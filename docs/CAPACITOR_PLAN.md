@@ -1,6 +1,6 @@
 # Capacitor Plan — APK + iOS from this PWA
 
-Status: decided — App name: **"RadioScout"**; App ID: **`gq.danread.radioscout`**; `android/` **committed**; **Android-first**, iOS deferred; **debug APK only**, release signing later. Goal: ship Android APK/AAB from the **same TanStack Start SSG artifact** (`dist/client`) that Cloudflare Pages already serves, with no fork of the web codebase.
+Status: decided — App name: **"RadioScout"**; App ID: **`gq.danread.radioscout`**; `android/` **committed**; **Android-first**, iOS deferred; **release-signed APK** via CI secrets (one keystore, held by the owner — never lose or rotate it). Goal: ship Android APK/AAB from the **same TanStack Start SSG artifact** (`dist/client`) that Cloudflare Pages already serves, with no fork of the web codebase.
 
 ## 1. Why Capacitor for this repo
 
@@ -39,7 +39,7 @@ pnpm build          → dist/client (static HTML+assets)
 ### Phase 0 — Prerequisites (1 session)
 
 - Node 24 + pnpm 10 (already in `wrangler.toml:25-26`), Android Studio (JDK 21, SDK 34+, `ANDROID_HOME`). No macOS/Xcode needed (Android-first, iOS deferred).
-- Decided: display name **"RadioScout"**, App ID **`gq.danread.radioscout`**. Still needed: who holds future Play signing keys (debug-only for now, so no key needed yet).
+- Decided: display name **"RadioScout"**, App ID **`gq.danread.radioscout`**. Release signing key held by the owner (single keystore, CI secrets `ANDROID_KEYSTORE_*`); debug builds need no key.
 
 ### Phase 1 — Install + config (the only native scaffolding)
 
@@ -133,10 +133,19 @@ Estimated diff: ~3 files touched + 1 new helper. No route changes.
 1. **Filesystem export:** radio backup JSON via `@capacitor/filesystem` + `Share` on native, download blob on web.
 2. **Push (deferred):** needs a server — explicitly out of scope (local-only app).
 
-### Phase 6 — Signing, release, CI (debug-APK-only scope per owner decision)
+### Phase 6 — Signing, release, CI
 
-- Android: local `assembleDebug` APK for sideload testing (agreed scope — no release/AAB signing in v1). iOS deferred entirely (no archive/TestFlight until Android v1 lands).
-- Minimal CI (`.github/workflows/release-apk.yml`): push a `v*` tag (must equal `package.json` version — the workflow fails fast otherwise) → Ubuntu build (`pnpm build` → `cap sync` → `cap:version` → `assembleDebug`) → `scout-vX.Y.Z.apk` attached to the GitHub Release with generated notes. `workflow_dispatch` builds without publishing. Web Pages deploy workflow untouched.
+- Android: `assembleDebug` for local sideload testing; `v*` tags build `assembleRelease`, signed with the owner's keystore via CI secrets (`ANDROID_KEYSTORE_BASE64` → decoded to `$RUNNER_TEMP`, passwords/alias as secrets; `android/app/build.gradle` `signingConfigs.release` applies only when `ANDROID_KEYSTORE_FILE` is set, so local release builds stay unsigned). **Keystore drill (one-off, run by the owner):**
+  ```bash
+  keytool -genkeypair -v -keystore radioscout-release.jks -alias radioscout -keyalg RSA -keysize 2048 -validity 10000
+  # back up radioscout-release.jks somewhere permanent — loss/rotation forces every user to reinstall
+  gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -w0 radioscout-release.jks)
+  gh secret set ANDROID_KEY_ALIAS -b radioscout
+  gh secret set ANDROID_KEYSTORE_PASSWORD
+  gh secret set ANDROID_KEY_PASSWORD
+  ```
+  (`*.jks` is gitignored.) First signed release should bump `package.json` (0.1.0 debug installs carry `versionCode` 100 under the debug signature, so they need a manual reinstall regardless — a new version keeps the timeline sane.)
+- Minimal CI (`.github/workflows/release-apk.yml`): push a `v*` tag (must equal `package.json` version — the workflow fails fast otherwise) → Ubuntu build (`pnpm build` → `cap sync` → `cap:version` → keystore decode → `assembleRelease`) → `radioscout-vX.Y.Z.apk` attached to the GitHub Release with generated notes. Tag builds fail loudly if the keystore secret is missing. `workflow_dispatch` builds without publishing. Web Pages deploy workflow untouched.
 - QA matrix before store: cold start < 2s on mid-range Android, rotation, gesture-nav insets, dark/light StatusBar, airplane-mode (all local flows work; only Open-Meteo weather degrades), Android back from every route, photo round-trip, 120Hz scroll on spaces grid.
 
 ## 5. Risks & repo-specific gotchas
@@ -156,7 +165,7 @@ Estimated diff: ~3 files touched + 1 new helper. No route changes.
 - [x] M6: Interactive swipe-to-go-back (`src/components/scout/SwipeBack.tsx` + `src/lib/animated-back.ts`, `tests/unit/animated-back.test.ts`): left-edge drag follows the finger, release past a third/flick flies the pane off and commits `history.back()`; dialogs, form fields and scrollable chip rows keep their gestures; hardware/system back reuses the same fly-out via `playBackTransition`; 500ms commit guard kills finger+OS double-fire (single guard owner — a 2026-09-10 double-wrap bug swallowed OS-back navigation and is regression-tested). Touch-gated (desktop unaffected). Verify on device: flick, cancel mid-drag, swipe over chips row, OS gesture + hardware back
 - [x] M1: Debug APK installs, launches to `/`, routes navigate, back button exits correctly — APK builds (`assembleDebug`, done 2026-09-10 with Studio-free SDK: winget `Microsoft.OpenJDK.21` + Google cmdline-tools + `android-36`/build-tools 36). On-device install + route/back-button QA still yours (no emulator run here). Scout-era milestones (M5/M7/M8 manuals/photos) dropped with the inventory purge.
 - [ ] M9 (re-scoped 2026-09-20): OTA updates for sideloaded APKs run on zero services — version manifest lives in-repo (`public/ota/<channel>.json`, served by Pages), bundles ride GitHub Release assets (`ota-<channel>-<version>` tags, kept separate from the `v*` APK tags), version pick is client-side (`src/lib/ota.ts`), publish via `pnpm ota:publish` (builds/zips/uploads, keeps last 3 per channel, then you commit + push the manifest). First publish still yours (needs a public repo + `gh auth login`). Native-layer edits (manifest, plugins, Capacitor itself) still need a full APK regardless.
-- [ ] M5 (later, out of v1): signed AAB → Play internal track; `cap add ios` → TestFlight
+- [ ] M5 (later, out of v1): signed AAB → Play internal track (reuses the same release keystore); `cap add ios` → TestFlight
 
 ## 7. Open questions — resolved 2026-09-10
 

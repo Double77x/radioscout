@@ -1,5 +1,10 @@
 apply plugin: 'com.android.application'
 
+// Release signing comes from CI secrets (ANDROID_KEYSTORE_* env — see
+// .github/workflows/release-apk.yml). Without them the release stays
+// unsigned and local installs should use `assembleDebug` instead.
+def releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_FILE")
+
 android {
     namespace = "gq.danread.radioscout"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -22,10 +27,23 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (releaseKeystorePath) {
+                storeFile file(releaseKeystorePath)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (releaseKeystorePath) {
+                signingConfig signingConfigs.release
+            }
         }
     }
 }

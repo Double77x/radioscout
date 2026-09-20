@@ -1,14 +1,17 @@
-# Release APK — tag a version, get a downloadable APK on the GitHub Release.
+# Release APK — tag a version, get a signed downloadable APK on the GitHub Release.
 #
 # Usage: bump `version` in package.json, commit, then
 # `git tag vX.Y.Z && git push origin vX.Y.Z`. Tagging is the deliberate
-# release act: every `v*` tag builds the debug APK from that commit and
-# attaches it to the release. `workflow_dispatch` builds without publishing.
+# release act: every `v*` tag builds the release-signed APK from that commit
+# and attaches it to the release. `workflow_dispatch` builds without publishing.
 #
-# The app is local-only (no backend), so the build needs no env vars.
+# The app is local-only (no backend), so the build needs no env vars beyond
+# the release-signing secrets below.
 #
-# Debug APKs need no signing keys (upgrade path: signed AAB via Play
-# upload-key secrets — see docs/CAPACITOR_PLAN.md M5).
+# Signing: one keystore, created once and kept forever (losing or changing it
+# forces every user to reinstall). Secrets required on tag builds:
+# ANDROID_KEYSTORE_BASE64 (base64 of the .jks), ANDROID_KEY_ALIAS,
+# ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_PASSWORD.
 # Action pins are kept current by Dependabot (.github/dependabot.yml).
 
 name: Release APK
@@ -82,15 +85,31 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Assemble debug APK
+      - name: Decode release keystore
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is not set — create the keystore and add CI secrets (see docs/CAPACITOR_PLAN.md M5)."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/radioscout-release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/radioscout-release.jks" >> "$GITHUB_ENV"
+
+      - name: Assemble release APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease --no-daemon
 
       - name: Name the APK
         if: startsWith(github.ref, 'refs/tags/')
         run: |
-          test -f android/app/build/outputs/apk/debug/radioscout-debug.apk
-          cp android/app/build/outputs/apk/debug/radioscout-debug.apk "radioscout-${GITHUB_REF_NAME}.apk"
+          test -f android/app/build/outputs/apk/release/radioscout-release.apk
+          cp android/app/build/outputs/apk/release/radioscout-release.apk "radioscout-${GITHUB_REF_NAME}.apk"
 
       - name: Publish to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
