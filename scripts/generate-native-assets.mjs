@@ -12,7 +12,8 @@ import { execSync } from "node:child_process";
  *   transparency; fills the mask safe zone, extreme circle masks may
  *   graze the sparkle tips).
  * - icon.png → legacy launcher (opaque dark tile, note at 75%).
- * - splash.png → launch splash on paper (matches theme background).
+ * - splash.png → launch splash on the dark tile (the mark is the silver
+ *   live logo — it needs the dark field, same as the launcher).
  * - ic_launcher_monochrome.png → Android 13+ themed-icon glyph (white
  *   silhouette keyed off the mark's own alpha).
  *
@@ -23,7 +24,6 @@ import { execSync } from "node:child_process";
  * slicer never owns. Fully re-runnable.
  */
 const DARK = "#171717";
-const PAPER = "#eef1eb";
 
 const RES = "android/app/src/main/res";
 const ANYDPI = `${RES}/mipmap-anydpi-v26`;
@@ -68,9 +68,9 @@ async function main() {
     .png()
     .toFile("assets/icon.png");
 
-  // Splash: paper field, note at ~30%.
+  // Splash: dark field, note at ~30% (silver mark needs the dark tile).
   const splashArt = await art(820);
-  await sharp(solid(2732, PAPER))
+  await sharp(solid(2732, DARK))
     .composite([{ input: splashArt, left: 956, top: 956 }])
     .png()
     .toFile("assets/splash.png");

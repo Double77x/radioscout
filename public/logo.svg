@@ -1,11 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <title>radio-note</title>
-  
-  <style>
-    @media (prefers-color-scheme: dark) {
-      .mark-note { fill: url(#note_body_dark); }
-    }
-  </style>
   <g fill="none" transform="translate(16,16) scale(20)">
     <path d="M19.0283 2.07158C20.57 1.77535 22 2.95673 22 4.52666V16.5003C21.9998 17.0524 21.5521 17.5003 21 17.5003C20.4479 17.5003 20.0002 17.0524 20 16.5003V7.38408L11 9.11553V19.5003C10.9997 20.0524 10.5521 20.5003 10 20.5003C9.44787 20.5003 9.00025 20.0524 9 19.5003V6.47783C9.00003 5.03945 10.0211 3.80318 11.4336 3.53154L19.0283 2.07158Z" class="mark-note" fill="url(#note_body)" mask="url(#note_mask)"></path>
     <path d="M19.0283 2.07158C20.57 1.77535 22 2.95673 22 4.52666V16.5003C21.9998 17.0524 21.5521 17.5003 21 17.5003C20.4479 17.5003 20.0002 17.0524 20 16.5003V7.38408L11 9.11553V19.5003C10.9997 20.0524 10.5521 20.5003 10 20.5003C9.44787 20.5003 9.00025 20.0524 9 19.5003V6.47783C9.00003 5.03945 10.0211 3.80318 11.4336 3.53154L19.0283 2.07158Z" class="mark-note" fill="url(#note_body)" filter="url(#note_filter)" clip-path="url(#note_clip)"></path>
@@ -16,8 +10,8 @@
   
     <defs>
       <linearGradient id="note_body" x1="15.5" y1="2.026" x2="15.5" y2="20.5" gradientUnits="userSpaceOnUse">
-        <stop stop-color="#3a3a3a"></stop>
-        <stop offset="1" stop-color="#0a0a0a"></stop>
+        <stop stop-color="#ffffff"></stop>
+        <stop offset="1" stop-color="#c4c4ca"></stop>
       </linearGradient>
       <linearGradient id="note_body_dark" x1="15.5" y1="2.026" x2="15.5" y2="20.5" gradientUnits="userSpaceOnUse">
         <stop stop-color="#ffffff"></stop>

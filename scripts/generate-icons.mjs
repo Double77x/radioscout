@@ -17,11 +17,20 @@ const MARK_PATHS = `
     <path d="M7.5 16C9.433 16 11 17.567 11 19.5C11 21.433 9.433 23 7.5 23C5.567 23 4 21.433 4 19.5C4 17.567 5.567 16 7.5 16ZM7.5 16.75C5.98122 16.75 4.75 17.9812 4.75 19.5C4.75 21.0188 5.98122 22.25 7.5 22.25C9.01878 22.25 10.25 21.0188 10.25 19.5C10.25 17.9812 9.01878 16.75 7.5 16.75Z" fill="url(#note_light)"></path>
     <path d="M5.5704 1.34086C5.90463 0.499778 7.09587 0.500524 7.42978 1.34183L8.60946 4.31449C8.6231 4.34877 8.65036 4.37609 8.68466 4.38968L11.6593 5.57035C12.5006 5.90439 12.5006 7.09569 11.6593 7.42972L8.68466 8.61039C8.65036 8.62398 8.6231 8.6513 8.60946 8.68558L7.42978 11.6592L7.35751 11.8067C6.97749 12.4511 6.02283 12.451 5.64267 11.8067L5.5704 11.6592L4.38974 8.68558C4.37612 8.65139 4.34873 8.624 4.31454 8.61039L1.34091 7.42972C0.55227 7.11657 0.502491 6.04995 1.19247 5.64261L1.34091 5.57035L4.31454 4.38968C4.34873 4.37607 4.37612 4.34868 4.38974 4.31449L5.5704 1.34086ZM6.73251 1.6182C6.64902 1.40785 6.35119 1.40787 6.26767 1.6182L5.087 4.59183H5.08603C4.99618 4.81748 4.81755 4.99612 4.59189 5.08597V5.08695L1.61728 6.26761C1.40713 6.35118 1.40713 6.64889 1.61728 6.73246L4.59189 7.91312V7.9141C4.81754 8.00394 4.99618 8.18257 5.08603 8.40824H5.087L6.26767 11.3819C6.35119 11.5922 6.64903 11.5922 6.73251 11.3819L7.9122 8.40824L7.95126 8.32425C8.05035 8.13534 8.21355 7.99031 8.40829 7.91312L11.3829 6.73246C11.5928 6.64881 11.5928 6.35126 11.3829 6.26761L8.40829 5.08695V5.08597C8.2137 5.00876 8.05029 4.86462 7.95126 4.67582L7.9122 4.59183L6.73251 1.6182Z" fill="url(#note_light)"></path>`;
 
-const MARK_DEFS = `
+const MARK_DEFS = markDefs("#3a3a3a", "#0a0a0a");
+// Silver-note variant — byte-identical paths to the live in-app mark
+// (`src/components/Logo.tsx`, silver on a dark tile). Feeds `logo.svg` /
+// `logo-dark.svg` and therefore the APK launcher via
+// `scripts/generate-native-assets.mjs` (sharp ignores the `prefers-color-scheme`
+// query, so the adaptive defs below would rasterize as dark-on-dark there).
+const MARK_DEFS_SILVER = markDefs("#ffffff", "#c4c4ca");
+
+function markDefs(noteFrom, noteTo) {
+  return `
     <defs>
       <linearGradient id="note_body" x1="15.5" y1="2.026" x2="15.5" y2="20.5" gradientUnits="userSpaceOnUse">
-        <stop stop-color="#3a3a3a"></stop>
-        <stop offset="1" stop-color="#0a0a0a"></stop>
+        <stop stop-color="${noteFrom}"></stop>
+        <stop offset="1" stop-color="${noteTo}"></stop>
       </linearGradient>
       <linearGradient id="note_body_dark" x1="15.5" y1="2.026" x2="15.5" y2="20.5" gradientUnits="userSpaceOnUse">
         <stop stop-color="#ffffff"></stop>
@@ -46,6 +55,7 @@ const MARK_DEFS = `
         <path d="M7.5 16.0005C9.433 16.0005 11 17.5675 11 19.5005C10.9998 21.4333 9.43285 23.0005 7.5 23.0005C5.56719 23.0004 4.00024 21.4332 4 19.5005C4 17.5675 5.56704 16.0005 7.5 16.0005ZM18.5 13.0005C20.433 13.0005 22 14.5675 22 16.5005C21.9998 18.4333 20.4328 20.0005 18.5 20.0005C16.5672 20.0004 15.0002 18.4332 15 16.5005C15 14.5675 16.567 13.0005 18.5 13.0005ZM5.57031 1.34131C5.9044 0.499973 7.09575 0.499914 7.42969 1.34131L8.60938 4.31494C8.62299 4.34909 8.65042 4.37555 8.68457 4.38916L11.6592 5.5708C12.5005 5.90483 12.5005 7.09515 11.6592 7.4292L8.68457 8.61084C8.65043 8.62444 8.623 8.65093 8.60938 8.68506L7.42969 11.6587C7.09575 12.5001 5.9044 12.5 5.57031 11.6587L4.38965 8.68506C4.37601 8.65096 4.34858 8.62443 4.31445 8.61084L1.34082 7.4292C0.49956 7.09515 0.49956 5.90485 1.34082 5.5708L4.31445 4.38916C4.3486 4.37556 4.37602 4.34907 4.38965 4.31494L5.57031 1.34131Z" fill="#000"></path>
       </mask>
     </defs>`;
+}
 
 // Adaptive mark: silver note in dark browser chrome (glass keeps its light
 // gradients). Keeps the favicon scheme test passing.
@@ -60,12 +70,22 @@ function markGroup(tx, ty, scale) {
   return `<g fill="none" transform="translate(${tx},${ty}) scale(${scale})">${MARK_PATHS}</g>`;
 }
 
-// Tab + manifest artwork: transparent, oversized note.
+// Tab + manifest artwork: transparent, oversized note (adaptive — the
+// favicon scheme test requires distinct light/dark renders).
 const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
   <title>radio-note</title>
   ${MARK_STYLE}
   ${markGroup(16, 16, 20)}
   ${MARK_DEFS}
+</svg>`;
+
+// Launcher source: the exact live in-app mark (silver always, no scheme
+// query — rasterizers ignore it, so the adaptive `svg` above would bake as
+// dark-on-dark on the icon tile).
+const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>radio-note</title>
+  ${markGroup(16, 16, 20)}
+  ${MARK_DEFS_SILVER}
 </svg>`;
 
 // Apple touch icon must stay opaque — white full-bleed.
@@ -79,8 +99,8 @@ const svgApple = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="51
 async function generate() {
   // Write SVGs
   await writeFile("public/favicon.svg", svg);
-  await writeFile("public/logo.svg", svg);
-  await writeFile("public/logo-dark.svg", svg);
+  await writeFile("public/logo.svg", svgIcon);
+  await writeFile("public/logo-dark.svg", svgIcon);
 
   // Generate PNGs edge-to-edge (transparent mark; manifest declares "any")
   const sizes = [
