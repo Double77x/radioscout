@@ -492,6 +492,15 @@
       "rules": {
         "jsx-a11y/prefer-tag-over-role": "off"
       }
+    },
+    {
+      // Custom vertical volume slider: a native vertical range renders
+      // inconsistently across mobile browsers, so the touch popup uses a
+      // pointer-driven div with the slider role + full keyboard support.
+      "files": ["src/components/radio/PlayerDock.tsx"],
+      "rules": {
+        "jsx-a11y/prefer-tag-over-role": "off"
+      }
     }
   ],
   "settings": {
