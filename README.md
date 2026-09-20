@@ -130,6 +130,29 @@ pnpm build:android:aab   # release bundle
 
 `cap:version` syncs `package.json` into `versionName`/`versionCode`; `cap:assets` regenerates icons/splash. Never commit `capacitor.config.local.ts`.
 
+## Missing a station?
+
+Station lists come from [radio-browser.info](https://www.radio-browser.info), and only
+playable entries are shown: the app filters out anything that isn't a working `https://`
+stream (`filterPlayableStations` in `src/lib/radio/types.ts`). Plain-`http://` streams can
+never load from a secure page or the APK WebView — Chrome auto-upgrades them to `https://`
+(where legacy stream edges abort TLS) — so they are hidden rather than left broken. Saved
+favourites are kept and explain why they won't play if their stream goes HTTP-only.
+
+If a station is missing, add it to the directory and it surfaces automatically:
+
+1. Find the station's current `https://` stream URL (Bauer stations moved from
+   `stream-*.planetradio.co.uk` to `stream-*.hellorayo.co.uk` / `live-*.sharp-stream.com` —
+   the web player's network tab has it). Strip session tracking params
+   (`permutiveid`, `listenerid`, `amsparams`, `___cb`); keep `direct=true`, `skey`,
+   `playerid`, `rp_source`.
+2. Confirm it serves audio: it should return `200` with an `audio/*` content type.
+   (Pasting it in the address bar may offer a download — that says nothing about
+   in-app playback; the `<audio>` element decodes it fine.)
+3. Submit it at [radio-browser.info/add](https://www.radio-browser.info/add) with a name,
+   `https://` favicon (the station site's `og:image` works), codec, country/language, and
+   lowercase comma-separated tags (e.g. `rock,adult contemporary,indie,pop`).
+
 ## Docs
 
 - `docs/ARCHITECTURE.md` — routing, SSG, data flow, design system
