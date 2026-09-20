@@ -1,0 +1,2 @@
+# Cloudflare Pages auto-detects 404.html for unmatched paths.
+# Clean URLs (e.g. /graph serves graph.html) are handled by Pages natively.

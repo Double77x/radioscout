@@ -1,0 +1,16 @@
+{
+  "app": "radioscout",
+  "version": 1,
+  "exportedAt": "2026-09-20T00:00:00.000Z",
+  "favourites": [
+    {
+      "stationuuid": "restore-1",
+      "snapshot": { "stationuuid": "restore-1", "name": "Restored FM", "url": "https://example.com/r.mp3" },
+      "saved_at": "2026-09-20T00:00:00.000Z",
+      "sort": 0
+    }
+  ],
+  "history": [],
+  "prefs": { "volume": 0.5, "muted": false },
+  "voted": []
+}

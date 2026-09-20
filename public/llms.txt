@@ -1,0 +1,26 @@
+# RadioScout
+
+> RadioScout is a free worldwide radio player — top stations, genre search, favourites and history, on the web and Android. TanStack Start SSG on Cloudflare Pages plus an Android APK from the same artifact via Capacitor. Local-first IndexedDB state, type-safe with Zod, Base UI and Tailwind.
+
+Built with React 19, Vite, TanStack Router/Start/Query, Dexie, Capacitor 8. Source at [github.com/Double77x/radioscout](https://github.com/Double77x/radioscout). Every route prerenders to static HTML.
+
+For agents working on the RadioScout codebase, read the guidance files below before making changes — they encode the project's strict logic, performance, accessibility and styling conventions.
+
+## Documentation
+
+- [CODING_STANDARDS.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/CODING_STANDARDS.md): Strict logic, performance, accessibility and linting rules. Read first.
+- [ARCHITECTURE.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/ARCHITECTURE.md): High-level system design and data flow.
+- [STYLE_GUIDE.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/STYLE_GUIDE.md): Visual tokens, themes and animation patterns.
+- [TECH_STACK.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/TECH_STACK.md): Complete list of libraries and versions.
+- [ROADMAP.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/ROADMAP.md): Planned features and direction.
+
+## Tools
+
+- [RadioScout home](https://radioscout.pages.dev/): Search, genre chips, Most loved / Saved / Recently played, persistent player dock.
+
+## Optional
+
+- [GitHub repository](https://github.com/Double77x/radioscout): Source code and issues.
+- [Privacy Policy](https://radioscout.pages.dev/legal/privacy): How user data is handled.
+- [Terms of Service](https://radioscout.pages.dev/legal/terms): Terms of use.
+- [Changelog](https://radioscout.pages.dev/legal/changelog): Release history.

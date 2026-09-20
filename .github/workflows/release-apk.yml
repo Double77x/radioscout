@@ -1,0 +1,100 @@
+# Release APK — tag a version, get a downloadable APK on the GitHub Release.
+#
+# Usage: bump `version` in package.json, commit, then
+# `git tag vX.Y.Z && git push origin vX.Y.Z`. Tagging is the deliberate
+# release act: every `v*` tag builds the debug APK from that commit and
+# attaches it to the release. `workflow_dispatch` builds without publishing.
+#
+# The app is local-only (no backend), so the build needs no env vars.
+#
+# Debug APKs need no signing keys (upgrade path: signed AAB via Play
+# upload-key secrets — see docs/CAPACITOR_PLAN.md M5).
+# Action pins are kept current by Dependabot (.github/dependabot.yml).
+
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install SDK packages
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag $TAG does not match package.json version $PKG — bump the version first (see docs/CAPACITOR_PLAN.md M3)."
+            exit 1
+          fi
+
+      - name: Build web + sync + stamp version
+        run: |
+          pnpm build
+          npx cap sync android
+          node scripts/cap-version.js
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Name the APK
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          test -f android/app/build/outputs/apk/debug/radioscout-debug.apk
+          cp android/app/build/outputs/apk/debug/radioscout-debug.apk "radioscout-${GITHUB_REF_NAME}.apk"
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: radioscout-v*.apk
+          generate_release_notes: true

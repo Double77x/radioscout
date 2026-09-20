@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RadioScout</string>
+    <string name="title_activity_main">RadioScout</string>
+    <string name="package_name">gq.danread.radioscout</string>
+    <string name="custom_url_scheme">gq.danread.radioscout</string>
+</resources>

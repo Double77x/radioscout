@@ -1,0 +1,29 @@
+{
+  "printWidth": 120,
+  "tabWidth": 2,
+  "useTabs": false,
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "bracketSpacing": true,
+  "bracketSameLine": true,
+  "arrowParens": "always",
+  "jsxSingleQuote": true,
+  "ignorePatterns": [
+    "src/routeTree.gen.ts",
+    ".tanstack/**",
+    "dist/**",
+    "*.tsbuildinfo",
+    "docs/**",
+    "**/*.png",
+    "**/*.jpg",
+    "**/*.jpeg",
+    "**/*.webp",
+    "**/*.svg",
+    "public/**"
+  ],
+  "tailwind": {
+    "stylesheet": "src/styles/index.css",
+    "functions": ["cn", "clsx", "cva", "twMerge", "tw"]
+  }
+}

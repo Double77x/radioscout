@@ -1,0 +1,122 @@
+# -----------------------------------------------------------------------------
+# Dependencies
+# -----------------------------------------------------------------------------
+node_modules
+.pnpm-store
+
+# -----------------------------------------------------------------------------
+# Production & Build Artifacts
+# -----------------------------------------------------------------------------
+dist
+dist-ssr
+build
+out
+coverage
+.vitest
+bundle-analysis*.html
+.tanstack
+
+# -----------------------------------------------------------------------------
+# Environment Variables & local secrets (never commit values)
+# -----------------------------------------------------------------------------
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+!.env.example
+# Wrangler local vars (may contain secrets) — dashboard vars are set per-env
+.dev.vars
+
+# -----------------------------------------------------------------------------
+# Logs & Debugging
+# -----------------------------------------------------------------------------
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.eslintcache
+
+# -----------------------------------------------------------------------------
+# IDE & Editor Files
+# -----------------------------------------------------------------------------
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+# (Uncomment the line above if you want to share workspace settings, otherwise keep it ignored)
+
+# JetBrains / WebStorm
+.idea
+*.iml
+
+# -----------------------------------------------------------------------------
+# Operating System Files
+# -----------------------------------------------------------------------------
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+
+# -----------------------------------------------------------------------------
+# Framework / Library Specifics
+# -----------------------------------------------------------------------------
+# TanStack Router generated files
+# (Committing this is usually recommended for CI/Type checking, but ignore if you prefer generating on build)
+# src/routeTree.gen.ts
+
+# Local Netlify folder
+.netlify
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Wrangler / Cloudflare Pages local runtime state
+.wrangler
+
+# ---------------------------------------------------------------------------
+# Capacitor (native shells are committed; only generated outputs/secrets ignored)
+# ---------------------------------------------------------------------------
+capacitor.config.local.ts
+android/app/build
+android/app/src/main/assets
+android/build
+android/.gradle
+android/.kotlin
+android/local.properties
+android/capacitor-cordova-android-plugins/build
+ios/DerivedData
+ios/App/Pods
+ios/App/build
+*.keystore
+*.jks
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# -----------------------------------------------------------------------------
+# Playwright (E2E Tests)
+# -----------------------------------------------------------------------------
+.playwright/
+test-results/
+playwright-report/
+blob-report/
+
+# Local LLM / Agent Context
+GEMINI.md
+.fallow/

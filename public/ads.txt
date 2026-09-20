@@ -1,0 +1,2 @@
+# ads.txt - Authorized Digital Sellers
+# This file is empty because this site does not currently display advertisements.

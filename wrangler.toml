@@ -1,0 +1,60 @@
+# ---------------------------------------------------------------------------
+# Cloudflare Pages — RadioScout
+#
+# This project is a TanStack Start app deployed as a build-time SSG site: all
+# routes are prerendered into static HTML (plus JS/CSS assets) and served by
+# Cloudflare Pages with no edge compute.
+# Canonical: https://radioscout.pages.dev
+#
+# Wrangler reads this file for `wrangler pages` locally and for remote
+# deployments. For Pages you must set `pages_build_output_dir` to the build
+# output directory and provide a `compatibility_date`.
+#
+# Full Pages build/env documentation:
+#   https://developers.cloudflare.com/pages/
+# ---------------------------------------------------------------------------
+
+name = "radioscout"
+compatibility_date = "2025-09-02"
+
+# TanStack Start SSG output directory served by Cloudflare Pages
+pages_build_output_dir = "dist/client"
+
+[vars]
+NODE_VERSION = "24.8"
+PNPM_VERSION = "10.32.1"
+CANONICAL_URL = "https://radioscout.pages.dev"
+SITE_URL = "https://radioscout.pages.dev"
+VITE_CANONICAL_URL = "https://radioscout.pages.dev"
+# OTA manifest host override (baked into the client at build time). Unset =
+# the app reads its own manifest at <canonical>/ota/<channel>.json, which
+# `pnpm ota:publish` maintains — override only to point elsewhere.
+# VITE_OTA_URL = "https://example.com/ota"
+
+# ---------------------------------------------------------------------------
+# Build-time environment variables (VITE_*)
+#
+# Vite inlines any `VITE_*` variable at build time (they are compiled into the
+# bundle, so they are safe to expose publicly). Configure these EITHER here
+# (only for local `wrangler pages dev` / preview) OR, preferably, as
+# "Environment variables" in the Cloudflare dashboard for Production/Preview
+# so the exact values differ per deployment.
+#
+# Anything here is exposed in the client bundle — NEVER put secrets here.
+#
+# [vars]
+# VITE_API_URL = "https://api.example.com"
+# VITE_GA_MEASUREMENT_ID = "G-XXXXXXXXXX"
+#
+# ---------------------------------------------------------------------------
+# Secrets (server-side only)
+#
+# Wrangler Pages secrets are NOT stored in this file and cannot be inlined by
+# Vite. Set them per-environment instead:
+#
+#   npx wrangler pages secret put <NAME> --project-name scout-app
+#
+# Example: npx wrangler pages secret put CLOUDFLARE_API_TOKEN --project-name radioscout
+#
+# Note: secrets are only usable from server-side Functions (./functions),
+# not from client-side Vite code.
