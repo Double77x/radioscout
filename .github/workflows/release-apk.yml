@@ -83,7 +83,7 @@ jobs:
           node scripts/cap-version.js
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Decode release keystore
         if: startsWith(github.ref, 'refs/tags/')
