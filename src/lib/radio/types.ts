@@ -99,14 +99,47 @@ export function parseStations(payload: unknown): Station[] {
   return out;
 }
 
-/** Port of `Utils.urlIndicatesHlsStream()` — HLS needs native handling. */
-export function isHlsUrl(streamUrl: string): boolean {
-  return /.*\.m3u8(?<suffix>[#?\s].*)?$/.test(streamUrl);
+/**
+ * Upstream rows sometimes carry playlist junk (seen 2026-09-20: a stored
+ * `url` of `...aac??direct=true&...%20#EXTINF:0,Absolute%2080s` — a doubled
+ * `?` plus an M3U `#EXTINF` line fused onto the query). Browsers request that
+ * verbatim, so strip it before handing a URL to `<audio>`. Idempotent — safe
+ * on already-clean URLs.
+ */
+export function sanitizeStreamUrl(raw: string): string {
+  if (raw === "") return "";
+  let url = raw.trim();
+  if (url === "") return "";
+  // M3U playlist line fused onto the URL (literal or %20-encoded space).
+  const extinf = url.search(/#EXTINF/i);
+  if (extinf >= 0) url = url.slice(0, extinf);
+  // Whitespace/newlines from concatenated playlist lines; fragments are never
+  // sent to a stream server, so drop those too.
+  const boundary = url.search(/[\s#]/);
+  if (boundary >= 0) url = url.slice(0, boundary);
+  url = url.trim().replace(/(?<trail>\s|%20)+$/i, "");
+  // Doubled `?` from `base + "?" + query` joins (`..aac??direct=true`).
+  url = url.replaceAll(/\?{2,}/g, "?").replaceAll("?&", "?");
+  return url;
 }
 
-/** Best-known playable URL without a network round-trip. */
+/** Port of `Utils.urlIndicatesHlsStream()` — HLS needs native handling. */
+export function isHlsUrl(streamUrl: string): boolean {
+  return /.*\.m3u8(?<suffix>[#?\s].*)?$/.test(sanitizeStreamUrl(streamUrl));
+}
+
+/**
+ * `true` for plain-`http://` streams. Unplayable from an `https://` page
+ * (mixed-content block on web, cleartext block in the APK WebView) — callers
+ * should say so instead of showing a generic failure.
+ */
+export function isInsecureHttpStream(streamUrl: string): boolean {
+  return /^http:\/\//i.test(sanitizeStreamUrl(streamUrl));
+}
+
+/** Best-known playable URL without a network round-trip (sanitized). */
 export function pickPlayableUrl(station: Station): string {
-  return station.url_resolved || station.url;
+  return sanitizeStreamUrl(station.url_resolved || station.url);
 }
 
 const QUALITY_PATTERN = /\b(?<rate>\d+(?:\.\d+)?)\s*(?:k|kbps|kb\/s)\b/i;

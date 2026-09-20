@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isHlsUrl, parseStation, parseStations, pickPlayableUrl, splitQualityFromName } from "@/lib/radio/types";
+import {
+  isHlsUrl,
+  isInsecureHttpStream,
+  parseStation,
+  parseStations,
+  pickPlayableUrl,
+  sanitizeStreamUrl,
+  splitQualityFromName,
+} from "@/lib/radio/types";
 
 const row = {
   stationuuid: "9617a7a2-0601-11e8-ae97-52543be04c81",
@@ -57,6 +65,56 @@ describe("pickPlayableUrl", () => {
   it("prefers the resolved URL", () => {
     const station = parseStation(row);
     expect(station ? pickPlayableUrl(station) : null).toBe("https://example.com/stream");
+  });
+
+  it("sanitizes upstream playlist junk", () => {
+    const station = parseStation({
+      ...row,
+      url_resolved:
+        "http://stream-ar.planetradio.co.uk/absoluteradiohigh.aac??direct=true&aw_0_1st.playerid=BMUK_Airable%20#EXTINF:0,Absolute%2080s",
+    });
+    expect(station ? pickPlayableUrl(station) : null).toBe(
+      "http://stream-ar.planetradio.co.uk/absoluteradiohigh.aac?direct=true&aw_0_1st.playerid=BMUK_Airable",
+    );
+  });
+});
+
+describe("sanitizeStreamUrl", () => {
+  it("collapses doubled question marks", () => {
+    expect(sanitizeStreamUrl("http://example.com/live.aac??direct=true&x=1")).toBe(
+      "http://example.com/live.aac?direct=true&x=1",
+    );
+  });
+
+  it("strips fused #EXTINF playlist lines (encoded and literal)", () => {
+    expect(sanitizeStreamUrl("http://example.com/a.aac?direct=true%20#EXTINF:0,Absolute%2080s")).toBe(
+      "http://example.com/a.aac?direct=true",
+    );
+    expect(sanitizeStreamUrl("http://example.com/a.aac?direct=true #EXTINF:-1,Name")).toBe(
+      "http://example.com/a.aac?direct=true",
+    );
+  });
+
+  it("drops fragments, whitespace and newlines", () => {
+    expect(sanitizeStreamUrl("https://example.com/live.mp3#icy-meta")).toBe("https://example.com/live.mp3");
+    expect(sanitizeStreamUrl("https://example.com/live.mp3\n#EXTM3U")).toBe("https://example.com/live.mp3");
+    expect(sanitizeStreamUrl("  https://example.com/live.mp3  ")).toBe("https://example.com/live.mp3");
+  });
+
+  it("leaves clean URLs (including queries) untouched", () => {
+    const clean = "https://live-bauerkiss.sharp-stream.com/kisstory.aac?direct=true&aw_0_1st.playerid=BMUK_Airable";
+    expect(sanitizeStreamUrl(clean)).toBe(clean);
+    expect(sanitizeStreamUrl("")).toBe("");
+  });
+});
+
+describe("isInsecureHttpStream", () => {
+  it("flags http streams even through upstream junk", () => {
+    expect(isInsecureHttpStream("http://example.com/live.mp3")).toBe(true);
+    expect(isInsecureHttpStream("HTTP://example.com/live.mp3")).toBe(true);
+    expect(isInsecureHttpStream("http://example.com/a.aac??direct=true%20#EXTINF:0,X")).toBe(true);
+    expect(isInsecureHttpStream("https://example.com/live.mp3")).toBe(false);
+    expect(isInsecureHttpStream("")).toBe(false);
   });
 });
 
