@@ -11,7 +11,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { usePersistentStrings } from "@/hooks/use-persistent-state";
-import { play, usePlayer } from "@/hooks/use-player";
+import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { openStationDetail } from "@/hooks/use-station-detail";
 import {
   useClearHistory,
@@ -55,7 +55,7 @@ export default function HomePage() {
       station={station}
       playing={player.station?.stationuuid === station.stationuuid && player.status === "playing"}
       favourited={favouriteIds.has(station.stationuuid)}
-      onPlay={play}
+      onPlay={togglePlay}
       onToggleFavourite={(item) => toggleFavourite.mutate(item)}
       onOpenDetail={openStationDetail}
     />

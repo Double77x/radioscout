@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
 import { StationCard } from "@/components/radio/StationCard";
 import { StationListSkeleton } from "@/components/radio/StationSkeleton";
-import { play, usePlayer } from "@/hooks/use-player";
+import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { FAVOURITES_KEY, useFavourites, useToggleFavourite } from "@/hooks/use-radio";
 import { openStationDetail } from "@/hooks/use-station-detail";
 import { queryClient } from "@/lib/query-client";
@@ -366,7 +366,7 @@ export function SavedStations() {
             station={row.snapshot}
             playing={player.station?.stationuuid === row.stationuuid && player.status === "playing"}
             favourited
-            onPlay={play}
+            onPlay={togglePlay}
             onToggleFavourite={(item) => toggleFavourite.mutate(item)}
             onOpenDetail={openStationDetail}
             dataUuid={row.stationuuid}

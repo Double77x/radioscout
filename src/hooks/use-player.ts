@@ -225,6 +225,16 @@ export function toggle(): void {
   else void resume();
 }
 
+/**
+ * Card/row press behavior: pause/resume the current station, (re)play
+ * anything else. The lists called `play()` unconditionally, so tapping the
+ * Pause icon restarted the stream instead of pausing it.
+ */
+export function togglePlay(station: Station): void {
+  if (snapshot.station?.stationuuid === station.stationuuid) toggle();
+  else play(station);
+}
+
 export function stop(): void {
   ++playToken;
   if (audio) {
