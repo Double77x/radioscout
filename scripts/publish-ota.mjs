@@ -127,7 +127,9 @@ console.log(`[ota:publish] bundle ${(bytes.length / 1024).toFixed(0)} KB, sha256
 
 const tag = `ota-${channel}-${version}`;
 sh(
-  `gh release create ${tag} ${JSON.stringify(zipPath)}#${assetName} --title ${JSON.stringify(`OTA ${version} (${channel})`)} --notes ${JSON.stringify(`OTA bundle for native versionCode ${minCode}${maxCode === null ? "+" : `–${maxCode}`}. Web-side changes only — native edits need a full APK.`)}`,
+  // Prerelease so `…/releases/latest` keeps pointing at the APK releases —
+  // OTA bundles are for the in-app updater, not for humans.
+  `gh release create ${tag} --prerelease ${JSON.stringify(zipPath)}#${assetName} --title ${JSON.stringify(`OTA ${version} (${channel})`)} --notes ${JSON.stringify(`OTA bundle for native versionCode ${minCode}${maxCode === null ? "+" : `–${maxCode}`}. Web-side changes only — native edits need a full APK.`)}`,
 );
 
 // Retention: newest --keep entries survive; older releases are deleted.

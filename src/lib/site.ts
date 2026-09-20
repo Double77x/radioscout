@@ -7,6 +7,7 @@ export const siteConfig = {
   email: "danreaduk@proton.me",
   links: {
     github: "https://github.com/Double77x/radioscout",
+    releases: "https://github.com/Double77x/radioscout/releases/latest",
     twitter: "https://twitter.com/",
   },
 } as const;

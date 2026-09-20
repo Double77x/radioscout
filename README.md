@@ -158,6 +158,7 @@ Use the Bug report template for bugs and include steps to reproduce, what you ex
    npx fallow audit --format json --quiet 2>/dev/null
    pnpm test:unit
    ```
+
 3. Add tests for new hooks or anything in `src/lib`. Pure functions are the easiest to cover.
 4. Update docs when you touch architecture, tokens or routing, and keep `AGENTS.md` aligned.
 5. Push and open a PR against `main`. Describe what changed and why, how you tested it, and add screenshots for UI work. Link the issue if there is one.

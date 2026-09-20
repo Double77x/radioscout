@@ -60,6 +60,15 @@ const Footer = () => {
                     </Link>
                   </li>
                 ))}
+                <li>
+                  <a
+                    href={siteConfig.links.releases}
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='text-sm text-muted-foreground transition-colors hover:text-foreground'>
+                    Android app
+                  </a>
+                </li>
               </ul>
             </div>
 
