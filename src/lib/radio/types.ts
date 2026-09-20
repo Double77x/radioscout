@@ -142,6 +142,25 @@ export function pickPlayableUrl(station: Station): string {
   return sanitizeStreamUrl(station.url_resolved || station.url);
 }
 
+/**
+ * `true` when the URL can actually load from an `https://` page or the APK
+ * WebView: a non-empty `https://` URL. Plain-`http://` streams never play
+ * there (Chrome auto-upgrades them onto legacy edges whose TLS aborts; the
+ * WebView blocks cleartext outright), and empty URLs play nowhere.
+ */
+export function isPlayableStreamUrl(streamUrl: string): boolean {
+  return /^https:\/\//i.test(sanitizeStreamUrl(streamUrl));
+}
+
+/**
+ * Drop rows that can never play (HTTP-only or missing URL). Discovery lists
+ * only — favourites/history keep the user's saved rows (tapping one explains
+ * why it won't play instead of silently vanishing).
+ */
+export function filterPlayableStations(stations: Station[]): Station[] {
+  return stations.filter((station) => isPlayableStreamUrl(pickPlayableUrl(station)));
+}
+
 const QUALITY_PATTERN = /\b(?<rate>\d+(?:\.\d+)?)\s*(?:k|kbps|kb\/s)\b/i;
 const BRACKET_GROUP_PATTERN = /\((?<paren>[^()]*)\)|\[(?<square>[^[\]]*)\]/g;
 const CODEC_PATTERN = /\b(?<codec>mp3|aac\+|aac|ogg|opus|flac|wma|m4a|wav)(?![a-zA-Z0-9])/i;

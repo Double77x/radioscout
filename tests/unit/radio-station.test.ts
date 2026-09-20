@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  filterPlayableStations,
   isHlsUrl,
   isInsecureHttpStream,
+  isPlayableStreamUrl,
   parseStation,
   parseStations,
   pickPlayableUrl,
@@ -115,6 +117,33 @@ describe("isInsecureHttpStream", () => {
     expect(isInsecureHttpStream("http://example.com/a.aac??direct=true%20#EXTINF:0,X")).toBe(true);
     expect(isInsecureHttpStream("https://example.com/live.mp3")).toBe(false);
     expect(isInsecureHttpStream("")).toBe(false);
+  });
+});
+
+describe("isPlayableStreamUrl", () => {
+  it("keeps https, drops http and empty", () => {
+    expect(isPlayableStreamUrl("https://example.com/live.aac?direct=true")).toBe(true);
+    expect(isPlayableStreamUrl("http://example.com/live.mp3")).toBe(false);
+    expect(isPlayableStreamUrl("HTTP://example.com/live.mp3")).toBe(false);
+    expect(isPlayableStreamUrl("http://example.com/a.aac??direct=true%20#EXTINF:0,X")).toBe(false);
+    expect(isPlayableStreamUrl("")).toBe(false);
+    expect(isPlayableStreamUrl("   ")).toBe(false);
+  });
+});
+
+describe("filterPlayableStations", () => {
+  const https = (uuid: string, url: string) => parseStation({ ...row, stationuuid: uuid, url, url_resolved: url });
+  it("drops HTTP-only and URL-less rows, keeps order of survivors", () => {
+    const httpOld = https("http-old", "http://stream-kiss.planetradio.co.uk/kisstory.mp3?direct=true");
+    const httpJunk = https(
+      "http-junk",
+      "http://stream-ar.planetradio.co.uk/absoluteradiohigh.aac??direct=true%20#EXTINF:0,X",
+    );
+    const noUrl = https("no-url", "");
+    const tlsA = https("tls-a", "https://live-bauerkiss.sharp-stream.com/kisstory.aac?direct=true");
+    const tlsB = https("tls-b", "https://stream-ar.hellorayo.co.uk/absolute80shigh.aac?direct=true");
+    const filtered = filterPlayableStations([httpOld, tlsA, httpJunk, noUrl, tlsB].filter((s) => s !== null));
+    expect(filtered.map((s) => s.stationuuid)).toEqual(["tls-a", "tls-b"]);
   });
 });
 

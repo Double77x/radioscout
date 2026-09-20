@@ -1,4 +1,4 @@
-import { parseStation, parseStations, type Station } from "./types";
+import { filterPlayableStations, parseStation, parseStations, type Station } from "./types";
 
 /**
  * Minimal radio-browser.info client. RadioDroid resolved
@@ -62,7 +62,9 @@ export async function searchStations(search: StationSearch): Promise<Station[]> 
     order: search.order ?? "clickcount",
     reverse: "true",
   });
-  return parseStations(await fetchJson(`/json/stations/search${query}`));
+  // HTTP-only rows can never play on an https page or in the APK WebView —
+  // drop them so every visible station is playable.
+  return filterPlayableStations(parseStations(await fetchJson(`/json/stations/search${query}`)));
 }
 
 function normalize(text: string): string {
@@ -121,14 +123,14 @@ export async function searchStationsIlike(query: string, tag?: string, limit = 5
     .slice(0, limit);
 }
 
-/** Most-voted stations — the default landing list. */
+/** Most-voted stations — the default landing list (unplayable rows filtered). */
 export async function topVotedStations(limit = 50): Promise<Station[]> {
-  return parseStations(await fetchJson(`/json/stations/topvote/${limit}`));
+  return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${limit}`)));
 }
 
-/** Most-clicked stations. */
+/** Most-clicked stations (unplayable rows filtered). */
 export async function topClickedStations(limit = 50): Promise<Station[]> {
-  return parseStations(await fetchJson(`/json/stations/topclick/${limit}`));
+  return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${limit}`)));
 }
 
 /** Refresh favourites/history snapshots by uuid (batch, one round-trip). */
