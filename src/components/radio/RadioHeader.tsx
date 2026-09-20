@@ -1,6 +1,6 @@
 import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, X } from "lucide-react";
 import { SettingsMenu } from "@/components/scout/SettingsMenu";
 import { Input } from "@/components/ui/input";
 import { FOCUS_RADIO_SEARCH_EVENT } from "@/lib/focus-radio-search";
@@ -60,6 +60,11 @@ export function RadioHeader({
       search: { q: next.q || undefined, tag: next.tag === "all" ? undefined : next.tag },
       replace: true,
     });
+
+  const clearSearch = () => {
+    setSearch({ tag: genre });
+    searchRef.current?.focus();
+  };
 
   const onRailPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "touch" || (event.pointerType === "mouse" && event.button !== 0)) return;
@@ -156,8 +161,17 @@ export function RadioHeader({
                 }
                 value={query}
                 onChange={(event) => setSearch({ q: event.target.value, tag: genre })}
-                className='h-12 rounded-full border-border bg-card pr-4 pl-11 text-base shadow-sm placeholder:text-muted-foreground'
+                className='h-12 rounded-full border-border bg-card pr-12 pl-11 text-base shadow-sm placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden'
               />
+              {query === "" ? null : (
+                <button
+                  type='button'
+                  onClick={clearSearch}
+                  aria-label='Clear search'
+                  className='absolute top-1/2 right-1 grid size-10 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                  <X className='size-6' />
+                </button>
+              )}
             </div>
           </search>
 
