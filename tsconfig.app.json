@@ -1,0 +1,41 @@
+{
+  "//": "Note: For libraries with missing or 'any' types, create a 'src/types/shims.d.ts' instead of using @ts-ignore.",
+  "compilerOptions": {
+    "target": "ESNext", // Move to ESNext to match Vite 'esnext' build target
+    "useDefineForClassFields": true,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+
+    /* Bundler mode */
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+
+    /* Strictness & Linting - The "Standard" for Quality */
+    "strict": true,
+    "noImplicitAny": true, // Prevents silent 'any' bugs
+    "strictNullChecks": true, // Prevents the 'undefined is not an object' nightmare
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+
+    /* Path Mapping */
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": [
+    "src",
+    "tests",
+    "src/types/**/*.d.ts" // Ensure this is explicitly or implicitly covered
+  ]
+}

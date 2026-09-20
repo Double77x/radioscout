@@ -1,0 +1,13 @@
+{
+  "files": [],
+  "references": [{ "path": "./tsconfig.app.json" }, { "path": "./tsconfig.node.json" }],
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    // Speed up builds by skipping type checking of declaration files
+    "skipLibCheck": true,
+    // Ensure consistent casing in imports
+    "forceConsistentCasingInFileNames": true
+  }
+}

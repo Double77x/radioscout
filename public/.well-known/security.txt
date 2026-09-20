@@ -1,0 +1,6 @@
+Contact: https://github.com/Double77x/radioscout/security/advisories/new
+Expires: 2027-08-31T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://radioscout.pages.dev/.well-known/security.txt
+Policy: https://radioscout.pages.dev/legal/security
+# Acknowledgments: https://radioscout.pages.dev/legal/security

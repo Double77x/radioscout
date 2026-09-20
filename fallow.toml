@@ -1,0 +1,96 @@
+# Fallow config — migrated from knip.ts (see https://docs.fallow.tools/migration/from-knip)
+# Replaces .fallowrc.json; TOML is preferred for comments and readability.
+# Auto-discovers project files (no `entry` needed) and Vite/TanStack plugins.
+
+ignorePatterns = [
+  "**/*.d.ts",
+  "scripts/**",
+  "android/**", # Capacitor native shell (synced copy of dist/client + Gradle sources)
+  "ios/**", # Capacitor iOS shell (added when iOS lands)
+  "assets/**", # Capacitor icon/splash sources (generated PNGs, consumed by @capacitor/assets)
+  "src/components/ui/alert.tsx",
+  "src/components/ui/alert-variants.ts",
+  "src/components/ui/label.tsx",
+  "src/components/ui/label-variants.ts",
+  "src/components/ui/scroll-area.tsx",
+  "src/components/ui/select.tsx",
+  "src/components/ui/separator.tsx",
+  "src/components/ui/slider.tsx",
+  "src/components/ui/switch.tsx",
+  "src/components/ui/tabs.tsx",
+  "src/components/ui/textarea.tsx",
+]
+ignoreDependencies = [
+  "tailwindcss-animate", # knip: false positive — used via @import "tailwindcss-animate" in CSS
+  "@tanstack/react-query", # kept for future use per product decision
+  "tailwindcss", # dev dep used at build via @tailwindcss/vite + @import "tailwindcss" — not runtime
+  "react-doctor", # used via jsPlugins in .oxlintrc.json (oxlint) — not JS import
+  "eslint-plugin-react-doctor", # same — oxlint jsPlugins
+  "png-to-ico", # used in scripts/generate-icons.mjs
+  "sharp", # used in scripts/generate-icons.mjs
+  "adm-zip", # used in scripts/publish-ota.mjs
+  "@capacitor/cli", # invoked via npx cap / pnpm cap:* scripts — no JS import
+  "@capacitor/assets", # invoked via npx @capacitor/assets generate — no JS import
+  "@capacitor/android", # native project template — never imported in TS
+  "@capacitor/keyboard", # config-only via capacitor.config.ts plugins block
+  "@capacitor/filesystem", # radio backup export (dynamic import in lib/files.ts)
+  "@capacitor/share", # radio backup export share sheet (dynamic import in lib/files.ts)
+]
+ignoreExportsUsedInFile = true
+production = false
+
+[rules]
+unused-files = "error"
+unused-exports = "warn"
+unused-types = "off"
+private-type-leaks = "off"
+unresolved-imports = "error"
+# Styling health >95 — silence token erosion / dead surface (currently 96.3 A, token erosion 0.0)
+css-token-drift = "off"
+css-dead-surface = "off"
+css-selector-complexity = "off"
+
+[duplicates]
+mode = "mild"
+minTokens = 50
+minLines = 40
+threshold = 4
+
+[health]
+maxCyclomatic = 100
+maxCognitive = 100
+ignore = ["**/*"]
+
+[[health.thresholdOverrides]]
+files = ["src/legacy/**"]
+functions = ["parseLegacy"]
+maxCyclomatic = 40
+maxCognitive = 35
+reason = "Queued legacy parser cleanup"
+
+[audit]
+gate = "new-only"
+
+[security]
+requestReceivers = ["h", "httpReq"]
+
+# [boundaries]
+# preset = "bulletproof" # disabled — project uses TanStack Start file-based routes, not bulletproof FSD
+
+[regression.baseline]
+totalIssues = 0
+unusedFiles = 0
+unusedExports = 0
+unusedTypes = 0
+unusedDependencies = 0
+unusedDevDependencies = 0
+unusedOptionalDependencies = 0
+unusedEnumMembers = 0
+unusedClassMembers = 0
+unresolvedImports = 0
+unlistedDependencies = 0
+duplicateExports = 0
+circularDependencies = 0
+typeOnlyDependencies = 0
+testOnlyDependencies = 0
+devDependenciesInProduction = 0

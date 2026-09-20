@@ -1,0 +1,10 @@
+/* TEAM */
+  Developer: Double77x
+  Contact: https://github.com/Double77x/radioscout
+  Location: United Kingdom
+
+/* SITE */
+  Last update: 2026/09/20
+  Standards: HTML5, CSS3, React 19, TypeScript
+  Components: Shadcn UI, Tailwind CSS 4, Base UI
+  Software: VS Code, RadioScout App

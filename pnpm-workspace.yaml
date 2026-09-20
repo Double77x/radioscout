@@ -1,0 +1,33 @@
+minimumReleaseAge: 10080 # 7 days
+minimumReleaseAgeExclude:
+  - typescript
+  - cn
+  # TEMPORARY (2026-09-04): allow Vitest 5.0.0 (published 2026-09-03) before it
+  # clears the 7-day maturity window (~2026-09-11). Remove after `pnpm install`
+  # succeeds without these entries.
+  - vitest
+  - "@vitest/*"
+  - tinybench
+
+trustPolicy: no-downgrade # blocks installs when a package's trust evidence gets weaker than earlier publishes
+trustPolicyExclude:
+  - semver
+  - react-redux
+  - reselect
+  # 2026-09-09: Google's workbox-build@7.4.1 (via vite-plugin-pwa) depends on the
+  # community fork @trickfilm400/rollup-plugin-off-main-thread (successor to the
+  # abandoned @surma fork). The pre-release ships without provenance attestations,
+  # which trips no-downgrade. Build-time only (bundles the SW at build time, never
+  # ships to browsers). Re-verify if the version changes.
+  - "@trickfilm400/rollup-plugin-off-main-thread@3.0.0-pre1"
+blockExoticSubdeps: true # blocks transitive dependencies from pulling code from exotic sources like git repos or direct tarball URLs
+allowBuilds:
+  esbuild: true # required by Vite + Wrangler (Oxide)
+  sharp: true
+  workerd: true # required to run Wrangler Pages/Workers locally
+
+# Project-level equivalent:
+# pnpm config set --location=project minimumReleaseAge 10080
+#
+# Global equivalent:
+# pnpm config set minimumReleaseAge 10080 --global

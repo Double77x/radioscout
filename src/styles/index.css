@@ -1,0 +1,491 @@
+@import "tailwindcss";
+
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Poppins", "Poppins Fallback", sans-serif;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-glow: var(--glow);
+
+  /* Scout brand + pastel space tints (light/dark aware via :root) */
+  --color-scout-ink: var(--scout-ink);
+  --color-scout-moss: var(--scout-moss);
+  --color-scout-moss-deep: var(--scout-moss-deep);
+  --color-scout-fog: var(--scout-fog);
+  --color-scout-paper: var(--scout-paper);
+  --color-scout-butter: var(--scout-butter);
+  --color-scout-mint: var(--scout-mint);
+  --color-scout-sky: var(--scout-sky);
+  --color-scout-lilac: var(--scout-lilac);
+  --color-scout-blush: var(--scout-blush);
+  --color-scout-sage: var(--scout-sage);
+  --color-scout-pine: var(--scout-pine);
+  --color-scout-coal: var(--scout-coal);
+  --color-scout-cream: var(--scout-cream);
+
+  /* Scout type scale + radii (canonical classes, no arbitrary values) */
+  --text-scout-title: 1.75rem;
+  --text-scout-eyebrow: 0.7rem;
+  --radius-scout-card: 1.75rem;
+  --radius-scout-hero: 2rem;
+
+  /* Vercel-inspired surface tiers */
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+
+  --animate-fade-in: fade-in 0.6s ease-out both;
+  --animate-fade-in-right: fade-in-right 0.6s ease-out both;
+  --animate-pulse-glow: pulseGlow 2s infinite;
+  --animate-scout-enter: scout-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-draw-circle: draw-stroke 0.3s ease-out both;
+  --animate-draw-check: draw-stroke 0.22s ease-out 0.18s both;
+
+  @keyframes fade-in {
+    0% {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  @keyframes fade-in-right {
+    0% {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+  @keyframes pulseGlow {
+    0% {
+      box-shadow: 0 0 0 0 var(--glow);
+    }
+    70% {
+      box-shadow: 0 0 0 15px rgba(0, 0, 0, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+    }
+  }
+  @keyframes scout-enter {
+    0% {
+      opacity: 0;
+      transform: translateY(14px) scale(0.98);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes draw-stroke {
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+}
+
+/* Scout (Light) — fog app background, mint primary, pastel space tints */
+:root {
+  --background: #fafbf8;
+  --foreground: #17211b;
+
+  --card: #ffffff;
+  --card-foreground: #17211b;
+
+  --popover: #ffffff;
+  --popover-foreground: #17211b;
+
+  --primary: #c9e7d2; /* Pantry mint */
+  --primary-foreground: #17211b;
+
+  --secondary: #edf1e9;
+  --secondary-foreground: #17211b;
+
+  --muted: #e7ece2;
+  --muted-foreground: #55645a;
+
+  --accent: #e7ece2;
+  --accent-foreground: #17211b;
+
+  --destructive: #d92d20;
+  --destructive-foreground: #ffffff;
+
+  --border: #d5dcd1;
+  --input: #d5dcd1;
+  --ring: #1e5b38;
+
+  /* Scrollbar thumb (decorative, kept visible on app surfaces) */
+  --scroll-thumb: #bcc7bd;
+  --scroll-thumb-hover: #7d8b80;
+
+  /* Alpha border tiers for shadow-based borders (Vercel style) */
+  --border-strong: rgba(0, 0, 0, 0.32);
+
+  --glow: rgba(201, 231, 210, 0.9);
+
+  /* Surface tiers (get darker as you go "deeper") */
+  --surface-1: #ffffff;
+  --surface-2: #f3f6f0;
+  --surface-3: #e7ece2;
+
+  /* Scout brand + pastel space tints */
+  --scout-ink: #17211b;
+  --scout-moss: #257a4b;
+  --scout-moss-deep: #1c5c39;
+  --scout-pine: #1e5b38; /* readable green text on light surfaces */
+  --scout-coal: #17211b; /* fixed dark for tint surfaces, both modes */
+  --scout-cream: #fafbf8; /* fixed light for text on coal, both modes */
+  --scout-fog: #e9ede4;
+  --scout-paper: #fafbf8;
+  --scout-butter: #f9e7a1;
+  --scout-mint: #c9e7d2;
+  --scout-sky: #d2e3f6;
+  --scout-lilac: #dbd4f2;
+  --scout-blush: #f4cdc5;
+  --scout-sage: #d6e3c2;
+
+  /* Grid guide + corner marker colours (very faint, Vercel zone aesthetic) */
+  --grid-guide: rgba(0, 0, 0, 0.06);
+  --grid-plus: var(--border-strong);
+  --grid-cols: 12;
+  --grid-gap: 1.5rem;
+
+  --radius: 0.375rem;
+
+  /* JS-set variables — defined here for fallow health (used via style props) */
+  --accordion-panel-height: 0px;
+  --svg-bg: transparent;
+  --svg-fill: #000000;
+}
+
+/* Scout (Dark) — neutral grey base, moss accents only */
+.dark {
+  --background: #131313;
+  --foreground: #e6efe7; /* mist */
+
+  --card: #1c1c1c;
+  --card-foreground: #e6efe7; /* mist */
+
+  --popover: #1c1c1c;
+  --popover-foreground: #e6efe7; /* mist */
+
+  --primary: #8adca6; /* moss light */
+  --primary-foreground: #0f2117; /* spruce black */
+
+  --secondary: #262626;
+  --secondary-foreground: #e6efe7; /* mist */
+
+  --muted: #262626;
+  --muted-foreground: #a8a8a8;
+
+  --accent: #262626;
+  --accent-foreground: #e6efe7; /* mist */
+
+  --destructive: #f38ba8; /* red */
+  --destructive-foreground: #1e1e2e; /* base */
+
+  --border: #333333;
+  --input: #333333;
+  --ring: #8adca6; /* moss light */
+
+  /* Scrollbar thumb (decorative, kept visible on app surfaces) */
+  --scroll-thumb: #4a4a4a;
+  --scroll-thumb-hover: #8a8a8a;
+
+  /* Alpha border tiers for shadow-based borders (Vercel style) */
+  --border-strong: rgba(255, 255, 255, 0.28);
+
+  --glow: rgba(138, 220, 166, 0.22);
+
+  /* Surface tiers (get lighter as you go "deeper") */
+  --surface-1: #131313;
+  --surface-2: #1c1c1c;
+  --surface-3: #262626;
+
+  /* Scout brand + pastel space tints (kept light in dark mode for contrast) */
+  --scout-ink: #edf4ee;
+  --scout-moss: #8adca6;
+  --scout-moss-deep: #6cc489;
+  --scout-pine: #8adca6; /* readable green text on dark surfaces */
+  --scout-coal: #17211b;
+  --scout-cream: #fafbf8;
+  --scout-fog: #0e0e0e;
+  --scout-paper: #131313;
+  --scout-butter: #f9e7a1;
+  --scout-mint: #c9e7d2;
+  --scout-sky: #d2e3f6;
+  --scout-lilac: #dbd4f2;
+  --scout-blush: #f4cdc5;
+  --scout-sage: #d6e3c2;
+
+  /* Grid guide + corner marker colours (very faint, Vercel zone aesthetic) */
+  --grid-guide: rgba(205, 214, 244, 0.05);
+  --grid-plus: var(--border-strong);
+}
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    font-family: var(--font-sans);
+    @apply bg-background text-foreground;
+  }
+  /* Vercel-style tighter heading tracking */
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.02em;
+  }
+  /* Only apply smooth scrolling and gutter on devices with a mouse/trackpad */
+  @media (hover: hover) and (pointer: fine) and (min-width: 1024px) {
+    html {
+      scroll-behavior: smooth;
+      scrollbar-gutter: stable;
+    }
+  }
+  button {
+    @apply cursor-pointer;
+  }
+
+  /* Optional: Fix disabled buttons showing a pointer */
+  button:disabled {
+    @apply cursor-not-allowed;
+  }
+
+  /* Scrollbar styling */
+  html {
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scroll-thumb);
+    border-radius: 10px;
+    border: 2px solid var(--background);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scroll-thumb-hover);
+  }
+}
+
+/* Component Utilities */
+@layer components {
+  .section-container {
+    @apply mx-auto max-w-7xl px-4 py-16 sm:px-6 md:py-24 lg:px-8;
+  }
+
+  /* Vercel-inspired hairline borders (box-shadow, not border) */
+  .border-hairline {
+    box-shadow: 0 0 0 1px var(--border);
+  }
+
+  .border-hairline-strong {
+    box-shadow: 0 0 0 1px var(--border-strong);
+  }
+
+  .border-hairline-inset {
+    box-shadow: inset 0 0 0 1px var(--border);
+  }
+
+  /* Horizontal divider rendered as a shadow (Vercel style) */
+  .divider-hairline {
+    box-shadow: 0 1px 0 0 var(--border);
+  }
+
+  /* Vertical column guide lines (drawn as a repeating gradient).
+     Applied directly to the content-grid container with `content-box` origin
+     so the guide lines land exactly on the grid column boundaries (aligning
+     with the visible columns and the "+" markers). */
+  .grid-zone {
+    position: relative;
+  }
+
+  .grid-zone__content {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Absolute guide layer that pins to the content gutters so guides
+     extend the full section height and the trailing line lands exactly
+     at the content edge (right "+"). Avoids the stray-repeat line that
+     appears when the repeating tile is painted on the padded container. */
+  .grid-guides-layer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image: linear-gradient(to right, var(--grid-guide, var(--border)) 1px, transparent 1px);
+    background-repeat: repeat;
+    background-size: calc(
+        (100% - (var(--grid-cols, 12) - 1) * var(--grid-gap, 1.5rem)) / var(--grid-cols, 12) + var(--grid-gap, 1.5rem)
+      )
+      100%;
+    border-right: 1px solid var(--grid-guide, var(--border));
+  }
+
+  /* Vercel-style "+" corner marker. Placed at a 0x0 anchor point so the cross
+     is centered exactly on the anchor (the first/last vertical guide line and
+     the section edge). */
+  .grid-plus {
+    position: absolute;
+    width: 0;
+    height: 0;
+    pointer-events: none;
+    color: var(--grid-plus, var(--border-strong));
+    z-index: 2;
+  }
+  .grid-plus::before,
+  .grid-plus::after {
+    content: "";
+    position: absolute;
+    background: currentColor;
+  }
+  .grid-plus::before {
+    left: 0;
+    top: -9px;
+    bottom: -9px;
+    width: 1px;
+  }
+  .grid-plus::after {
+    top: 0;
+    left: -9px;
+    right: -9px;
+    height: 1px;
+  }
+
+  /* Scout — hide scrollbars on the horizontal chip rail (still scrollable) */
+  .scout-no-scrollbar {
+    scrollbar-width: none;
+  }
+  .scout-no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Scout — entrance animations stay off until they run */
+  @media (prefers-reduced-motion: reduce) {
+    .animate-scout-enter {
+      animation: none;
+    }
+  }
+
+  /* Scout — token-themed volume slider (player dock). Muted track with a
+     foreground thumb; hover grows the thumb for feedback in both schemes. */
+  .volume-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+  }
+  .volume-slider::-webkit-slider-runnable-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-muted);
+  }
+  .volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -7px;
+    height: 20px;
+    width: 20px;
+    border-radius: 9999px;
+    background: var(--color-foreground);
+    transition: transform 0.15s ease;
+  }
+  .volume-slider:hover::-webkit-slider-thumb {
+    transform: scale(1.15);
+  }
+  .volume-slider::-moz-range-track {
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-muted);
+  }
+  .volume-slider::-moz-range-progress {
+    height: 6px;
+    border-radius: 9999px;
+    background: var(--color-foreground);
+  }
+  .volume-slider::-moz-range-thumb {
+    height: 20px;
+    width: 20px;
+    border: none;
+    border-radius: 9999px;
+    background: var(--color-foreground);
+    transition: transform 0.15s ease;
+  }
+  .volume-slider:hover::-moz-range-thumb {
+    transform: scale(1.15);
+  }
+}
+
+/* Base UI Accordion Panel – height + fade animation */
+.accordion-panel {
+  overflow: hidden;
+  height: var(--accordion-panel-height, 0px);
+  opacity: 1;
+  transition:
+    height 0.4s cubic-bezier(0.87, 0, 0.13, 1),
+    opacity 0.4s cubic-bezier(0.87, 0, 0.13, 1);
+}
+.accordion-panel[data-starting-style],
+.accordion-panel[data-ending-style] {
+  height: 0;
+  opacity: 0;
+}
+
+@utility rounded-inherit {
+  border-radius: inherit;
+}
