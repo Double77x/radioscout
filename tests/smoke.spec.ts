@@ -97,6 +97,21 @@ test.describe("RadioScout home", () => {
     await expect(page).toHaveURL(/tag=rock/);
   });
 
+  test("genre chips drag to scroll from the chip itself", async ({ page }) => {
+    const rail = page.locator("fieldset div").first();
+    const chip = page.getByRole("link", { name: "Pop", exact: true });
+    const box = await chip.boundingBox();
+    if (!box) throw new Error("Pop chip has no bounding box");
+    const before = await rail.evaluate((el) => el.scrollLeft);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x - 160, box.y + box.height / 2, { steps: 12 });
+    await page.mouse.up();
+    // A real drag scrolls instead of navigating.
+    await expect.poll(() => rail.evaluate((el) => el.scrollLeft), { timeout: 5000 }).not.toBe(before);
+    await expect(page).not.toHaveURL(/tag=pop/);
+  });
+
   test("empty search offers a reset", async ({ page }) => {
     await page.getByLabel("Search stations by name").fill("no such thing here");
     await expect(page.getByText("Nothing matches that")).toBeVisible();

@@ -183,6 +183,7 @@ export function RadioHeader({
                   <Link
                     key={filter.id}
                     to='/'
+                    draggable={false}
                     search={{ tag: filter.id === "all" ? undefined : filter.id, q: query || undefined }}
                     replace
                     className={cn(
