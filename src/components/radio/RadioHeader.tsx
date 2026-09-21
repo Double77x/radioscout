@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Search, X } from "lucide-react";
 import { SettingsMenu } from "@/components/scout/SettingsMenu";
 import { Input } from "@/components/ui/input";
+import { useIsClient } from "@/hooks/use-is-client";
 import { FOCUS_RADIO_SEARCH_EVENT } from "@/lib/focus-radio-search";
 import { GENRE_FILTERS } from "@/lib/radio/genres";
 import { formatStationCount } from "@/lib/radio/format";
@@ -35,6 +36,13 @@ export function RadioHeader({
 }: RadioHeaderProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const isClient = useIsClient();
+  // Prerendered HTML has no search state, so a direct load of a shared
+  // `/?q=` / `/?tag=` URL would hydrate mismatched (active chip, input
+  // value) and throw React #418. Render the default search UI until the
+  // client takes over — one silent extra render, only for param URLs.
+  const shownQuery = isClient ? query : "";
+  const shownGenre = isClient ? genre : "all";
   const searchRef = useRef<HTMLInputElement | null>(null);
   // Drag-to-scroll state for the chip rail (mouse only — touch keeps
   // native momentum scrolling). Refs only, no effects: pointer handlers
@@ -62,7 +70,7 @@ export function RadioHeader({
     });
 
   const clearSearch = () => {
-    setSearch({ tag: genre });
+    setSearch({ tag: shownGenre });
     searchRef.current?.focus();
   };
 
@@ -159,11 +167,11 @@ export function RadioHeader({
                     ? "Search stations…"
                     : `Search ${formatStationCount(totalStations)}+ stations…`
                 }
-                value={query}
-                onChange={(event) => setSearch({ q: event.target.value, tag: genre })}
+                value={shownQuery}
+                onChange={(event) => setSearch({ q: event.target.value, tag: shownGenre })}
                 className='h-12 rounded-full border-border bg-card pr-12 pl-11 text-base shadow-sm placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden'
               />
-              {query === "" ? null : (
+              {shownQuery === "" ? null : (
                 <button
                   type='button'
                   onClick={clearSearch}
@@ -186,7 +194,7 @@ export function RadioHeader({
               onClickCapture={onRailClickCapture}
               className='scout-no-scrollbar -mx-4 mt-3 flex cursor-grab gap-2 overflow-x-auto px-4 pb-1 select-none active:cursor-grabbing'>
               {GENRE_FILTERS.map((filter) => {
-                const active = genre === filter.id;
+                const active = shownGenre === filter.id;
                 return active ? (
                   <span
                     key={filter.id}
@@ -198,7 +206,7 @@ export function RadioHeader({
                     key={filter.id}
                     to='/'
                     draggable={false}
-                    search={{ tag: filter.id === "all" ? undefined : filter.id, q: query || undefined }}
+                    search={{ tag: filter.id === "all" ? undefined : filter.id, q: shownQuery || undefined }}
                     replace
                     className={cn(
                       "shrink-0 rounded-full border border-border bg-card px-5 py-3 text-sm font-medium text-muted-foreground transition hover:text-foreground",

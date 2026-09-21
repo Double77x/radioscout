@@ -10,6 +10,7 @@ import { StationListSkeleton } from "@/components/radio/StationSkeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useIsClient } from "@/hooks/use-is-client";
 import { usePersistentStrings } from "@/hooks/use-persistent-state";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { openStationDetail } from "@/hooks/use-station-detail";
@@ -32,10 +33,14 @@ const HOME_SECTION_IDS = new Set(["saved", "top", "recent"]);
 
 export default function HomePage() {
   const { q = "", tag = "all" } = routeApi.useSearch();
+  const isClient = useIsClient();
   const [openSections, setOpenSections] = usePersistentStrings(HOME_SECTIONS_KEY, HOME_SECTIONS_DEFAULT);
   const visibleSections = openSections.filter((id) => HOME_SECTION_IDS.has(id));
   const top = useTopStations("votes");
-  const filtering = q.trim() !== "" || tag !== "all";
+  // Matches RadioHeader's hydration gate: the prerender has no search state,
+  // so a direct `/?q=` / `/?tag=` load renders home sections until the client
+  // takes over instead of mismatching the results branch (React #418).
+  const filtering = isClient && (q.trim() !== "" || tag !== "all");
   const search = useStationSearch(
     { name: q.trim() || undefined, tag: tag === "all" ? undefined : tag, limit: 50 },
     filtering,

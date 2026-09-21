@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
 import { StationCard } from "@/components/radio/StationCard";
 import { StationListSkeleton } from "@/components/radio/StationSkeleton";
+import { useIsClient } from "@/hooks/use-is-client";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { FAVOURITES_KEY, useFavourites, useToggleFavourite } from "@/hooks/use-radio";
 import { openStationDetail } from "@/hooks/use-station-detail";
@@ -75,6 +76,7 @@ export function SavedStations() {
   const { data: favourites, isFetching } = useFavourites();
   const toggleFavourite = useToggleFavourite();
   const player = usePlayer();
+  const isClient = useIsClient();
 
   const [dragId, setDragId] = useState<string | null>(null);
   const [overIndex, setOverIndex] = useState<number | null>(null);
@@ -333,11 +335,13 @@ export function SavedStations() {
     event.stopPropagation();
   };
 
-  // Local store resolves after first paint: skeleton while the initial
-  // fetch is in flight so the empty state never flashes over real rows.
-  // Non-empty lists keep rendering through background refetches.
+  // Local store resolves after first paint. Prerender with the skeleton (the
+  // store never runs on the server, so the empty state would mismatch
+  // hydration and flash over real rows); the empty state appears only once
+  // the client fetch actually resolves with zero rows. Non-empty lists keep
+  // rendering through background refetches.
   if (favourites.length === 0) {
-    if (isFetching) return <StationListSkeleton rows={3} />;
+    if (!isClient || isFetching) return <StationListSkeleton rows={3} />;
     return (
       <div className='flex flex-col items-center rounded-scout-card border border-dashed border-border bg-card px-6 py-10 text-center'>
         <p className='font-semibold'>No favourites yet</p>
