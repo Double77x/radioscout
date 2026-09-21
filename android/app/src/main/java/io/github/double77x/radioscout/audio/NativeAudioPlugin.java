@@ -1,8 +1,10 @@
 package io.github.double77x.radioscout.audio;
 
+import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import androidx.core.content.ContextCompat;
@@ -13,10 +15,13 @@ import androidx.media3.common.Player;
 import androidx.media3.session.MediaController;
 import androidx.media3.session.SessionToken;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -28,7 +33,9 @@ import java.util.concurrent.ExecutionException;
  * <p>Every call degrades gracefully: when the service is unreachable the
  * method rejects and the web layer falls back to {@code <audio>}.
  */
-@CapacitorPlugin(name = "NativeAudio")
+@CapacitorPlugin(
+        name = "NativeAudio",
+        permissions = {@Permission(alias = "notifications", strings = {Manifest.permission.POST_NOTIFICATIONS})})
 public class NativeAudioPlugin extends Plugin {
 
     private static final String EVENT_STATUS = "playbackStatus";
@@ -134,6 +141,37 @@ public class NativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void play(PluginCall call) {
+        if (needsNotificationPermission()) {
+            // First playback on Android 13+: ask for the notification
+            // permission in context, then start regardless — denied just
+            // means no lock-screen/shade UI, audio still plays.
+            requestPermissionForAlias("notifications", call, "startPlayAfterPermission");
+            return;
+        }
+        startPlay(call);
+    }
+
+    @PermissionCallback
+    private void startPlayAfterPermission(PluginCall call) {
+        startPlay(call);
+    }
+
+    /**
+     * True when the media notification (and with it the lock-screen / shade
+     * controls) would be silently dropped: Android 13+ denies
+     * POST_NOTIFICATIONS by default and the manifest declaration alone is
+     * not enough. Fail-open to playback if the plumbing is unavailable.
+     */
+    private boolean needsNotificationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false;
+        try {
+            return getPermissionState("notifications") != PermissionState.GRANTED;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private void startPlay(PluginCall call) {
         String url = call.getString("url", "");
         if (url == null || url.isEmpty()) {
             call.reject("Missing stream URL");

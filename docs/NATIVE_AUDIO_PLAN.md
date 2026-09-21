@@ -51,6 +51,9 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   device, HTTPS `<audio>` path untouched as fallback.
 - [x] N2: foreground service + MediaSession (lock-screen controls, survives
   WebView death); OTA-safe (native-layer edits still need a full APK).
+  POST_NOTIFICATIONS is requested in-context on first native play
+  (Android 13+ denies it by default — without the grant the media
+  notification, and with it all lock-screen/shade controls, never appears).
 - [ ] N3: scoped cleartext allowlist for legacy HTTP edges OR server-side HTTPS
   proxy decision (proxy would also fix web — revisit then); HTTP-only error
   copy in `use-player.ts` updated to match whichever lands.
