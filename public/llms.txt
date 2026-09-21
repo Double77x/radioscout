@@ -24,3 +24,4 @@ For agents working on the RadioScout codebase, read the guidance files below bef
 - [Privacy Policy](https://radioscout.pages.dev/legal/privacy): How user data is handled.
 - [Terms of Service](https://radioscout.pages.dev/legal/terms): Terms of use.
 - [Changelog](https://radioscout.pages.dev/legal/changelog): Release history.
+- [Adding stations](https://radioscout.pages.dev/adding-stations): How to add a missing station via radio-browser.info.

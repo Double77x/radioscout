@@ -15,7 +15,15 @@ async function settleEnterAnimations(page: Page) {
   );
 }
 
-const routes = ["/", "/legal/privacy", "/legal/terms", "/legal/cookies", "/legal/security", "/legal/changelog"];
+const routes = [
+  "/",
+  "/legal/privacy",
+  "/legal/terms",
+  "/legal/cookies",
+  "/legal/security",
+  "/legal/changelog",
+  "/adding-stations",
+];
 
 for (const path of routes) {
   test(`a11y: ${path} has no serious violations`, async ({ page }) => {

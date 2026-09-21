@@ -14,6 +14,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SplatRouteImport } from './routes/$'
 
+const AddingStationsLazyRouteImport = createFileRoute('/adding-stations')()
 const LegalChangelogLazyRouteImport = createFileRoute('/legal/changelog')()
 const LegalCookiesLazyRouteImport = createFileRoute('/legal/cookies')()
 const LegalPrivacyLazyRouteImport = createFileRoute('/legal/privacy')()
@@ -30,6 +31,13 @@ const SplatRoute = SplatRouteImport.update({
   path: '/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AddingStationsLazyRoute = AddingStationsLazyRouteImport.update({
+  id: '/adding-stations',
+  path: '/adding-stations',
+  getParentRoute: () => rootRouteImport,
+} as any).lazy(() =>
+  import('./routes/adding-stations.lazy').then((d) => d.Route),
+)
 const LegalChangelogLazyRoute = LegalChangelogLazyRouteImport.update({
   id: '/legal/changelog',
   path: '/legal/changelog',
@@ -63,6 +71,7 @@ const LegalTermsLazyRoute = LegalTermsLazyRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/adding-stations': typeof AddingStationsLazyRoute
   '/legal/changelog': typeof LegalChangelogLazyRoute
   '/legal/cookies': typeof LegalCookiesLazyRoute
   '/legal/privacy': typeof LegalPrivacyLazyRoute
@@ -72,6 +81,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/adding-stations': typeof AddingStationsLazyRoute
   '/legal/changelog': typeof LegalChangelogLazyRoute
   '/legal/cookies': typeof LegalCookiesLazyRoute
   '/legal/privacy': typeof LegalPrivacyLazyRoute
@@ -82,6 +92,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/$': typeof SplatRoute
+  '/adding-stations': typeof AddingStationsLazyRoute
   '/legal/changelog': typeof LegalChangelogLazyRoute
   '/legal/cookies': typeof LegalCookiesLazyRoute
   '/legal/privacy': typeof LegalPrivacyLazyRoute
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/$'
+    | '/adding-stations'
     | '/legal/changelog'
     | '/legal/cookies'
     | '/legal/privacy'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/$'
+    | '/adding-stations'
     | '/legal/changelog'
     | '/legal/cookies'
     | '/legal/privacy'
@@ -111,6 +124,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/$'
+    | '/adding-stations'
     | '/legal/changelog'
     | '/legal/cookies'
     | '/legal/privacy'
@@ -121,6 +135,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SplatRoute: typeof SplatRoute
+  AddingStationsLazyRoute: typeof AddingStationsLazyRoute
   LegalChangelogLazyRoute: typeof LegalChangelogLazyRoute
   LegalCookiesLazyRoute: typeof LegalCookiesLazyRoute
   LegalPrivacyLazyRoute: typeof LegalPrivacyLazyRoute
@@ -142,6 +157,13 @@ declare module '@tanstack/react-router' {
       path: '/$'
       fullPath: '/$'
       preLoaderRoute: typeof SplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/adding-stations': {
+      id: '/adding-stations'
+      path: '/adding-stations'
+      fullPath: '/adding-stations'
+      preLoaderRoute: typeof AddingStationsLazyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/legal/changelog': {
@@ -185,6 +207,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SplatRoute: SplatRoute,
+  AddingStationsLazyRoute: AddingStationsLazyRoute,
   LegalChangelogLazyRoute: LegalChangelogLazyRoute,
   LegalCookiesLazyRoute: LegalCookiesLazyRoute,
   LegalPrivacyLazyRoute: LegalPrivacyLazyRoute,

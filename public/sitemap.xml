@@ -7,6 +7,12 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://radioscout.pages.dev/adding-stations</loc>
+    <lastmod>2026-09-21</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://radioscout.pages.dev/</loc>
     <lastmod>2026-09-20</lastmod>
     <changefreq>daily</changefreq>

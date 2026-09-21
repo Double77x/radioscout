@@ -23,6 +23,7 @@ export const NAV_LINKS: NavLink[] = [{ to: "/", label: "Home" }];
 export const FOOTER_PRODUCT_LINKS: NavLink[] = [
   { to: "/", label: "Home" },
   { to: "/legal/changelog", label: "Changelog" },
+  { to: "/adding-stations", label: "Adding stations" },
 ];
 
 export const FOOTER_LEGAL_LINKS: NavLink[] = [
