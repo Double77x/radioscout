@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { GripVertical } from "lucide-react";
 import { StationCard } from "@/components/radio/StationCard";
 import { StationListSkeleton } from "@/components/radio/StationSkeleton";
@@ -40,6 +40,69 @@ interface PendingDrag {
   timer: ReturnType<typeof globalThis.setTimeout> | null;
 }
 
+/** Rendered drag visuals: lifted row, gap, optimistic order, settle-back. */
+interface DragVisualState {
+  id: string | null;
+  overIndex: number | null;
+  dy: number;
+  gap: number;
+  orderOverride: string[] | null;
+  settle: { id: string; dy: number } | null;
+}
+
+const INITIAL_DRAG_VISUAL: DragVisualState = {
+  id: null,
+  overIndex: null,
+  dy: 0,
+  gap: 0,
+  orderOverride: null,
+  settle: null,
+};
+
+type DragVisualAction =
+  | { type: "activate"; id: string; gap: number; index: number }
+  | { type: "move"; dy: number; over: number | null }
+  | { type: "commit"; order: string[]; settle: { id: string; dy: number } }
+  | { type: "settle-done" }
+  | { type: "reset" };
+
+/**
+ * One reducer for the six visual states above (react-doctor
+ * prefer-useReducer: they always change together on grab / move / drop).
+ * Handler-owned mirrors (overRef/dyRef) stay refs: listeners close over
+ * renders and must read current values without re-subscribing.
+ */
+function dragVisualReducer(state: DragVisualState, action: DragVisualAction): DragVisualState {
+  switch (action.type) {
+    case "activate": {
+      return { ...state, id: action.id, gap: action.gap, overIndex: action.index, dy: 0, settle: null };
+    }
+    case "move": {
+      return state.dy === action.dy && state.overIndex === action.over
+        ? state
+        : { ...state, dy: action.dy, overIndex: action.over };
+    }
+    case "commit": {
+      return {
+        ...state,
+        id: null,
+        overIndex: null,
+        dy: 0,
+        orderOverride: action.order,
+        settle: action.settle,
+      };
+    }
+    case "settle-done": {
+      return state.settle === null ? state : { ...state, settle: null };
+    }
+    case "reset": {
+      return state.id === null && state.overIndex === null && state.dy === 0
+        ? state
+        : { ...state, id: null, overIndex: null, dy: 0 };
+    }
+  }
+}
+
 /** Non-passive scroll lock while a touch drag is live (owned by AbortController). */
 function preventTouchScroll(event: TouchEvent): void {
   event.preventDefault();
@@ -78,12 +141,8 @@ export function SavedStations() {
   const player = usePlayer();
   const isClient = useIsClient();
 
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [overIndex, setOverIndex] = useState<number | null>(null);
-  const [dragDy, setDragDy] = useState(0);
-  const [dragGap, setDragGap] = useState(0);
-  const [orderOverride, setOrderOverride] = useState<string[] | null>(null);
-  const [settle, setSettle] = useState<{ id: string; dy: number } | null>(null);
+  const [visual, dispatch] = useReducer(dragVisualReducer, INITIAL_DRAG_VISUAL);
+  const { id: dragId, overIndex, dy: dragDy, gap: dragGap, orderOverride, settle } = visual;
 
   const listRef = useRef<HTMLUListElement | null>(null);
   const dragState = useRef<DragState | null>(null);
@@ -154,13 +213,12 @@ export function SavedStations() {
         // Settle animation: the dragged row keeps a transform from its
         // release point to its committed home, then relaxes to none.
         const newTop = topOfOrder(next, state.id, state);
-        setOrderOverride(next);
-        setSettle({ id: state.id, dy: originTop + dyRef.current - newTop });
+        dispatch({ type: "commit", order: next, settle: { id: state.id, dy: originTop + dyRef.current - newTop } });
         if (settleRaf.current !== 0) globalThis.cancelAnimationFrame(settleRaf.current);
         settleRaf.current = globalThis.requestAnimationFrame(() =>
           globalThis.requestAnimationFrame(() => {
             settleRaf.current = 0;
-            setSettle(null);
+            dispatch({ type: "settle-done" });
           }),
         );
         persistOrder(next);
@@ -169,9 +227,7 @@ export function SavedStations() {
         suppressClickRef.current = true;
       }
     }
-    setDragId(null);
-    setOverIndex(null);
-    setDragDy(0);
+    dispatch({ type: "reset" });
     dyRef.current = 0;
   };
 
@@ -203,12 +259,8 @@ export function SavedStations() {
       });
       globalThis.navigator?.vibrate?.(10);
     }
-    setSettle(null);
-    setDragId(pending.uuid);
-    setDragGap((heights[fromIndex] ?? 0) + ROW_GAP);
-    setOverIndex(fromIndex);
+    dispatch({ type: "activate", id: pending.uuid, gap: (heights[fromIndex] ?? 0) + ROW_GAP, index: fromIndex });
     overRef.current = fromIndex;
-    setDragDy(0);
     dyRef.current = 0;
   };
 
@@ -304,8 +356,7 @@ export function SavedStations() {
           if (!active) return;
           const dy = pointerY - active.startY;
           dyRef.current = dy;
-          setDragDy(dy);
-          setOverIndex(overRef.current);
+          dispatch({ type: "move", dy, over: overRef.current });
         });
       },
       { signal },
