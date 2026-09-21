@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useLocation, useRouter } from "@tanstack/react-router";
+import { useLocation, useNavigate } from "@tanstack/react-router";
 import { useIsClient } from "@/hooks/use-is-client";
 import { queryClient } from "@/lib/query-client";
 import type { Station } from "@/lib/radio/types";
@@ -44,43 +44,38 @@ export function useDetailStation() {
 }
 
 /**
- * Rewrite the current URL's `station` param on the history stack, keeping
- * every other param (`q`, `tag`) intact. Raw history, not `navigate`: the
- * update targets whatever route is current (the dock opens details from
- * legal pages too), and untyped `navigate` cannot express a cross-route
- * search change. Same push/replace stack semantics either way.
- */
-function pushStationParam(router: ReturnType<typeof useRouter>, uuid: string | null, replace: boolean): void {
-  const { pathname, searchStr } = router.state.location;
-  const params = new URLSearchParams(searchStr);
-  if (uuid === null) params.delete("station");
-  else params.set("station", uuid);
-  const query = params.toString();
-  const href = query === "" ? pathname : `${pathname}?${query}`;
-  if (replace) router.history.replace(href);
-  else router.history.push(href);
-}
-
-/**
  * Open the sheet: seed the detail cache (marked stale, so the live stats
  * still refresh in the background) and push `?station=`. Push, not replace
- * — back then closes the sheet instead of leaving the app.
+ * — back then closes the sheet instead of leaving the app. `resetScroll`
+ * keeps the list exactly where it was: opening details must never move the
+ * page (previously no navigation happened at all).
  */
 export function useOpenStationDetail(): (station: Station) => void {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   return (station: Station) => {
     queryClient.setQueryData(["radio", "detail", station.stationuuid], station, { updatedAt: 0 });
-    pushStationParam(router, station.stationuuid, false);
+    void navigate({
+      to: pathname,
+      search: (prev) => ({ ...prev, station: station.stationuuid }),
+      resetScroll: false,
+    });
   };
 }
 
 /**
  * Close the sheet and strip `?station=`. Replace: closing records nothing,
- * so back never reopens it.
+ * so back never reopens it. `resetScroll` for the same reason as open.
  */
 export function useCloseStationDetail(): () => void {
-  const router = useRouter();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
   return () => {
-    pushStationParam(router, null, true);
+    void navigate({
+      to: pathname,
+      search: (prev) => ({ ...prev, station: undefined }),
+      replace: true,
+      resetScroll: false,
+    });
   };
 }

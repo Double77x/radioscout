@@ -196,6 +196,37 @@ test.describe("RadioScout home", () => {
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).toBeHidden();
   });
+
+  test("opening details keeps the list scroll position", async ({ page }) => {
+    await page.evaluate(() => window.scrollTo(0, 300));
+    const y = await page.evaluate(() => window.scrollY);
+    expect(y).toBeGreaterThan(0);
+    // A button already fully in view, so the click itself moves nothing —
+    // any scroll change comes from the navigation.
+    const details = page.getByRole("button", { name: /Details for Test/ });
+    const height = await page.evaluate(() => window.innerHeight);
+    const count = await details.count();
+    let target = null;
+    for (let index = 0; index < count; index++) {
+      const box = await details.nth(index).boundingBox();
+      if (box && box.y >= 0 && box.y + box.height <= height) {
+        target = details.nth(index);
+        break;
+      }
+    }
+    expect(target).not.toBeNull();
+    await target?.click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("button", { name: "Play now" })).toBeVisible();
+    await expect(page).toHaveURL(/station=/);
+    // Let the navigation's scroll restoration run before measuring.
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+    await dialog.getByRole("button", { name: "Close details" }).click();
+    await expect(dialog).toBeHidden();
+    await page.waitForTimeout(250);
+    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+  });
 });
 
 test.describe("Runtime warnings", () => {
