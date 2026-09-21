@@ -13,8 +13,9 @@ export default function PrivacyPage() {
 
         <ProseH2>Information we collect</ProseH2>
         <p>
-          RadioScout has no accounts and no servers. Your favourites, history, volume, votes and language filter stay in
-          your browser's local storage on your own device. We never see, collect or transmit them.
+          RadioScout has no accounts and no servers. Your favourites, history, volume, votes, language filter and last
+          played station stay in your browser's local storage on your own device. We never see, collect or transmit
+          them.
         </p>
 
         <ProseH2>How we use your information</ProseH2>

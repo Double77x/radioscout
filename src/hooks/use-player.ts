@@ -11,6 +11,7 @@ import {
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
 import { loadMuted, loadVolume, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
+import { readLastStation, writeLastStation } from "@/lib/radio/last-played";
 import {
   isHlsUrl,
   isInsecureHttpStream,
@@ -70,10 +71,41 @@ function initialSnapshot(): PlayerSnapshot {
   if (globalThis.window === undefined) {
     return { station: null, status: "idle", error: null, needsNative: false, volume: 0.9, muted: false };
   }
-  return { station: null, status: "idle", error: null, needsNative: false, volume: loadVolume(), muted: loadMuted() };
+  // Quick resume: the previous station returns paused (never autoplaying).
+  // Hydration still starts from `serverSnapshot` below and picks this up as
+  // a post-hydration update, so the prerender ("Nothing playing") matches.
+  const restored = readLastStation();
+  return {
+    station: restored,
+    status: restored ? "paused" : "idle",
+    error: null,
+    needsNative: false,
+    volume: loadVolume(),
+    muted: loadMuted(),
+  };
 }
 
 let snapshot: PlayerSnapshot = initialSnapshot();
+
+/**
+ * Static prerender snapshot. The server always renders the idle dock, so
+ * hydration must start there too — the restored station applies as a normal
+ * post-hydration update. Passing `getSnapshot` here instead would hydrate a
+ * stored station over "Nothing playing" markup (React #418) for every
+ * returning user.
+ */
+const serverSnapshot: PlayerSnapshot = {
+  station: null,
+  status: "idle",
+  error: null,
+  needsNative: false,
+  volume: 0.9,
+  muted: false,
+};
+
+function getServerSnapshot(): PlayerSnapshot {
+  return serverSnapshot;
+}
 
 function emit(next: Partial<PlayerSnapshot>): void {
   snapshot = { ...snapshot, ...next };
@@ -97,6 +129,13 @@ function ensureAudio(): HTMLAudioElement | null {
     audio = new Audio();
     audio.preload = "none";
     audio.volume = snapshot.muted ? 0 : snapshot.volume;
+    // Quick resume: point the fresh element at the restored station (no
+    // fetch until play — preload stays "none"). Empty URL means the stored
+    // row can't play; resume() falls back to the full play path then.
+    if (snapshot.station) {
+      const local = pickPlayableUrl(snapshot.station);
+      if (local !== "") audio.src = local;
+    }
     // Native owns playback while `usingNative` — stale `<audio>` events
     // must never flip the snapshot behind the service.
     audio.addEventListener("playing", () => {
@@ -235,12 +274,13 @@ export function usePlayer(): PlayerSnapshot & {
   setVolume: (volume: number) => void;
   toggleMute: () => void;
 } {
-  const snap = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const snap = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   return { ...snap, play, toggle, stop, setVolume, toggleMute };
 }
 
 export function play(station: Station): void {
   const token = ++playToken;
+  writeLastStation(station);
   emit({ station, status: "loading", error: null, needsNative: false });
 
   void (async () => {
@@ -328,6 +368,12 @@ export function resume(): Promise<void> {
   }
   const element = ensureAudio();
   if (!element || !snapshot.station) return Promise.resolve();
+  if (!element.getAttribute("src")) {
+    // Restored row without a playable URL (or a parked element) — run the
+    // full resolve path instead of playing silence.
+    play(snapshot.station);
+    return Promise.resolve();
+  }
   emit({ status: "loading", error: null });
   return element.play().catch(() => {
     emit({ status: "error", error: "Couldn't resume playback." });
@@ -335,7 +381,11 @@ export function resume(): Promise<void> {
 }
 
 export function toggle(): void {
-  if (!audio || !snapshot.station) return;
+  // No element yet (fresh load with a restored station): pause() is a safe
+  // no-op via `audio?.pause()`, and resume() creates the element on demand —
+  // so only the missing station bails. Gating on `audio` instead would leave
+  // the row play button dead until something else builds the element.
+  if (!snapshot.station) return;
   if (snapshot.status === "playing" || snapshot.status === "loading") pause();
   else void resume();
 }
