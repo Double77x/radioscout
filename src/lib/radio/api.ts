@@ -49,14 +49,39 @@ export interface StationSearch {
   limit?: number;
   /** Tag charts rank by votes ("highest rated"); everything else by clicks. */
   order?: "clickcount" | "votes";
+  /**
+   * Content-language filter (directory names, e.g. `["english"]`).
+   * One language filters server-side; several fan out (the `language`
+   * param only matches a single literal) and merge deduped.
+   */
+  languages?: string[];
+}
+
+/** Merge parallel language requests, first language wins on duplicates. */
+function dedupeStations(stations: Station[]): Station[] {
+  const seen = new Set<string>();
+  return stations.filter((station) => {
+    if (seen.has(station.stationuuid)) return false;
+    seen.add(station.stationuuid);
+    return true;
+  });
 }
 
 /** Mirrors the browse/search lists (stations, categories, tags fragments). */
 export async function searchStations(search: StationSearch): Promise<Station[]> {
+  const languages = (search.languages ?? []).filter((language) => language !== "");
+  if (languages.length > 1) {
+    const batched = await Promise.all(
+      languages.map((language) => searchStations({ ...search, languages: [language] })),
+    );
+    // Inner calls are already playable-filtered; just dedupe the merge.
+    return dedupeStations(batched.flat());
+  }
   const query = searchParams({
     name: search.name,
     tag: search.tag,
     country: search.country,
+    language: languages[0],
     limit: search.limit ?? 50,
     hidebroken: "true",
     order: search.order ?? "clickcount",
@@ -87,14 +112,22 @@ function haystackFor(station: Station): string {
  * term, then keep rows where EVERY term appears anywhere in the
  * searchable text (name, tags, country, state, language, codec).
  */
-export async function searchStationsIlike(query: string, tag?: string, limit = 50): Promise<Station[]> {
+export async function searchStationsIlike(
+  query: string,
+  tag?: string,
+  limit = 50,
+  languages: string[] = [],
+): Promise<Station[]> {
   const terms = normalize(query)
     .split(/[\s,/_-]+/)
     .filter((term) => term.length > 1);
   if (terms.length === 0) return [];
   const anchors = terms.toSorted((a, b) => b.length - a.length);
   // Longest terms first, fetched together — the server ranks each by clicks.
-  const batched = await Promise.all(anchors.slice(0, 2).map((anchor) => searchStations({ name: anchor, limit: 100 })));
+  // Language fan-out (if any) happens inside `searchStations`.
+  const batched = await Promise.all(
+    anchors.slice(0, 2).map((anchor) => searchStations({ name: anchor, limit: 100, languages })),
+  );
   const seen = new Set<string>();
   const candidates: Station[] = [];
   for (const rows of batched) {
@@ -124,22 +157,48 @@ export async function searchStationsIlike(query: string, tag?: string, limit = 5
 }
 
 /** Most-voted stations — the default landing list (unplayable rows filtered). */
-export async function topVotedStations(limit = 50): Promise<Station[]> {
-  return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${limit}`)));
+export async function topVotedStations(limit = 50, languages: string[] = []): Promise<Station[]> {
+  if (languages.length === 0) {
+    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${limit}`)));
+  }
+  // `topvote` ignores `?language=` — rank through the search endpoint instead.
+  return rankedTopStations("votes", limit, languages);
 }
 
 /** Most-clicked stations (unplayable rows filtered). */
-export async function topClickedStations(limit = 50): Promise<Station[]> {
-  return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${limit}`)));
+export async function topClickedStations(limit = 50, languages: string[] = []): Promise<Station[]> {
+  if (languages.length === 0) {
+    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${limit}`)));
+  }
+  return rankedTopStations("clickcount", limit, languages);
+}
+
+/**
+ * Language-filtered chart: top `limit` per language, merged by rank.
+ * Each leg is server-ranked and playable-filtered; the merge re-sorts.
+ */
+async function rankedTopStations(
+  order: "clickcount" | "votes",
+  limit: number,
+  languages: string[],
+): Promise<Station[]> {
+  const batched = await Promise.all(
+    languages.map((language) => searchStations({ order, languages: [language], limit })),
+  );
+  return dedupeStations(batched.flat())
+    .toSorted((a, b) => b[order] - a[order])
+    .slice(0, limit);
 }
 
 /** Refresh favourites/history snapshots by uuid (batch, one round-trip). */
 export async function stationsByUuid(uuids: string[]): Promise<Station[]> {
   if (uuids.length === 0) return [];
+  // The server only reads form-encoded bodies here — a JSON body is
+  // silently ignored and answers `[]` (verified 2026-09-21 against de1).
   const response = await fetchJson("/json/stations/byuuid", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ uuids: uuids.join(",") }),
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ uuids: uuids.join(",") }).toString(),
   });
   return parseStations(response);
 }

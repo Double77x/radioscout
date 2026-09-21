@@ -11,12 +11,14 @@ const HISTORY_KEY = [...RADIO_KEY, "history"] as const;
 
 const STALE_MS = 1000 * 60 * 5;
 
-const loadTopVoted = () => import("@/lib/radio/api").then((api) => api.topVotedStations());
-const loadTopClicked = () => import("@/lib/radio/api").then((api) => api.topClickedStations());
+const loadTopVoted = (languages: string[]) => () =>
+  import("@/lib/radio/api").then((api) => api.topVotedStations(50, languages));
+const loadTopClicked = (languages: string[]) => () =>
+  import("@/lib/radio/api").then((api) => api.topClickedStations(50, languages));
 const loadSearch = (search: StationSearch) =>
   import("@/lib/radio/api").then((api) => {
     if ((search.name ?? "").trim() !== "") {
-      return api.searchStationsIlike(search.name ?? "", search.tag, search.limit);
+      return api.searchStationsIlike(search.name ?? "", search.tag, search.limit, search.languages);
     }
     // Genre chips: highest-rated top 50 for the tag, not most-clicked.
     return api.searchStations({ ...search, order: "votes" });
@@ -27,11 +29,11 @@ const loadHistory = () => import("@/lib/radio/store").then((store) => store.list
 const saveFavourite = (station: Station) => import("@/lib/radio/store").then((store) => store.toggleFavourite(station));
 const wipeHistory = () => import("@/lib/radio/store").then((store) => store.clearHistory());
 
-export function useTopStations(sort: "votes" | "clicks" = "votes") {
+export function useTopStations(sort: "votes" | "clicks" = "votes", languages: string[] = []) {
   const isClient = useIsClient();
   return useQuery({
-    queryKey: [...RADIO_KEY, "top", sort],
-    queryFn: sort === "votes" ? loadTopVoted : loadTopClicked,
+    queryKey: [...RADIO_KEY, "top", sort, languages],
+    queryFn: sort === "votes" ? loadTopVoted(languages) : loadTopClicked(languages),
     enabled: isClient,
     staleTime: STALE_MS,
     placeholderData: keepPreviousData,

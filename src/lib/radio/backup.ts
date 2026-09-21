@@ -2,11 +2,13 @@ import { z } from "zod";
 import { isNative } from "@/lib/capacitor";
 import { downloadBlob, shareFile } from "@/lib/files";
 import { readPlayerPrefs, type PlayerPrefs } from "@/lib/radio/prefs";
+import { normalizeLanguages, readLanguages, writeLanguages } from "@/lib/radio/languages";
 import { radioDb, type FavouriteRow, type HistoryRow, type RadioDB } from "@/lib/radio/store";
 import { stationSchema } from "@/lib/radio/types";
 import { readVotedIds, writeVotedIds } from "@/lib/radio/votes";
 
-export const RADIO_BACKUP_VERSION = 1 as const;
+/** v2 adds the content-language filter (`languages`, defaults to worldwide). */
+export const RADIO_BACKUP_VERSION = 2 as const;
 
 /**
  * Versioned envelope for everything RadioScout keeps locally. New feature
@@ -40,6 +42,8 @@ const radioBackupSchema = z.object({
   history: historyRowSchema.array(),
   prefs: prefsSchema,
   voted: z.string().array(),
+  // Absent in v1 backups — worldwide by default, never a restore failure.
+  languages: z.string().array().optional().default([]),
 });
 
 export type RadioBackupPayload = {
@@ -50,6 +54,7 @@ export type RadioBackupPayload = {
   history: HistoryRow[];
   prefs: PlayerPrefs;
   voted: string[];
+  languages: string[];
 };
 
 export function radioBackupFilename(now: Date = new Date()): string {
@@ -70,6 +75,7 @@ export async function collectRadioBackup(database: RadioDB = radioDb): Promise<R
     history,
     prefs: readPlayerPrefs(),
     voted: readVotedIds(),
+    languages: readLanguages(),
   };
 }
 
@@ -84,7 +90,7 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   if (parsed.data.version > RADIO_BACKUP_VERSION) {
     throw new Error("That backup needs a newer RadioScout — update first, then restore.");
   }
-  const { favourites, history, prefs, voted } = parsed.data;
+  const { favourites, history, prefs, voted, languages } = parsed.data;
   await database.transaction("rw", [database.favourites, database.history], async () => {
     await database.favourites.clear();
     await database.history.clear();
@@ -93,6 +99,7 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
     await database.history.bulkPut(withoutIds);
   });
   writeVotedIds(voted);
+  writeLanguages(normalizeLanguages(languages));
   return prefs;
 }
 

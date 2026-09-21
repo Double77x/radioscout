@@ -1,11 +1,44 @@
 import "fake-indexeddb/auto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { collectRadioBackup, radioBackupFilename, restoreRadioBackup, RADIO_BACKUP_VERSION } from "@/lib/radio/backup";
 import { RadioDB, toggleFavourite } from "@/lib/radio/store";
 import { EMPTY_STATION } from "@/lib/radio/types";
 
 let counter = 0;
 let database = new RadioDB(`radioscout-backup-test-${counter}`);
+
+/**
+ * Node has no DOM storage — stub the two globals the radio state touches.
+ * Seeded with the app defaults so untouched prefs read exactly as in prod.
+ */
+const globalScope = globalThis as unknown as { window?: unknown; localStorage?: Storage };
+const backing = new Map<string, string>();
+
+function installStorageStub(): void {
+  backing.clear();
+  backing.set("radioscout:volume", "0.9");
+  backing.set("radioscout:muted", "0");
+  globalScope.window = globalThis;
+  globalScope.localStorage = {
+    getItem: (key: string) => backing.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      backing.set(key, value);
+    },
+    removeItem: (key: string) => {
+      backing.delete(key);
+    },
+    clear: () => backing.clear(),
+    get length() {
+      return backing.size;
+    },
+    key: (index: number) => [...backing.keys()][index] ?? null,
+  } as Storage;
+}
+
+function uninstallStorageStub(): void {
+  delete globalScope.window;
+  delete globalScope.localStorage;
+}
 
 function freshDatabase(): RadioDB {
   counter += 1;
@@ -15,6 +48,11 @@ function freshDatabase(): RadioDB {
 
 afterEach(async () => {
   await database.delete();
+  uninstallStorageStub();
+});
+
+beforeEach(() => {
+  installStorageStub();
 });
 
 const STATION = {
@@ -29,20 +67,42 @@ describe("radio backup", () => {
     expect(radioBackupFilename(new Date("2026-09-20T12:00:00Z"))).toBe("radioscout-backup-2026-09-20.json");
   });
 
-  it("round-trips favourites, prefs and votes", async () => {
+  it("round-trips favourites, prefs, votes and languages", async () => {
     const source = freshDatabase();
     await toggleFavourite(STATION, source);
     const payload = await collectRadioBackup(source);
     expect(payload.app).toBe("radioscout");
     expect(payload.version).toBe(RADIO_BACKUP_VERSION);
     expect(payload.favourites).toHaveLength(1);
+    expect(payload.languages).toEqual([]);
 
     const target = freshDatabase();
-    const prefs = await restoreRadioBackup(structuredClone(payload), target);
+    const prefs = await restoreRadioBackup(structuredClone({ ...payload, languages: ["english", "German "] }), target);
     expect(prefs.volume).toBeGreaterThan(0);
     const rows = await target.favourites.toArray();
     expect(rows.map((row) => row.stationuuid)).toEqual(["backup-1"]);
     expect(rows[0]?.snapshot.name).toBe("Backup FM");
+    const { readLanguages } = await import("@/lib/radio/languages");
+    expect(readLanguages()).toEqual(["english", "german"]);
+  });
+
+  it("restores v1 backups without languages as worldwide", async () => {
+    const target = freshDatabase();
+    const { writeLanguages, readLanguages } = await import("@/lib/radio/languages");
+    writeLanguages(["french"]);
+    await restoreRadioBackup(
+      {
+        app: "radioscout",
+        version: 1,
+        exportedAt: "",
+        favourites: [],
+        history: [],
+        prefs: { volume: 1, muted: false },
+        voted: [],
+      },
+      target,
+    );
+    expect(readLanguages()).toEqual([]);
   });
 
   it("rejects foreign files and newer envelopes", async () => {

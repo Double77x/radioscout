@@ -65,6 +65,11 @@ import ilUrl from "flag-icons/flags/4x3/il.svg?url";
 import maUrl from "flag-icons/flags/4x3/ma.svg?url";
 import dzUrl from "flag-icons/flags/4x3/dz.svg?url";
 import ruUrl from "flag-icons/flags/4x3/ru.svg?url";
+import pkUrl from "flag-icons/flags/4x3/pk.svg?url";
+import siUrl from "flag-icons/flags/4x3/si.svg?url";
+import baUrl from "flag-icons/flags/4x3/ba.svg?url";
+import hkUrl from "flag-icons/flags/4x3/hk.svg?url";
+import npUrl from "flag-icons/flags/4x3/np.svg?url";
 
 interface CountryFlagProps {
   /** ISO 3166-1 alpha-2, any case. */
@@ -146,6 +151,11 @@ const FLAG_URLS: Record<string, string> = {
   ma: maUrl,
   dz: dzUrl,
   ru: ruUrl,
+  pk: pkUrl,
+  si: siUrl,
+  ba: baUrl,
+  hk: hkUrl,
+  np: npUrl,
 };
 
 export function CountryFlag({ code, name, className }: CountryFlagProps) {

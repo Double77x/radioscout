@@ -14,6 +14,8 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { usePersistentStrings } from "@/hooks/use-persistent-state";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { openStationDetail } from "@/hooks/use-station-detail";
+import { formatTags } from "@/lib/radio/format";
+import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import {
   useClearHistory,
   useFavourites,
@@ -30,19 +32,23 @@ const routeApi = getRouteApi("/");
 const HOME_SECTIONS_KEY = "radioscout:home-sections";
 const HOME_SECTIONS_DEFAULT = ["saved", "top"];
 const HOME_SECTION_IDS = new Set(["saved", "top", "recent"]);
+/** Hoisted: the persisted hook needs a referentially stable fallback. */
+const LANGUAGES_FALLBACK: string[] = [];
 
 export default function HomePage() {
   const { q = "", tag = "all" } = routeApi.useSearch();
   const isClient = useIsClient();
   const [openSections, setOpenSections] = usePersistentStrings(HOME_SECTIONS_KEY, HOME_SECTIONS_DEFAULT);
   const visibleSections = openSections.filter((id) => HOME_SECTION_IDS.has(id));
-  const top = useTopStations("votes");
+  const [languages] = usePersistentStrings(LANGUAGES_KEY, LANGUAGES_FALLBACK);
+  const languageLabel = languages.length > 0 ? formatTags(languages.join(",")) : "";
+  const top = useTopStations("votes", languages);
   // Matches RadioHeader's hydration gate: the prerender has no search state,
   // so a direct `/?q=` / `/?tag=` load renders home sections until the client
   // takes over instead of mismatching the results branch (React #418).
   const filtering = isClient && (q.trim() !== "" || tag !== "all");
   const search = useStationSearch(
-    { name: q.trim() || undefined, tag: tag === "all" ? undefined : tag, limit: 50 },
+    { name: q.trim() || undefined, tag: tag === "all" ? undefined : tag, limit: 50, languages },
     filtering,
   );
   const favourites = useFavourites();
@@ -81,7 +87,9 @@ export default function HomePage() {
             <div className='flex items-baseline justify-between'>
               <h2 className='text-lg font-semibold tracking-tight'>Results</h2>
               <p className='text-xs font-medium text-muted-foreground'>
-                {search.data ? `${search.data.length} found` : "Searching…"}
+                {search.data
+                  ? `${search.data.length} found${languageLabel ? ` · ${languageLabel}` : ""}`
+                  : "Searching…"}
               </p>
             </div>
             {search.data ? (
@@ -133,6 +141,9 @@ export default function HomePage() {
                     </span>
                     <span className='text-lg font-semibold tracking-tight'>Most loved</span>
                     {top.data ? <Badge variant='secondary'>{top.data.length}</Badge> : null}
+                    {languageLabel ? (
+                      <span className='truncate text-xs font-medium text-muted-foreground'>{languageLabel}</span>
+                    ) : null}
                   </span>
                 </AccordionTrigger>
                 <AccordionContent aria-busy={!top.data && !top.isError}>

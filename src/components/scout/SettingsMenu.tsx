@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
+import { LanguagePicker } from "@/components/radio/LanguagePicker";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 
 /** Query client stays out of the initial bundle — loaded on demand. */
@@ -64,9 +65,23 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
             Data
           </h2>
           <p className='px-2 pt-1 pb-2 text-xs text-muted-foreground'>
-            Saved stations, history, volume and votes in one JSON file — move it between browser and APK.
+            Saved stations, history, volume, votes and languages in one JSON file — move it between browser and APK.
           </p>
           <RadioDataSection />
+        </section>
+
+        <section aria-labelledby='settings-language-heading' className='mt-5'>
+          <h2
+            id='settings-language-heading'
+            className='px-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase'>
+            Languages
+          </h2>
+          <p className='px-2 pt-1 pb-2 text-xs text-muted-foreground'>
+            Filter search results and charts to these languages. Empty means worldwide.
+          </p>
+          <div className='rounded-2xl border border-border bg-card p-3'>
+            <LanguagePicker />
+          </div>
         </section>
 
         <section aria-labelledby='settings-style-heading' className='mt-5'>
@@ -112,7 +127,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   );
 }
 
-/** Radio export/import: favourites, history, volume and votes in one JSON file. */
+/** Radio export/import: favourites, history, volume, votes and languages in one JSON file. */
 function RadioDataSection() {
   const [exportState, setExportState] = useState<"idle" | "working" | "shared" | "downloaded" | "error">("idle");
   const [importState, setImportState] = useState<"idle" | "working" | "done" | "error">("idle");
@@ -143,7 +158,7 @@ function RadioDataSection() {
       .then(([, { queryClient }]) => {
         queryClient.invalidateQueries({ queryKey: ["radio"] });
         setImportState("done");
-        toast("Restore complete", { description: "Saved stations, history and volume are back." });
+        toast("Restore complete", { description: "Saved stations, history, volume and languages are back." });
       })
       .catch((error: unknown) => {
         setImportState("error");
