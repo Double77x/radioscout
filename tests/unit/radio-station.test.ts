@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, afterEach } from "vitest";
 import {
   filterPlayableStations,
   isHlsUrl,
@@ -9,6 +9,7 @@ import {
   pickPlayableUrl,
   sanitizeStreamUrl,
   splitQualityFromName,
+  upgradeInsecureUrl,
 } from "@/lib/radio/types";
 
 const row = {
@@ -144,6 +145,47 @@ describe("filterPlayableStations", () => {
     const tlsB = https("tls-b", "https://stream-ar.hellorayo.co.uk/absolute80shigh.aac?direct=true");
     const filtered = filterPlayableStations([httpOld, tlsA, httpJunk, noUrl, tlsB].filter((s) => s !== null));
     expect(filtered.map((s) => s.stationuuid)).toEqual(["tls-a", "tls-b"]);
+  });
+});
+
+/** Point `globalThis.window` at a fake page protocol (or remove it for SSR). */
+function setPage(protocol: string | undefined) {
+  if (protocol === undefined) {
+    delete (globalThis as { window?: unknown }).window;
+  } else {
+    (globalThis as { window?: unknown }).window = { location: { protocol } };
+  }
+}
+
+describe("upgradeInsecureUrl", () => {
+  const hadWindow = "window" in globalThis;
+  const realWindow = (globalThis as { window?: unknown }).window;
+
+  afterEach(() => {
+    if (hadWindow) (globalThis as { window?: unknown }).window = realWindow;
+    else delete (globalThis as { window?: unknown }).window;
+  });
+
+  it("leaves non-http URLs alone on any page", () => {
+    setPage("https:");
+    expect(upgradeInsecureUrl("https://example.com/a.png")).toBe("https://example.com/a.png");
+    expect(upgradeInsecureUrl("data:image/png;base64,AAA")).toBe("data:image/png;base64,AAA");
+    expect(upgradeInsecureUrl("")).toBe("");
+  });
+
+  it("is a no-op without a window (SSR) or on http pages", () => {
+    setPage(undefined);
+    expect(upgradeInsecureUrl("http://example.com/a.png")).toBe("http://example.com/a.png");
+    setPage("http:");
+    expect(upgradeInsecureUrl("http://example.com/a.png")).toBe("http://example.com/a.png");
+    setPage("capacitor:");
+    expect(upgradeInsecureUrl("http://example.com/live.mp3")).toBe("http://example.com/live.mp3");
+  });
+
+  it("rewrites http to https on secure pages, keeping the rest byte-identical", () => {
+    setPage("https:");
+    expect(upgradeInsecureUrl("http://example.com/a.png")).toBe("https://example.com/a.png");
+    expect(upgradeInsecureUrl("HTTP://example.com/live.m3u8?token=1")).toBe("https://example.com/live.m3u8?token=1");
   });
 });
 

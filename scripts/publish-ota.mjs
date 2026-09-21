@@ -117,7 +117,7 @@ console.log(`[ota:publish] building ${version} for channel "${channel}"…`);
 const built = spawnSync("pnpm", ["build"], { cwd: root, stdio: "inherit", shell: true });
 if (built.status !== 0) fail("pnpm build failed — not publishing.");
 const assetName = `${version}.zip`;
-const zipPath = path.join(os.tmpdir(), `radioscout-ota-${randomUUID()}-${assetName}`);
+const zipPath = path.join(os.tmpdir(), `radioscout-ota-${randomUUID()}.zip`);
 const zip = new AdmZip();
 zip.addLocalFolder(path.join(root, "dist", "client"));
 zip.writeZip(zipPath);
@@ -126,10 +126,16 @@ const checksum = createHash("sha256").update(bytes).digest("hex");
 console.log(`[ota:publish] bundle ${(bytes.length / 1024).toFixed(0)} KB, sha256 ${checksum.slice(0, 16)}…`);
 
 const tag = `ota-${channel}-${version}`;
+// `gh release create <file>#<label>` renaming is a no-op on Windows, and
+// GitHub serves `+` in asset names only percent-encoded — so stage an
+// exactly-named copy: the uploaded asset, the manifest URL and the on-disk
+// file always match, on every platform.
+const namedPath = path.join(os.tmpdir(), assetName);
+fs.copyFileSync(zipPath, namedPath);
 sh(
   // Prerelease so `…/releases/latest` keeps pointing at the APK releases —
   // OTA bundles are for the in-app updater, not for humans.
-  `gh release create ${tag} --prerelease ${JSON.stringify(zipPath)}#${assetName} --title ${JSON.stringify(`OTA ${version} (${channel})`)} --notes ${JSON.stringify(`OTA bundle for native versionCode ${minCode}${maxCode === null ? "+" : `–${maxCode}`}. Web-side changes only — native edits need a full APK.`)}`,
+  `gh release create ${tag} --prerelease ${JSON.stringify(namedPath)} --title ${JSON.stringify(`OTA ${version} (${channel})`)} --notes ${JSON.stringify(`OTA bundle for native versionCode ${minCode}${maxCode === null ? "+" : `–${maxCode}`}. Web-side changes only — native edits need a full APK.`)}`,
 );
 
 // Retention: newest --keep entries survive; older releases are deleted.
@@ -137,7 +143,8 @@ const entry = {
   version,
   min_version_code: minCode,
   max_version_code: maxCode,
-  url: `https://github.com/${repo}/releases/download/${tag}/${assetName}`,
+  // Percent-encoded: GitHub serves `+` in asset names only as `%2B`.
+  url: `https://github.com/${repo}/releases/download/${tag}/${encodeURIComponent(assetName)}`,
   checksum,
 };
 const versions = [entry, ...manifest.versions.filter((row) => row?.version !== version)];
@@ -148,6 +155,7 @@ for (const row of versions.slice(keep)) {
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 fs.writeFileSync(manifestPath, `${JSON.stringify({ channel, versions: versions.slice(0, keep) }, null, 2)}\n`);
 fs.rmSync(zipPath, { force: true });
+fs.rmSync(namedPath, { force: true });
 
 console.log(
   `[ota:publish] staged: ${version} on "${channel}" (native ${minCode}${maxCode === null ? "+" : `–${maxCode}`}), keeping ${keep}.`,

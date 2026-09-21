@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { upgradeInsecureUrl } from "@/lib/radio/types";
 
 interface StationArtProps {
   src: string;
@@ -18,7 +19,14 @@ interface StationArtProps {
  */
 export function StationArt({ src, className, fallbackClassName, iconClassName }: StationArtProps) {
   const [failed, setFailed] = useState(false);
-  if (src === "" || failed) {
+  // Secure pages auto-upgrade (or block) `http://` artwork with a console
+  // warning per image — upgrade at the source instead. `no-referrer` keeps
+  // the page URL out of favicon requests and dodges hotlink blocks that key
+  // on `Referer`. Dead origins (e.g. a suspended host) still fail, and the
+  // fallback tile below covers them — the browser-level 4xx log for those
+  // cannot be suppressed from JS.
+  const safeSrc = upgradeInsecureUrl(src);
+  if (safeSrc === "" || failed) {
     return (
       <span
         aria-hidden='true'
@@ -32,10 +40,11 @@ export function StationArt({ src, className, fallbackClassName, iconClassName }:
   }
   return (
     <img
-      src={src}
+      src={safeSrc}
       alt=''
       loading='lazy'
       decoding='async'
+      referrerPolicy='no-referrer'
       onError={() => setFailed(true)}
       className={cn("shrink-0 object-cover", className)}
     />

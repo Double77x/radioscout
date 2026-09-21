@@ -143,6 +143,22 @@ export function pickPlayableUrl(station: Station): string {
 }
 
 /**
+ * Rewrite `http://` to `https://` when the current page is itself secure.
+ * Browsers auto-upgrade (or block) insecure subresources on `https://` pages
+ * with a console warning per request — an HLS playlist fans out into a
+ * warning per segment — so upgrade at the source instead. No-op on `http://`
+ * pages (local dev) and during SSR, where there is no page protocol. Never
+ * applied to the native-service URL: Media3 plays plain HTTP fine, and an
+ * upgrade could break HTTP-only stations there.
+ */
+export function upgradeInsecureUrl(raw: string): string {
+  if (!/^http:\/\//i.test(raw)) return raw;
+  if (globalThis.window === undefined) return raw;
+  if (globalThis.window.location?.protocol !== "https:") return raw;
+  return raw.replace(/^http:\/\//i, "https://");
+}
+
+/**
  * `true` when the URL can actually load from an `https://` page or the APK
  * WebView: a non-empty `https://` URL. Plain-`http://` streams never play
  * there (Chrome auto-upgrades them onto legacy edges whose TLS aborts; the
