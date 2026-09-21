@@ -3,7 +3,7 @@ import { PlayerDock } from "../radio/PlayerDock";
 import { StationDetailSheet } from "../radio/StationDetailSheet";
 import { SwipeBack } from "./SwipeBack";
 import Footer from "@/components/Footer";
-import { closeStationDetail, useStationDetail } from "@/hooks/use-station-detail";
+import { useCloseStationDetail } from "@/hooks/use-station-detail";
 
 interface AppShellProps {
   children: ReactNode;
@@ -18,7 +18,7 @@ interface AppShellProps {
  * status-bar height where the WebView draws under the system bars.
  */
 export function AppShell({ children }: AppShellProps) {
-  const { station } = useStationDetail();
+  const closeDetail = useCloseStationDetail();
   return (
     <div className='min-h-dvh bg-scout-fog'>
       <div className='mx-auto flex min-h-dvh w-full max-w-107.5 flex-col bg-background pt-[env(safe-area-inset-top)] sm:border-x sm:border-border lg:max-w-2xl xl:max-w-4xl'>
@@ -27,7 +27,7 @@ export function AppShell({ children }: AppShellProps) {
           <Footer />
           <PlayerDock />
         </SwipeBack>
-        <StationDetailSheet station={station} onClose={closeStationDetail} />
+        <StationDetailSheet onClose={closeDetail} />
       </div>
     </div>
   );

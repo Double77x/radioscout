@@ -184,7 +184,16 @@ test.describe("RadioScout home", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Test Jazz FM").first()).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Play now" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Share Test Jazz FM" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close details" }).click();
+    await expect(dialog).toBeHidden();
+  });
+
+  test("dead station links explain instead of stranding", async ({ page }) => {
+    await page.goto("/?station=does-not-exist");
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Couldn't open that station")).toBeVisible();
+    await dialog.getByRole("button", { name: "Close" }).click();
     await expect(dialog).toBeHidden();
   });
 });

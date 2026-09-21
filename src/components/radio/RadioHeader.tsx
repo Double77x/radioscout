@@ -65,7 +65,11 @@ export function RadioHeader({
   const setSearch = (next: { q?: string; tag?: string }) =>
     navigate({
       to: "/",
-      search: { q: next.q || undefined, tag: next.tag === "all" ? undefined : next.tag },
+      search: (prev) => ({
+        q: next.q || undefined,
+        tag: next.tag === "all" ? undefined : next.tag,
+        station: prev.station,
+      }),
       replace: true,
     });
 
@@ -206,7 +210,11 @@ export function RadioHeader({
                     key={filter.id}
                     to='/'
                     draggable={false}
-                    search={{ tag: filter.id === "all" ? undefined : filter.id, q: shownQuery || undefined }}
+                    search={(prev) => ({
+                      tag: filter.id === "all" ? undefined : filter.id,
+                      q: shownQuery || undefined,
+                      station: prev.station,
+                    })}
                     replace
                     className={cn(
                       "shrink-0 rounded-full border border-border bg-card px-5 py-3 text-sm font-medium text-muted-foreground transition hover:text-foreground",

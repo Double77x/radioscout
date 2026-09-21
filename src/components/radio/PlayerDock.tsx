@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { StationArt } from "@/components/radio/StationArt";
 import { focusRadioSearch } from "@/lib/focus-radio-search";
 import { usePlayer } from "@/hooks/use-player";
-import { openStationDetail } from "@/hooks/use-station-detail";
+import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
 
 /** Seconds before the volume overlay retreats on its own. */
@@ -115,6 +115,7 @@ function VolumeSlider({
 export function PlayerDock() {
   const { station, status, error, volume, muted, toggle, stop, play, setVolume, toggleMute } = usePlayer();
   const [volumeOpen, setVolumeOpen] = useState(false);
+  const openDetail = useOpenStationDetail();
   // Timeout ref (not state): the auto-hide timer is imperative by nature —
   // no declarative alternative, and cleanup owns the handle.
   const hideTimer = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
@@ -168,7 +169,7 @@ export function PlayerDock() {
             <button
               type='button'
               aria-label={`Details for ${station.name}`}
-              onClick={() => openStationDetail(station)}
+              onClick={() => openDetail(station)}
               className='shrink-0 rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
               <StationArt
                 key={station.favicon || station.stationuuid}
@@ -189,7 +190,7 @@ export function PlayerDock() {
             <button
               type='button'
               aria-label={`Details for ${station.name}`}
-              onClick={() => openStationDetail(station)}
+              onClick={() => openDetail(station)}
               className='min-w-0 flex-1 pl-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
               aria-live='polite'>
               <span className='flex items-center gap-1.5'>

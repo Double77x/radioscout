@@ -5,7 +5,7 @@ import { StationListSkeleton } from "@/components/radio/StationSkeleton";
 import { useIsClient } from "@/hooks/use-is-client";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { FAVOURITES_KEY, useFavourites, useToggleFavourite } from "@/hooks/use-radio";
-import { openStationDetail } from "@/hooks/use-station-detail";
+import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { queryClient } from "@/lib/query-client";
 import { cn } from "@/lib/utils";
 
@@ -140,6 +140,7 @@ export function SavedStations() {
   const toggleFavourite = useToggleFavourite();
   const player = usePlayer();
   const isClient = useIsClient();
+  const openDetail = useOpenStationDetail();
 
   const [visual, dispatch] = useReducer(dragVisualReducer, INITIAL_DRAG_VISUAL);
   const { id: dragId, overIndex, dy: dragDy, gap: dragGap, orderOverride, settle } = visual;
@@ -423,7 +424,7 @@ export function SavedStations() {
             favourited
             onPlay={togglePlay}
             onToggleFavourite={(item) => toggleFavourite.mutate(item)}
-            onOpenDetail={openStationDetail}
+            onOpenDetail={openDetail}
             dataUuid={row.stationuuid}
             onRowPointerDown={(event, uuid) => beginDrag(event, uuid, false)}
             outerStyle={rowOuterStyle({ dragging, dragDy, settleDy: settling, shift })}

@@ -1,25 +1,21 @@
 import { useState } from "react";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
-import { useQuery } from "@tanstack/react-query";
-import { ExternalLink, Play, Square, Star, X } from "lucide-react";
+import { ExternalLink, Play, Share2, Square, Star, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { badgeVariants } from "@/components/ui/badge-variants";
 import { Button } from "@/components/ui/button";
 import { CountryFlag } from "@/components/radio/CountryFlag";
 import { StationArt } from "@/components/radio/StationArt";
-import { useIsClient } from "@/hooks/use-is-client";
 import { play, stop, usePlayer } from "@/hooks/use-player";
 import { useFavourites, useToggleFavourite } from "@/hooks/use-radio";
+import { useDetailStation } from "@/hooks/use-station-detail";
 import { hasVoted, markVoted } from "@/lib/radio/votes";
+import { shareStation } from "@/lib/radio/share";
+import { cn } from "@/lib/utils";
 import { formatCount } from "@/lib/format";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
-import type { Station } from "@/lib/radio/types";
 
-interface StationDetailSheetProps {
-  station: Station | null;
-  onClose: () => void;
-}
-
-/** API stays out of the initial bundle — loaded when the sheet opens/votes. */
+/** API stays out of the initial bundle — loaded when the sheet votes. */
 const loadDetailApi = () => import("@/lib/radio/api");
 
 function formatChecked(iso: string): string {
@@ -31,26 +27,27 @@ function formatChecked(iso: string): string {
   return `${Number(match.groups.day)} ${month} ${match.groups.year}`;
 }
 
+interface StationDetailSheetProps {
+  onClose: () => void;
+}
+
 /**
- * Bottom sheet with the full backend record for a station. Opens from any
- * row/tile; refreshes the stats (votes, clicks) on open so the numbers
- * are live, not the cached snapshot.
+ * Bottom sheet with the full backend record for a station. The station is
+ * derived from `?station=` (row taps seed the cache for an instant paint,
+ * shared links fetch by uuid), so the URL alone decides open vs closed —
+ * browser and Android back close the sheet with no sync effect.
  */
-export function StationDetailSheet({ station, onClose }: StationDetailSheetProps) {
-  const isClient = useIsClient();
+export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
   const player = usePlayer();
   const { data: favourites } = useFavourites();
   const toggleFavourite = useToggleFavourite();
   const [voted, setVoted] = useState(false);
-  const open = station !== null;
 
-  const refresh = useQuery({
-    queryKey: ["radio", "detail", station?.stationuuid],
-    queryFn: () => loadDetailApi().then((api) => (station ? api.stationByUuid(station.stationuuid) : null)),
-    enabled: isClient && open && station !== null,
-    staleTime: 1000 * 60,
-  });
-  const live = refresh.data ?? station;
+  const { uuid, data, isFetching, isFetched } = useDetailStation();
+  const open = uuid !== null;
+  const live = data ?? null;
+  const settled = isFetched && !isFetching;
+  const missing = open && live === null && settled;
   const playing = live !== null && player.station?.stationuuid === live.stationuuid && player.status === "playing";
   const favourited = live !== null && favourites.some((row) => row.stationuuid === live.stationuuid);
   const alreadyVoted = live !== null && (voted || hasVoted(live.stationuuid));
@@ -103,13 +100,20 @@ export function StationDetailSheet({ station, onClose }: StationDetailSheetProps
                 Details, statistics and playback controls for {live.name}.
               </BaseDialog.Description>
 
-              <div className='mt-3 flex flex-wrap gap-1.5'>
+              <div className='mt-3 flex flex-wrap items-center gap-1.5'>
                 {live.codec ? <Badge variant='secondary'>{live.codec}</Badge> : null}
                 {live.bitrate > 0 ? <Badge variant='secondary'>{live.bitrate}k</Badge> : null}
                 {live.hls === 1 ? <Badge variant='secondary'>HLS</Badge> : null}
                 <Badge variant={live.lastcheckok === 1 ? "secondary" : "destructive"}>
                   {live.lastcheckok === 1 ? "Online" : "Offline"}
                 </Badge>
+                <button
+                  type='button'
+                  onClick={() => void shareStation(live)}
+                  aria-label={`Share ${live.name}`}
+                  className={cn(badgeVariants({ variant: "secondary" }), "ml-auto cursor-pointer gap-1")}>
+                  <Share2 className='size-3.5' /> Share
+                </button>
               </div>
 
               <dl className='mt-4 grid grid-cols-3 gap-2'>
@@ -227,6 +231,41 @@ export function StationDetailSheet({ station, onClose }: StationDetailSheetProps
                   : "Votes and clicks feed the global Most loved / Most played charts."}
               </p>
             </div>
+          ) : open ? (
+            missing ? (
+              <div className='px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-center'>
+                <span aria-hidden='true' className='mx-auto block h-1 w-10 rounded-full bg-border' />
+                <BaseDialog.Title className='mt-3 text-lg font-semibold tracking-tight'>
+                  Couldn't open that station
+                </BaseDialog.Title>
+                <BaseDialog.Description className='mt-1 text-sm text-muted-foreground'>
+                  The link may be stale, or the station was removed from the directory.
+                </BaseDialog.Description>
+                <BaseDialog.Close className='mt-4 h-11 w-full rounded-full bg-secondary font-semibold text-secondary-foreground transition hover:bg-secondary/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                  Close
+                </BaseDialog.Close>
+              </div>
+            ) : (
+              <div
+                aria-busy='true'
+                className='px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] animate-pulse motion-reduce:animate-none'>
+                <span aria-hidden='true' className='mx-auto block h-1 w-10 rounded-full bg-border' />
+                <BaseDialog.Title className='sr-only'>Loading station…</BaseDialog.Title>
+                <BaseDialog.Description className='sr-only'>The shared station is loading.</BaseDialog.Description>
+                <div className='mt-3 flex items-start gap-3'>
+                  <span aria-hidden='true' className='size-14 shrink-0 rounded-2xl bg-muted' />
+                  <span aria-hidden='true' className='min-w-0 flex-1'>
+                    <span className='block h-6 w-3/4 rounded-full bg-muted' />
+                    <span className='mt-2 block h-4 w-1/2 rounded-full bg-muted' />
+                  </span>
+                </div>
+                <div aria-hidden='true' className='mt-4 grid grid-cols-3 gap-2'>
+                  {[0, 1, 2].map((index) => (
+                    <span key={index} className='h-16 rounded-2xl bg-muted/60' />
+                  ))}
+                </div>
+              </div>
+            )
           ) : null}
         </BaseDialog.Popup>
       </BaseDialog.Portal>

@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePersistentStrings } from "@/hooks/use-persistent-state";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
-import { openStationDetail } from "@/hooks/use-station-detail";
+import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { formatTags } from "@/lib/radio/format";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import {
@@ -38,6 +38,7 @@ const LANGUAGES_FALLBACK: string[] = [];
 export default function HomePage() {
   const { q = "", tag = "all" } = routeApi.useSearch();
   const isClient = useIsClient();
+  const openDetail = useOpenStationDetail();
   const [openSections, setOpenSections] = usePersistentStrings(HOME_SECTIONS_KEY, HOME_SECTIONS_DEFAULT);
   const visibleSections = openSections.filter((id) => HOME_SECTION_IDS.has(id));
   const [languages] = usePersistentStrings(LANGUAGES_KEY, LANGUAGES_FALLBACK);
@@ -68,7 +69,7 @@ export default function HomePage() {
       favourited={favouriteIds.has(station.stationuuid)}
       onPlay={togglePlay}
       onToggleFavourite={(item) => toggleFavourite.mutate(item)}
-      onOpenDetail={openStationDetail}
+      onOpenDetail={openDetail}
     />
   );
 
@@ -102,7 +103,7 @@ export default function HomePage() {
                   </span>
                   <p className='mt-3 font-semibold'>Nothing matches that</p>
                   <p className='mt-1 text-sm text-muted-foreground'>Try a different word, or clear the filters.</p>
-                  <Link to='/' replace className='mt-4'>
+                  <Link to='/' replace search={(prev) => ({ ...prev, q: undefined, tag: undefined })} className='mt-4'>
                     <Button className='h-12 rounded-full px-6'>Clear search</Button>
                   </Link>
                 </div>

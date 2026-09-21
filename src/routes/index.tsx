@@ -6,6 +6,8 @@ import HomePage from "@/pages/Home";
 const homeSearchSchema = z.object({
   q: z.string().optional(),
   tag: z.string().optional(),
+  /** Shareable station link (`/?station=<uuid>`) — opens the detail sheet. */
+  station: z.string().optional(),
 });
 
 export const Route = createFileRoute("/")({
