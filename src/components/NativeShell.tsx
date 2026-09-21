@@ -5,6 +5,7 @@ import { CapacitorUpdater } from "@capgo/capacitor-updater";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
 import { pickOtaUpdate } from "@/lib/ota";
 import { playBackTransition } from "@/lib/animated-back";
@@ -42,6 +43,19 @@ async function runOtaUpdateCheck(signal: AbortSignal): Promise<string | null> {
     return null;
   });
   if (signal.aborted || !info) return null;
+  // Version basis: after an OTA applies, App.getInfo() still reports the
+  // NATIVE versionName — comparing against it would re-pick the staged
+  // bundle every boot. Prefer the live bundle version instead.
+  let currentVersion = info.version;
+  try {
+    const current = await CapacitorUpdater.current();
+    if (current?.bundle && current.bundle.id !== "builtin" && current.bundle.version) {
+      currentVersion = current.bundle.version;
+    }
+  } catch {
+    // Bundle info unavailable — the native version stands.
+  }
+  if (signal.aborted) return null;
   const manifest = await fetch(`${base}/production.json`, { cache: "no-store", signal })
     .then((response) => (response.ok ? response.json() : null))
     .catch((error: unknown) => {
@@ -49,7 +63,7 @@ async function runOtaUpdateCheck(signal: AbortSignal): Promise<string | null> {
       if (!signal.aborted) console.warn("[ota] check", error instanceof Error ? error.message : error);
       return null;
     });
-  const update = pickOtaUpdate(manifest, info.version, Number(info.build) || 0);
+  const update = pickOtaUpdate(manifest, currentVersion, Number(info.build) || 0);
   if (signal.aborted || !update) return null;
   const bundle = await CapacitorUpdater.download({
     url: update.url,
@@ -125,7 +139,9 @@ export function NativeShell() {
   // OTA update check (static in-repo manifest + GitHub Release zips, see
   // `src/lib/ota.ts` and `scripts/publish-ota.mjs`), once per mount. The work lives in `runOtaUpdateCheck` above; the effect only
   // owns the abort signal, so unmounting mid-check cancels the fetch and
-  // every later step stands down via the same signal.
+  // every later step stands down via the same signal. A freshly staged
+  // bundle surfaces as a restart toast (it would otherwise apply silently
+  // on the next backgrounding with no signal anything changed).
   // Justification for no-fetch-in-effect: one-shot native boot check (not
   // reactive data — Query would add a subscription lifecycle to a
   // fire-and-forget bridge call), abort-guarded end to end.
@@ -133,7 +149,20 @@ export function NativeShell() {
   useEffect(() => {
     if (!isNative()) return;
     const controller = new AbortController();
-    void runOtaUpdateCheck(controller.signal).catch((error: unknown) => console.error("[ota]", error));
+    void runOtaUpdateCheck(controller.signal)
+      .then((staged) => {
+        if (staged && !controller.signal.aborted) {
+          toast("Update downloaded", {
+            description: `${staged} applies on next launch — or restart now.`,
+            action: {
+              label: "Restart now",
+              onClick: () =>
+                void CapacitorUpdater.reload().catch((error: unknown) => console.error("[ota] reload", error)),
+            },
+          });
+        }
+      })
+      .catch((error: unknown) => console.error("[ota]", error));
     return () => {
       controller.abort();
     };

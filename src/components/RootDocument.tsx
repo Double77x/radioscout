@@ -6,6 +6,7 @@ import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { CommandPalette } from "@/components/CommandPalette";
+import { AppUpdateDialog } from "@/components/AppUpdateDialog";
 import { NativeShell } from "@/components/NativeShell";
 import { queryClient } from "@/lib/query-client";
 
@@ -32,6 +33,7 @@ export function RootComponent() {
             <Outlet />
             <CommandPalette />
             <NativeShell />
+            <AppUpdateDialog />
             <Sonner />
           </HotkeysProvider>
         </TooltipProvider>

@@ -1,0 +1,107 @@
+# Publish OTA — manual dispatch for sideloaded APKs.
+#
+# Human decides WHEN and SCOPING (web-only change? which native shells?);
+# the machine does build → prerelease → manifest → commit-back → verify.
+# Dispatch: Actions → Publish OTA → Run workflow.
+#
+# Guard: the matching `v<core>` APK release must already exist, so an OTA
+# can never strand itself on an unreleased core. Verification re-downloads
+# the manifest URL and checksum-matches it (the two failure modes that bit
+# the first manual publish: misnamed asset + unencoded `+` in the URL).
+#
+# Action pins mirror release-apk.yml (kept current by Dependabot).
+
+name: Publish OTA
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "OTA channel (manifest file)"
+        default: "production"
+        required: true
+      keep:
+        description: "Bundles to keep per channel"
+        default: "3"
+        required: true
+      min-native-code:
+        description: "Override min native versionCode (default: from package.json core)"
+        default: ""
+        required: false
+      max-native-code:
+        description: "Cap which native shells may take it (empty = all newer)"
+        default: ""
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-ota-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Guard matching APK release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CORE="$(node -p "require('./package.json').version")"
+          gh release view "v$CORE" --json tagName -q .tagName || {
+            echo "::error::No v$CORE APK release — tag and publish the APK first, then ship OTA."
+            exit 1
+          }
+
+      - name: Publish OTA bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS=(--channel "${{ inputs.channel }}" --keep "${{ inputs.keep }}")
+          [ -n "${{ inputs.min-native-code }}" ] && ARGS+=(--min-native-code "${{ inputs.min-native-code }}")
+          [ -n "${{ inputs.max-native-code }}" ] && ARGS+=(--max-native-code "${{ inputs.max-native-code }}")
+          pnpm ota:publish "${ARGS[@]}"
+
+      - name: Verify manifest URL + checksum
+        run: |
+          MANIFEST="public/ota/${{ inputs.channel }}.json"
+          URL="$(node -p "require('./$MANIFEST').versions[0].url")"
+          SUM="$(node -p "require('./$MANIFEST').versions[0].checksum")"
+          curl -sL "$URL" -o /tmp/ota-verify.zip
+          echo "$SUM  /tmp/ota-verify.zip" | sha256sum -c -
+
+      - name: Commit manifest back
+        run: |
+          MANIFEST="public/ota/${{ inputs.channel }}.json"
+          VERSION="$(node -p "require('./$MANIFEST').versions[0].version")"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin "${{ github.ref_name }}"
+          git add "$MANIFEST"
+          if git diff --cached --quiet; then
+            echo "Manifest unchanged — nothing to commit."
+          else
+            git commit -m "OTA: publish $VERSION to ${{ inputs.channel }} (workflow)"
+            git push origin "HEAD:${{ github.ref_name }}"
+            echo "Committed $MANIFEST ($VERSION) — Pages deploys it and devices see it."
+          fi
