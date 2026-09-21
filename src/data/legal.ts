@@ -18,7 +18,7 @@ export const LEGAL_META: Record<LegalSlug, LegalMeta> = {
   privacy: {
     slug: "privacy",
     title: "Privacy Policy",
-    description: "How RadioScout handles your data — local-only favourites and history, no accounts.",
+    description: "How RadioScout handles your data: local-only favourites and history, no accounts.",
     keywords: ["privacy policy", "data protection", "user privacy", "local data", "information security"],
     lastUpdated: "20 September 2026",
   },

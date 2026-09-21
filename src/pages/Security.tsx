@@ -7,18 +7,18 @@ export default function SecurityPage() {
   return (
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
-        <p className='text-lg text-muted-foreground'>We put the safety of your data first.</p>
+        <p className='text-lg text-muted-foreground'>RadioScout has no accounts and no servers holding your data.</p>
 
         <ProseH2>Static-first delivery</ProseH2>
         <p>
-          RadioScout ships as prerendered static pages. There is no account database to breach — your favourites and
+          RadioScout ships as prerendered static pages. There is no account database to breach. Your favourites and
           history stay on your device unless you choose to share a backup file.
         </p>
 
         <ProseH2>Infrastructure security</ProseH2>
         <p>
-          We host on secure, industry-standard cloud providers and use TLS/SSL encryption for data in transit between
-          your device and our services.
+          The site is hosted with an established cloud provider, and data in transit between your device and our
+          services uses TLS encryption.
         </p>
 
         <ProseH2>Data privacy</ProseH2>

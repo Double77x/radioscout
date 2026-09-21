@@ -16,7 +16,7 @@ export default function TermsPage() {
 
         <ProseH2>2. Description of service</ProseH2>
         <p>
-          RadioScout is a free worldwide radio player — top stations, genre search, favourites and history, on the web
+          RadioScout is a free worldwide radio player: top stations, genre search, favourites and history, on the web
           and Android. The Service is provided "as is" and "as available" without warranties of any kind.
         </p>
 

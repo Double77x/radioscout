@@ -17,7 +17,7 @@ export default function CookiesPage() {
         <ProseH2>What are cookies?</ProseH2>
         <p>
           Cookies are small files placed on your computer or mobile device when you visit a website. They help sites
-          work, work more efficiently and provide reporting information.
+          work, run more efficiently and provide reporting information.
         </p>
 
         <ProseH2>Why do we use cookies?</ProseH2>
