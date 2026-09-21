@@ -8,6 +8,21 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.1.7 - OTA updates and language filter</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Language filter in Settings: top-40 quick picks plus the full searchable directory, applied to Most loved
+              and search results
+            </li>
+            <li>Filter choices save on-device and travel with radio backup export/import; empty means worldwide</li>
+            <li>
+              Over-the-air updates for the Android app: new versions download and apply on next launch, no store update
+              needed
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.1.0 - Radio switcher</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
