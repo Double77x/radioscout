@@ -1,6 +1,15 @@
 import { useSyncExternalStore } from "react";
-import { isNative } from "@/lib/capacitor";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
+import {
+  canUseNativeAudio,
+  nativePause,
+  nativePlay,
+  nativeResume,
+  nativeSetVolume,
+  nativeStop,
+  onNativePlaybackStatus,
+  type NativePlaybackEvent,
+} from "@/lib/native-audio";
 import { loadMuted, loadVolume, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
 import {
   isHlsUrl,
@@ -24,30 +33,35 @@ interface PlayerSnapshot {
 }
 
 /**
- * Web playback singleton. One shared `<audio>` element, state fanned out
- * via `useSyncExternalStore` (no context re-renders, SSR-safe snapshot).
+ * Playback singleton. On the APK the Media3 foreground service is the
+ * player (lock-screen / shade / headset / Auto controls via MediaSession);
+ * everywhere else one shared `<audio>` element is. State fans out via
+ * `useSyncExternalStore` (no context re-renders, SSR-safe snapshot).
  *
  * Port of RadioDroid's `PlayerService` play path at web fidelity:
- * resolve → load → play → MediaSession. True background playback
- * (after the WebView dies), recording, and wake alarms stay native-only —
- * see `playViaNative` stub below for where the Capacitor
- * foreground-service plugin (Media3 + MediaSession) plugs in.
+ * resolve → load → play → MediaSession. Recording and wake alarms stay
+ * native-only (out of scope, same as before).
  */
 
 let audio: HTMLAudioElement | null = null;
 let playToken = 0;
+/** `true` while the Media3 service (not `<audio>`) owns playback. */
+let usingNative = false;
+/** Native event subscription is attached once per session. */
+let nativeListenerReady = false;
 /** `true` when the pending load is an `http://` stream on an `https://` page (blocked by policy, not offline). */
 let lastLoadInsecure = false;
 /** Shown instead of the generic failure when the stream is HTTP-only on a secure page. */
 const INSECURE_HTTP_MESSAGE =
-  "This station only streams over insecure HTTP, which secure pages and the app WebView block. Pick a station with an HTTPS stream, or wait for the native player.";
+  "This station only streams over insecure HTTP, which secure pages and the app WebView block. Pick a station with an HTTPS stream.";
 const listeners = new Set<() => void>();
 
-/** Write prefs to storage and the live element/snapshot. */
+/** Write prefs to storage and the live output (service or element). */
 export function applyPlayerPrefs(prefs: PlayerPrefs): void {
   const volume = Math.min(1, Math.max(0, Number.isFinite(prefs.volume) ? prefs.volume : 0.9));
   const muted = prefs.muted === true;
   if (audio) audio.volume = muted ? 0 : volume;
+  if (usingNative) void nativeSetVolume(volume, muted).catch(() => {});
   persistVolume(volume, muted);
   emit({ volume, muted });
 }
@@ -83,15 +97,24 @@ function ensureAudio(): HTMLAudioElement | null {
     audio = new Audio();
     audio.preload = "none";
     audio.volume = snapshot.muted ? 0 : snapshot.volume;
-    audio.addEventListener("playing", () => emit({ status: "playing", error: null }));
+    // Native owns playback while `usingNative` — stale `<audio>` events
+    // must never flip the snapshot behind the service.
+    audio.addEventListener("playing", () => {
+      if (!usingNative) emit({ status: "playing", error: null });
+    });
     audio.addEventListener("pause", () => {
+      if (usingNative) return;
       if (snapshot.status === "playing" || snapshot.status === "loading") emit({ status: "paused" });
     });
     audio.addEventListener("waiting", () => {
+      if (usingNative) return;
       if (snapshot.status === "playing") emit({ status: "loading" });
     });
-    audio.addEventListener("ended", () => emit({ status: "paused" }));
+    audio.addEventListener("ended", () => {
+      if (!usingNative) emit({ status: "paused" });
+    });
     audio.addEventListener("error", () => {
+      if (usingNative) return;
       if (snapshot.status === "loading") {
         emit({
           status: "error",
@@ -127,15 +150,71 @@ function updateMediaSession(station: Station): void {
 }
 
 /**
- * Native bridge stub. When the Capacitor foreground-service plugin lands
- * (Kotlin + Media3, porting `PlayerService.java`), route here first:
- * `if (await NativeAudio.play(url)) return true`. Until then the WebView
- * `<audio>` element is the player on every platform.
+ * Mirror native transport state into the snapshot. Attached once, the first
+ * time the service is used — the listener lives for the session so headset
+ * / lock-screen pauses stay in sync with the dock.
  */
-function playViaNative(_station: Station, _url: string): Promise<boolean> {
-  if (!isNative()) return Promise.resolve(false);
-  // No native audio plugin registered yet — fall through to web audio.
-  return Promise.resolve(false);
+function ensureNativeListener(): void {
+  if (nativeListenerReady || !canUseNativeAudio()) return;
+  nativeListenerReady = true;
+  void onNativePlaybackStatus((event: NativePlaybackEvent) => {
+    if (!usingNative) return;
+    if (event.status === "playing") emit({ status: "playing", error: null });
+    else if (event.status === "paused") emit({ status: "paused" });
+    else if (event.status === "loading") emit({ status: "loading" });
+    else emit({ status: "error", error: event.error ?? "The native player hit an error." });
+  }).catch(() => {
+    nativeListenerReady = false;
+  });
+}
+
+/** Park the web element when the service takes over (no event cross-talk). */
+function parkWebAudio(): void {
+  if (!audio) return;
+  try {
+    audio.pause();
+  } catch {
+    // Element teardown races are harmless — the service owns audio now.
+  }
+  audio.removeAttribute("src");
+  audio.load();
+}
+
+/**
+ * APK path: hand the resolved URL to the Media3 foreground service, which
+ * renders the standard system media UI (notification, lock-screen, headset,
+ * Auto) and keeps playing after the WebView dies. `false` on web, or when
+ * the bridge rejects — callers fall through to `<audio>`.
+ */
+async function playViaNative(station: Station, url: string): Promise<boolean> {
+  if (!canUseNativeAudio()) return false;
+  ensureNativeListener();
+  try {
+    await nativePlay({
+      url,
+      title: station.name,
+      artist: formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Radio",
+      artwork: station.favicon,
+      volume: snapshot.volume,
+      muted: snapshot.muted,
+    });
+    usingNative = true;
+    parkWebAudio();
+    return true;
+  } catch {
+    // A failed take-over must never leave the previous station audible
+    // behind the error snapshot — stop the stray session, then let the
+    // caller fall back to `<audio>`.
+    void nativeStop().catch(() => {});
+    usingNative = false;
+    return false;
+  }
+}
+
+/** History + server click-count, fire-and-forget (port of RadioDroid's play → json/url flow). */
+function logPlay(station: Station): void {
+  // Dynamic import keeps Dexie out of this chunk until the first play.
+  void import("@/lib/radio/store").then((store) => store.logPlay(station)).catch(() => {});
 }
 
 async function resolveUrl(station: Station): Promise<string> {
@@ -176,14 +255,23 @@ export function play(station: Station): void {
       emit({ status: "error", error: "This station has no stream URL." });
       return;
     }
-    if (isHlsUrl(url) && !element.canPlayType("application/vnd.apple.mpegurl")) {
-      // Chrome/Android WebView can't play HLS in <audio> — flag for the
-      // native plugin instead of spinning on an error event.
-      emit({ needsNative: true, status: "error", error: "This is an HLS stream — needs the native player (APK)." });
+    // APK first: the service plays every format (including HLS) with
+    // system media UI. Web falls through to `<audio>`.
+    if (await playViaNative(station, url)) {
+      if (token !== playToken) {
+        // Superseded while the bridge connected — stop the stray start.
+        void nativeStop().catch(() => {});
+        return;
+      }
+      emit({ status: "playing" });
+      logPlay(station);
       return;
     }
-    if (await playViaNative(station, url)) {
-      emit({ status: "playing" });
+    usingNative = false;
+    if (isHlsUrl(url) && !element.canPlayType("application/vnd.apple.mpegurl")) {
+      // Chrome/Android WebView can't play HLS in <audio> — and the native
+      // bridge just declined — so flag it instead of spinning on an error.
+      emit({ needsNative: true, status: "error", error: "This is an HLS stream — needs the native player (APK)." });
       return;
     }
     // `http://` streams never load from an `https://` page (mixed-content on
@@ -193,6 +281,7 @@ export function play(station: Station): void {
     // with no per-request mixed-content warnings (HLS playlists fan out into
     // one warning per segment); when it doesn't, the error below still names
     // the policy via `lastLoadInsecure`, computed from the ORIGINAL url.
+    // The native path above keeps the original URL — Media3 plays HTTP fine.
     lastLoadInsecure = isInsecureHttpStream(url) && globalThis.window?.location?.protocol === "https:";
     try {
       element.src = upgradeInsecureUrl(url);
@@ -200,10 +289,7 @@ export function play(station: Station): void {
       await element.play();
       if (token !== playToken) return;
       updateMediaSession(station);
-      // History + server click-count, fire-and-forget (port of RadioDroid's
-      // play → json/url flow). Dynamic imports keep Dexie out of this chunk
-      // until the first play.
-      void import("@/lib/radio/store").then((store) => store.logPlay(station)).catch(() => {});
+      logPlay(station);
     } catch (error: unknown) {
       if (token !== playToken) return; // abort() from a superseding play()
       const name = error instanceof DOMException ? error.name : "";
@@ -220,10 +306,26 @@ export function play(station: Station): void {
 }
 
 export function pause(): void {
+  if (usingNative) {
+    // Optimistic for dock snappiness; the service event confirms.
+    emit({ status: "paused" });
+    void nativePause().catch(() => {
+      emit({ status: "error", error: "Couldn't pause playback." });
+    });
+    return;
+  }
   audio?.pause();
 }
 
 export function resume(): Promise<void> {
+  if (usingNative) {
+    if (!snapshot.station) return Promise.resolve();
+    emit({ status: "loading", error: null });
+    void nativeResume().catch(() => {
+      emit({ status: "error", error: "Couldn't resume playback." });
+    });
+    return Promise.resolve();
+  }
   const element = ensureAudio();
   if (!element || !snapshot.station) return Promise.resolve();
   emit({ status: "loading", error: null });
@@ -250,6 +352,9 @@ export function togglePlay(station: Station): void {
 
 export function stop(): void {
   ++playToken;
+  const wasNative = usingNative;
+  usingNative = false;
+  if (wasNative) void nativeStop().catch(() => {});
   if (audio) {
     audio.pause();
     audio.removeAttribute("src");

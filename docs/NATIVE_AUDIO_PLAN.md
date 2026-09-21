@@ -1,8 +1,7 @@
 # Native Audio Plan — Media3 foreground-service player (APK)
 
-Status: spec — web shared fixes (URL sanitize, HTTP-only messaging, no
-`upgrade-insecure-requests`) are done; this covers what stays broken without a
-native player.
+Status: N1 + N2 done (plugin + service + web wiring ship together).
+N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
 
 ## Why the WebView is not enough
 
@@ -48,9 +47,9 @@ native player.
 
 ## Milestones
 
-- [ ] N1: `NativeAudio` plugin skeleton + `playViaNative` wiring; HLS plays on
-  device, HTTPS `<audio>` path untouched.
-- [ ] N2: foreground service + MediaSession (lock-screen controls, survives
+- [x] N1: `NativeAudio` plugin skeleton + `playViaNative` wiring; HLS plays on
+  device, HTTPS `<audio>` path untouched as fallback.
+- [x] N2: foreground service + MediaSession (lock-screen controls, survives
   WebView death); OTA-safe (native-layer edits still need a full APK).
 - [ ] N3: scoped cleartext allowlist for legacy HTTP edges OR server-side HTTPS
   proxy decision (proxy would also fix web — revisit then); HTTP-only error
