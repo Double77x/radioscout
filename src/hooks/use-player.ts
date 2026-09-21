@@ -2,7 +2,14 @@ import { useSyncExternalStore } from "react";
 import { isNative } from "@/lib/capacitor";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
 import { loadMuted, loadVolume, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
-import { isHlsUrl, isInsecureHttpStream, pickPlayableUrl, sanitizeStreamUrl, type Station } from "@/lib/radio/types";
+import {
+  isHlsUrl,
+  isInsecureHttpStream,
+  pickPlayableUrl,
+  sanitizeStreamUrl,
+  upgradeInsecureUrl,
+  type Station,
+} from "@/lib/radio/types";
 
 export type PlayerStatus = "idle" | "loading" | "playing" | "paused" | "error";
 
@@ -106,7 +113,10 @@ function updateMediaSession(station: Station): void {
       title: station.name,
       artist: formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Radio",
       album: "RadioScout",
-      artwork: station.favicon === "" ? [] : [{ src: station.favicon, sizes: "512x512", type: "image/png" }],
+      artwork:
+        station.favicon === ""
+          ? []
+          : [{ src: upgradeInsecureUrl(station.favicon), sizes: "512x512", type: "image/png" }],
     });
     mediaSession.setActionHandler("play", () => void resume());
     mediaSession.setActionHandler("pause", () => pause());
@@ -178,11 +188,14 @@ export function play(station: Station): void {
     }
     // `http://` streams never load from an `https://` page (mixed-content on
     // web, cleartext in the APK WebView) — flag it so both failure paths below
-    // explain the policy instead of blaming the station. Still attempted: a
-    // per-site insecure-content override or future proxy would let it play.
+    // explain the policy instead of blaming the station. The `<audio>` source
+    // itself is upgraded first: when the host serves TLS this plays cleanly
+    // with no per-request mixed-content warnings (HLS playlists fan out into
+    // one warning per segment); when it doesn't, the error below still names
+    // the policy via `lastLoadInsecure`, computed from the ORIGINAL url.
     lastLoadInsecure = isInsecureHttpStream(url) && globalThis.window?.location?.protocol === "https:";
     try {
-      element.src = url;
+      element.src = upgradeInsecureUrl(url);
       element.load();
       await element.play();
       if (token !== playToken) return;
