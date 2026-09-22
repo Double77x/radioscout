@@ -74,9 +74,13 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   POST_NOTIFICATIONS is requested in-context on first native play
   (Android 13+ denies it by default — without the grant the media
   notification, and with it all lock-screen/shade controls, never appears).
-- [ ] N3: scoped cleartext allowlist for legacy HTTP edges OR server-side HTTPS
-  proxy decision (proxy would also fix web — revisit then); HTTP-only error
-  copy in `use-player.ts` updated to match whichever lands.
+- [x] N3 (scoped): Dance Wave's https directory URL 302s to its http edge,
+  which ExoPlayer refused as a cross-protocol downgrade (`302` → Source
+  error). Both players are now built by `RadioPlayerFactory` (one pipeline:
+  leveling, cross-protocol redirects, focus params), and
+  `network_security_config.xml` allowlists cleartext for `dancewave.online`
+  subdomains only — deny-by-default everywhere else. No global
+  `usesCleartextTraffic`, no proxy.
 - [ ] N4: headset/Auto handling, retry + audio-focus (calls) behavior, device QA
   matrix (offline start, rotation, 120Hz, back-button with mini-player).
 - [x] N5: loudness leveling in the Media3 pipeline (`LevelingAudioProcessor`,

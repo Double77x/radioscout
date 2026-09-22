@@ -1,15 +1,10 @@
 package io.github.double77x.radioscout.audio;
 
-import android.content.Context;
 import android.util.Log;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.Player;
-import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.audio.DefaultAudioSink;
-import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 
@@ -91,30 +86,7 @@ public class RadioPlaybackService extends MediaSessionService {
         Log.i(LOG_TAG, "service created");
         levelingProcessor = new LevelingAudioProcessor();
         levelingInstance = levelingProcessor;
-        DefaultRenderersFactory renderersFactory =
-                new DefaultRenderersFactory(this) {
-                    @Override
-                    protected AudioSink buildAudioSink(
-                            Context context, boolean enableFloatOutput, boolean enableAudioTrackPlaybackParams) {
-                        return new DefaultAudioSink.Builder(context)
-                                .setAudioProcessors(new AudioProcessor[] {levelingProcessor})
-                                .setEnableFloatOutput(enableFloatOutput)
-                                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                                .build();
-                    }
-                };
-        ExoPlayer player =
-                new ExoPlayer.Builder(this)
-                        .setRenderersFactory(renderersFactory)
-                        .setAudioAttributes(
-                                new AudioAttributes.Builder()
-                                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                                        .setUsage(C.USAGE_MEDIA)
-                                        .build(),
-                                /* handleAudioFocus= */ true)
-                        .setHandleAudioBecomingNoisy(true)
-                        .setWakeMode(C.WAKE_MODE_NETWORK)
-                        .build();
+        ExoPlayer player = RadioPlayerFactory.create(this, levelingProcessor, true, true);
         session = new MediaSession.Builder(this, player).build();
     }
 

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Cleartext stays denied app-wide; only legacy HTTP stream edges the
+  directory redirects to are allowlisted per host (Dance Wave's
+  https URL 302s to its http edge — ExoPlayer follows the redirect, this
+  file decides the target may load). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">dancewave.online</domain>
+    </domain-config>
+</network-security-config>

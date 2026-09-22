@@ -10,18 +10,12 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import androidx.core.content.ContextCompat;
-import androidx.media3.common.AudioAttributes;
-import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
-import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.Metadata;
-import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
-import androidx.media3.exoplayer.audio.AudioSink;
-import androidx.media3.exoplayer.audio.DefaultAudioSink;
 import androidx.media3.extractor.metadata.icy.IcyInfo;
 import androidx.media3.extractor.metadata.id3.TextInformationFrame;
 import androidx.media3.extractor.metadata.vorbis.VorbisComment;
@@ -543,39 +537,7 @@ public class NativeAudioPlugin extends Plugin {
             processor.setLevelingEnabled(levelingEnabled);
             processor.resetForNewStation();
             fadeLeveling = processor;
-            DefaultRenderersFactory renderersFactory =
-                    new DefaultRenderersFactory(app) {
-                        @Override
-                        protected AudioSink buildAudioSink(
-                                Context ctx,
-                                boolean enableFloatOutput,
-                                boolean enableAudioTrackPlaybackParams) {
-                            return new DefaultAudioSink.Builder(ctx)
-                                    .setAudioProcessors(new AudioProcessor[] {processor})
-                                    .setEnableFloatOutput(enableFloatOutput)
-                                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                                    .build();
-                        }
-                    };
-            // Focus stays OFF until the swap: requesting permanent focus here
-            // would steal it from the session player mid-blend, pausing (or
-            // ducking) the old station — the user would hear stop-then-start
-            // instead of an overlap. Audio focus is per-player even in one
-            // app, so the newcomer must not ask until it owns the session.
-            // Noisy stays off for the same reason (only the session player
-            // answers headset unplug); both flip at the swap.
-            ExoPlayer player =
-                    new ExoPlayer.Builder(app)
-                            .setRenderersFactory(renderersFactory)
-                            .setAudioAttributes(
-                                    new AudioAttributes.Builder()
-                                            .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                                            .setUsage(C.USAGE_MEDIA)
-                                            .build(),
-                                    /* handleAudioFocus= */ false)
-                            .setHandleAudioBecomingNoisy(false)
-                            .setWakeMode(C.WAKE_MODE_NETWORK)
-                            .build();
+            ExoPlayer player = RadioPlayerFactory.create(app, processor, false, false);
             fadePlayer = player;
             fadeTarget = muted ? 0f : volume;
             fadeBlending = false;
