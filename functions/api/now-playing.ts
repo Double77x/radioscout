@@ -58,7 +58,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   if (target.hostname === "localhost" || target.hostname === "127.0.0.1" || target.hostname === "[::1]") {
     return jsonTitle(null, 60, "local-host");
   }
-  let upstream: Response;
+  let upstream: Response | null = null;
   try {
     upstream = await fetch(target.toString(), {
       headers: { "Icy-MetaData": "1", "User-Agent": "RadioScout/now-playing" },
@@ -67,6 +67,7 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   } catch (error) {
     return jsonTitle(null, 10, `fetch-fail:${error instanceof Error ? error.message : "unknown"}`);
   }
+  if (upstream === null) return jsonTitle(null, 10, "fetch-empty");
   try {
     const interval = Math.trunc(Number(upstream.headers.get("icy-metaint") ?? ""));
     if (!upstream.ok || !Number.isFinite(interval) || interval <= 0 || interval > MAX_INTERVAL_BYTES) {
