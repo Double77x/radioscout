@@ -37,7 +37,9 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
 - **Bridge:** one Capacitor plugin (`NativeAudio`, no third-party dep):
   `play({ url, title, artist, artwork })`, `pause()`, `resume()`, `stop()`,
   `setVolume()`, `setLeveling()`, `setSleepTimer({ seconds })`, event
-  `playbackStatus` (`playing | paused | loading | error`).
+  `playbackStatus` (`playing | paused | loading | error`) plus `trackUpdate`
+  (`{ title }` — now-playing parsed from ICY/ID3/Vorbis by the service, which
+  the browser can never read through `<audio>`).
 - **Station-switch crossfade:** `play({ handoff: true })` while a station is
   live buffers the new URL on a second ExoPlayer (own leveling processor,
   fresh settle) while the session player keeps playing. When the newcomer

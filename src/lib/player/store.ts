@@ -28,6 +28,11 @@ export interface PlayerSnapshot {
   muted: boolean;
   /** Sleep-timer deadline as epoch ms (`0` = off; never persisted). */
   sleepEndsAt: number;
+  /**
+   * Stream now-playing title (APK only — parsed from ICY/ID3/Vorbis by the
+   * service; always null on web). Cleared on every station change/stop.
+   */
+  track: string | null;
 }
 
 function initialSnapshot(): PlayerSnapshot {
@@ -40,6 +45,7 @@ function initialSnapshot(): PlayerSnapshot {
       volume: DEFAULT_VOLUME,
       muted: false,
       sleepEndsAt: 0,
+      track: null,
     };
   }
   // Quick resume: the previous station returns paused (never autoplaying).
@@ -54,6 +60,7 @@ function initialSnapshot(): PlayerSnapshot {
     volume: loadVolume(),
     muted: loadMuted(),
     sleepEndsAt: 0,
+    track: null,
   };
 }
 
@@ -74,6 +81,7 @@ const serverSnapshot: PlayerSnapshot = {
   volume: DEFAULT_VOLUME,
   muted: false,
   sleepEndsAt: 0,
+  track: null,
 };
 
 export function getServerSnapshot(): PlayerSnapshot {

@@ -17,10 +17,14 @@ import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
 import androidx.media3.common.Player;
 import androidx.media3.common.audio.AudioProcessor;
+import androidx.media3.common.Metadata;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.audio.AudioSink;
 import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.extractor.metadata.icy.IcyInfo;
+import androidx.media3.extractor.metadata.id3.TextInformationFrame;
+import androidx.media3.extractor.metadata.vorbis.VorbisComment;
 import androidx.media3.session.MediaController;
 import androidx.media3.session.SessionToken;
 import com.getcapacitor.JSObject;
@@ -48,6 +52,7 @@ import java.util.concurrent.ExecutionException;
 public class NativeAudioPlugin extends Plugin {
 
     private static final String EVENT_STATUS = "playbackStatus";
+    private static final String EVENT_TRACK = "trackUpdate";
     private static final String LOG_TAG = "RadioPlayback";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -79,6 +84,8 @@ public class NativeAudioPlugin extends Plugin {
     private static final int FADE_STEPS = 20;
     /** Upper bound for the incoming pre-buffer before cutting over instead. */
     private static final long FADE_WATCHDOG_MS = 20_000;
+    /** Last forwarded stream title (dedupes the metadata firehose). */
+    private String lastTrack;
     /** Last user level (play/setVolume) — restores the session volume when a
      * pause kills a mid-blend ramp part-way down. */
     private float lastVolume = 0.9f;
@@ -98,6 +105,20 @@ public class NativeAudioPlugin extends Plugin {
                     Log.i(LOG_TAG, "session player error: " + describeError(error));
                     emitStatus(controller, error.getMessage());
                 }
+
+                @Override
+                public void onMetadata(Metadata metadata) {
+                    // ICY/ID3/Vorbis now-playing titles ride the stream itself
+                    // (the browser can never read these — CORS — but the
+                    // service parses them for free). Forward changes only.
+                    String title = extractTrackTitle(metadata);
+                    if (title != null && !title.equals(lastTrack)) {
+                        lastTrack = title;
+                        JSObject data = new JSObject();
+                        data.put("title", title);
+                        notifyListeners(EVENT_TRACK, data, true);
+                    }
+                }
             };
 
     /** Functional interface to avoid java.util.function on older toolchains. */
@@ -112,6 +133,44 @@ public class NativeAudioPlugin extends Plugin {
         return (float) value;
     }
 
+    /**
+     * Pull the now-playing title out of stream metadata: Shoutcast/Icecast
+     * `StreamTitle`, ID3 TIT2 (HLS/MP3 tags), or Vorbis `TITLE`, in that
+     * order. Null when nothing carries a title — never throws.
+     */
+    private static String extractTrackTitle(Metadata metadata) {
+        if (metadata == null) return null;
+        String id3 = null;
+        String vorbis = null;
+        for (int i = 0; i < metadata.length(); i++) {
+            try {
+                Metadata.Entry entry = metadata.get(i);
+                if (entry instanceof IcyInfo) {
+                    String title = ((IcyInfo) entry).title;
+                    if (title != null && !title.trim().isEmpty()) return title.trim();
+                } else if (entry instanceof TextInformationFrame) {
+                    TextInformationFrame frame = (TextInformationFrame) entry;
+                    if ("TIT2".equals(frame.id)
+                            && frame.value != null
+                            && !frame.value.trim().isEmpty()
+                            && id3 == null) {
+                        id3 = frame.value.trim();
+                    }
+                } else if (entry instanceof VorbisComment) {
+                    VorbisComment comment = (VorbisComment) entry;
+                    if ("TITLE".equalsIgnoreCase(comment.key)
+                            && comment.value != null
+                            && !comment.value.trim().isEmpty()
+                            && vorbis == null) {
+                        vorbis = comment.value.trim();
+                    }
+                }
+            } catch (Exception ignored) {
+                // One malformed entry must never hide the rest.
+            }
+        }
+        return id3 != null ? id3 : vorbis;
+    }
     /**
      * One-line root cause for a player failure (the dock only shows the bare
      * message, e.g. "Source error"): numeric code + code name + the cause
@@ -270,6 +329,9 @@ public class NativeAudioPlugin extends Plugin {
         boolean muted = call.getBoolean("muted", false);
         levelingEnabled = call.getBoolean("leveling", false);
         lastStatus = "";
+        // New station, new title — the old StreamTitle must not linger into
+        // the tune (the web snapshot clears its copy in parallel).
+        lastTrack = null;
         withController(
                 (mediaController) -> {
                     MediaMetadata.Builder metadata =
@@ -372,6 +434,7 @@ public class NativeAudioPlugin extends Plugin {
         withController(
                 (mediaController) -> {
                     cancelHandoff();
+                    lastTrack = null;
                     mediaController.stop();
                     mediaController.clearMediaItems();
                     call.resolve();

@@ -115,7 +115,7 @@ function VolumeSlider({
  * a few idle seconds.
  */
 export function PlayerDock() {
-  const { station, status, error, volume, muted, toggle, stop, play, setVolume, toggleMute } = usePlayer();
+  const { station, status, error, track, volume, muted, toggle, stop, play, setVolume, toggleMute } = usePlayer();
   const sleepCountdown = useSleepCountdown();
   const sleepSuffix = sleepCountdown ? ` · Sleep ${sleepCountdown}` : "";
   const { surprise, isSurprising } = useSurpriseMe();
@@ -211,7 +211,7 @@ export function PlayerDock() {
                 {busy
                   ? `Tuning in…${sleepSuffix}`
                   : playing
-                    ? `${formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live"}${sleepSuffix}`
+                    ? `${track ?? (formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live")}${sleepSuffix}`
                     : `${error ?? "Paused"}${sleepSuffix}`}
               </span>
             </button>

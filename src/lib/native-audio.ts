@@ -25,6 +25,11 @@ export interface NativePlaybackEvent {
   error?: string | null;
 }
 
+/** Now-playing title parsed from stream metadata (ICY/ID3/Vorbis, APK only). */
+export interface NativeTrackEvent {
+  title: string;
+}
+
 interface NativeAudioApi {
   play: (options: NativePlayOptions) => Promise<void>;
   pause: () => Promise<void>;
@@ -37,6 +42,10 @@ interface NativeAudioApi {
   addListener: (
     event: "playbackStatus",
     callback: (event: NativePlaybackEvent) => void,
+  ) => Promise<PluginListenerHandle>;
+  addTrackListener: (
+    event: "trackUpdate",
+    callback: (event: NativeTrackEvent) => void,
   ) => Promise<PluginListenerHandle>;
 }
 
@@ -94,4 +103,14 @@ export function onNativePlaybackStatus(
 ): Promise<PluginListenerHandle | null> {
   if (!isNative()) return Promise.resolve(null);
   return NativeAudio.addListener("playbackStatus", callback);
+}
+
+/**
+ * Stream now-playing titles (APK only — the browser cannot read ICY/ID3
+ * metadata through `<audio>`, and most stations omit the CORS headers a
+ * manual fetch would need). Null handle on web like the status listener.
+ */
+export function onNativeTrackUpdate(callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle | null> {
+  if (!isNative()) return Promise.resolve(null);
+  return NativeAudio.addTrackListener("trackUpdate", callback);
 }

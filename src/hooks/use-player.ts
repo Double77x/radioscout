@@ -11,6 +11,7 @@ import {
   nativeSetVolume,
   nativeStop,
   onNativePlaybackStatus,
+  onNativeTrackUpdate,
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
@@ -698,6 +699,15 @@ function ensureNativeListener(): void {
   }).catch(() => {
     nativeListenerReady = false;
   });
+  // Stream titles ride a separate bridge event (same lifetime — one
+  // subscription per session alongside the status listener above).
+  void onNativeTrackUpdate((event) => {
+    if (!usingNative) return;
+    const title = event.title.trim() === "" ? null : event.title.trim();
+    if (title !== snapshot.track) emit({ track: title });
+  }).catch(() => {
+    nativeListenerReady = false;
+  });
 }
 
 /** Park the web element when the service takes over (no event cross-talk). */
@@ -1030,7 +1040,7 @@ function revertToPrevious(failedName: string, note?: string): void {
   } catch {
     audible = false;
   }
-  emit({ station: prevStation, status: audible ? "playing" : "paused", error: null });
+  emit({ station: prevStation, status: audible ? "playing" : "paused", error: null, track: null });
   toast("Couldn't start that station", {
     description: note ?? `${failedName} wouldn't play — kept ${prevStation.name} on.`,
   });
@@ -1143,7 +1153,7 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
   // it keeps playing untouched until the new stream is ready.
   handoffPrev = snapshot.station ? { station: snapshot.station, element: audio } : null;
   writeLastStation(station);
-  emit({ station, status: "loading", error: null, needsNative: false });
+  emit({ station, status: "loading", error: null, needsNative: false, track: null });
 
   void (async () => {
     const element = ensureAudio();
@@ -1159,7 +1169,7 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
       // (it already names the new station, which never started — resume must
       // find the still-parked predecessor, not an empty take).
       const prev = handoffPrev?.station;
-      if (prev) emit({ station: prev, status: "paused", error: null });
+      if (prev) emit({ station: prev, status: "paused", error: null, track: null });
       return;
     }
     if (element !== audio) return; // element rebuilt mid-resolve (leveling toggle)
@@ -1240,7 +1250,7 @@ export function pause(): void {
   // station that never started, and resume would play the wrong one.
   const prev = handoffPrev?.station ?? null;
   killIncoming();
-  if (prev && snapshot.status === "loading") emit({ station: prev, status: "paused", error: null });
+  if (prev && snapshot.status === "loading") emit({ station: prev, status: "paused", error: null, track: null });
   // Only fade audible playback — a loading stream parks immediately.
   if (snapshot.status !== "playing") {
     pauseNow();
@@ -1290,7 +1300,7 @@ export function resume(): Promise<void> {
     } catch {
       audible = false;
     }
-    emit({ station: prevStation, status: audible ? "playing" : "paused", error: null });
+    emit({ station: prevStation, status: audible ? "playing" : "paused", error: null, track: null });
     if (audible) return Promise.resolve();
   }
   if (usingNative) {
@@ -1378,7 +1388,7 @@ function stopNow(): void {
     audio.removeAttribute("src");
     audio.load();
   }
-  emit({ station: null, status: "idle", error: null, needsNative: false });
+  emit({ station: null, status: "idle", error: null, needsNative: false, track: null });
 }
 
 /** 0..1. Dragging above zero unmutes. Persisted for the next session. */
