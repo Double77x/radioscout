@@ -35,10 +35,17 @@ import AdmZip from "adm-zip";
 const root = process.cwd();
 
 function arg(name, fallback) {
-  const hit = process.argv.find((entry) => entry === `--${name}` || entry.startsWith(`--${name}=`));
-  if (!hit) return fallback;
+  const flag = `--${name}`;
+  const idx = process.argv.findIndex((entry) => entry === flag || entry.startsWith(`${flag}=`));
+  if (idx === -1) return fallback;
+  const hit = process.argv[idx];
   const eq = hit.indexOf("=");
-  return eq === -1 ? true : hit.slice(eq + 1);
+  if (eq !== -1) return hit.slice(eq + 1);
+  // Space-separated form (`--channel production`): take the next argv
+  // entry. A missing value (or another flag) means a boolean switch.
+  const next = process.argv[idx + 1];
+  if (next === undefined || next.startsWith("--")) return true;
+  return next;
 }
 
 function fail(message) {
