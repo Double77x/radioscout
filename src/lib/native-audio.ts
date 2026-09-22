@@ -8,6 +8,8 @@ export interface NativePlayOptions {
   artwork: string;
   volume: number;
   muted: boolean;
+  /** Loudness leveling for the service-side processor (APK only). */
+  leveling: boolean;
 }
 
 export type NativePlaybackStatus = "playing" | "paused" | "loading" | "error";
@@ -23,6 +25,7 @@ interface NativeAudioApi {
   resume: () => Promise<void>;
   stop: () => Promise<void>;
   setVolume: (options: { volume: number; muted: boolean }) => Promise<void>;
+  setLeveling: (options: { enabled: boolean }) => Promise<void>;
   addListener: (
     event: "playbackStatus",
     callback: (event: NativePlaybackEvent) => void,
@@ -59,6 +62,12 @@ export function nativeStop(): Promise<void> {
 
 export function nativeSetVolume(volume: number, muted: boolean): Promise<void> {
   return NativeAudio.setVolume({ volume, muted });
+}
+
+/** Flip the service-side leveling processor (APK only — no-op on web). */
+export function nativeSetLeveling(enabled: boolean): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  return NativeAudio.setLeveling({ enabled });
 }
 
 /** Null handle on web so subscribers can no-op without branching. */

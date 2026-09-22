@@ -34,6 +34,7 @@ Radio switcher (`radioscout`). The Scout home-inventory app was purged
 - [x] Old-snapshot schema hardening (`withStationDefaults` — fixes BBC `toFixed` crash)
 - [x] Listening stats: session clock on player transitions (5s tap threshold, pagehide/hide + native background checkpoints), `listening` table capped at 1000 sessions, Total/Daily SVG charts under Recently played, v4 backup envelope
 - [x] Loudness leveling: Settings → Audio switch (adaptive K-weighted RMS gain via Web Audio, volume-relative so 0–100 stays master; CORS-blocked hosts rescued to direct playback once per element and remembered for the session, v5 backup envelope)
+- [x] Native leveling: `LevelingAudioProcessor` in the Media3 pipeline (same DSP, JVM-tested), `setLeveling` bridge + per-play flag, one switch drives both players
 - [x] Vote counts refresh (optimistic +1 on the cached detail + list invalidation behind the sheet)
 
 ## Next

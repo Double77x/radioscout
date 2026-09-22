@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from "react";
+import { toast } from "sonner";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
 import {
   canUseNativeAudio,
   nativePause,
   nativePlay,
   nativeResume,
+  nativeSetLeveling,
   nativeSetVolume,
   nativeStop,
   onNativePlaybackStatus,
@@ -121,6 +123,8 @@ function getServerSnapshot(): PlayerSnapshot {
   return serverSnapshot;
 }
 
+/** One-time compat-mode notice per launch (see below). */
+let warnedFallback = false;
 /** Audible-stretch clock: epoch ms when the current `playing` run began (`0` = none). */
 let sessionStart = 0;
 /** Station the running stretch belongs to (rolled over on mid-play swaps). */
@@ -458,13 +462,19 @@ function adaptTick(): void {
 }
 
 /**
- * Flip the leveling toggle live. Enabling rebuilds a direct element so the
- * next load routes (replaying the current station when audible); disabling
- * just freezes the graph at unity — the stream never glitches.
+ * Flip the leveling toggle live. On the APK the Media3 service owns audio,
+ * so the flag goes straight to its processor and the web graph stays out of
+ * it. On web, enabling rebuilds a direct element so the next load routes
+ * (replaying the current station when audible); disabling just freezes the
+ * graph at unity — the stream never glitches.
  */
 export function setNormalization(enabled: boolean): void {
   writeNormalizeEnabled(enabled);
   normalizeOn = enabled;
+  if (canUseNativeAudio()) {
+    void nativeSetLeveling(enabled).catch(() => {});
+    if (usingNative) return;
+  }
   if (!enabled) {
     freezeGain();
     return;
@@ -547,6 +557,7 @@ async function playViaNative(station: Station, url: string): Promise<boolean> {
       artwork: station.favicon,
       volume: snapshot.volume,
       muted: snapshot.muted,
+      leveling: normalizeOn,
     });
     usingNative = true;
     parkWebAudio();
@@ -657,6 +668,16 @@ export function play(station: Station): void {
       if (token !== playToken) return;
       updateMediaSession(station);
       logPlay(station);
+      // The native bridge exists on this device but didn't take playback —
+      // say so once per launch. WebView audio has no lockscreen, headset or
+      // background survival, so silence here would strand the user with no
+      // explanation and no diagnostic trail.
+      if (canUseNativeAudio() && !usingNative && !warnedFallback) {
+        warnedFallback = true;
+        toast("Compatibility playback", {
+          description: "The system player didn't start — lockscreen and headset controls are unavailable.",
+        });
+      }
     } catch (error: unknown) {
       if (token !== playToken) return; // abort() from a superseding play()
       const name = error instanceof DOMException ? error.name : "";

@@ -24,7 +24,7 @@ Tracked workstreams. Checked items are done and gated (lint, tsc, unit, e2e, bui
 - [x] Favicon runtime check (adaptive SVG mark verified per color scheme; `tests/favicon.spec.ts` regression test)
 - [x] Dexie split into its own async chunk (`vendor-dexie`)
 - [x] Listening stats (session clock in `use-player`, `listening` table + Total/Daily SVG charts, v4 backup envelope)
-- [x] Loudness leveling toggle (Web Audio adaptive RMS gain, CORS-rescue + session-blocked hosts, v5 backup envelope)
+- [x] Loudness leveling toggle (Web Audio adaptive RMS gain, CORS-rescue + session-blocked hosts, v5 backup envelope; Media3 `LevelingAudioProcessor` on the APK)
 
 ## Up next (agreed)
 

@@ -44,6 +44,7 @@ public class NativeAudioPlugin extends Plugin {
     private MediaController controller;
     private ListenableFuture<MediaController> controllerFuture;
     private String lastStatus = "";
+    private boolean levelingEnabled = false;
 
     private final Player.Listener listener =
             new Player.Listener() {
@@ -182,6 +183,7 @@ public class NativeAudioPlugin extends Plugin {
         String artwork = call.getString("artwork", "");
         float volume = clamp01(call.getDouble("volume", 0.9));
         boolean muted = call.getBoolean("muted", false);
+        levelingEnabled = call.getBoolean("leveling", false);
         lastStatus = "";
         withController(
                 (mediaController) -> {
@@ -204,6 +206,7 @@ public class NativeAudioPlugin extends Plugin {
                                     .setMediaMetadata(metadata.build())
                                     .build();
                     mediaController.setVolume(muted ? 0f : volume);
+                    applyLeveling();
                     mediaController.setMediaItem(item);
                     mediaController.prepare();
                     mediaController.play();
@@ -253,6 +256,25 @@ public class NativeAudioPlugin extends Plugin {
                     call.resolve();
                 },
                 call);
+    }
+
+    /**
+     * Flip loudness leveling live. The processor lives in the service (same
+     * process); when it doesn't exist yet the flag rides along on the next
+     * play() call instead.
+     */
+    @PluginMethod
+    public void setLeveling(PluginCall call) {
+        levelingEnabled = call.getBoolean("enabled", false);
+        applyLeveling();
+        call.resolve();
+    }
+
+    private void applyLeveling() {
+        LevelingAudioProcessor processor = RadioPlaybackService.getLevelingProcessor();
+        if (processor != null) {
+            processor.setLevelingEnabled(levelingEnabled);
+        }
     }
 
     @Override

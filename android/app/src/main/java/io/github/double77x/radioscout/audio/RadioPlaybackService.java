@@ -1,8 +1,13 @@
 package io.github.double77x.radioscout.audio;
 
+import android.content.Context;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.audio.AudioSink;
+import androidx.media3.exoplayer.audio.DefaultAudioSink;
+import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.session.MediaSession;
 import androidx.media3.session.MediaSessionService;
 
@@ -17,12 +22,34 @@ import androidx.media3.session.MediaSessionService;
 public class RadioPlaybackService extends MediaSessionService {
 
     private MediaSession session;
+    private LevelingAudioProcessor levelingProcessor;
+    private static LevelingAudioProcessor levelingInstance;
+
+    /** Live processor for the plugin bridge (null before onCreate / after onDestroy). */
+    public static LevelingAudioProcessor getLevelingProcessor() {
+        return levelingInstance;
+    }
 
     @Override
     public void onCreate() {
         super.onCreate();
+        levelingProcessor = new LevelingAudioProcessor();
+        levelingInstance = levelingProcessor;
+        DefaultRenderersFactory renderersFactory =
+                new DefaultRenderersFactory(this) {
+                    @Override
+                    protected AudioSink buildAudioSink(
+                            Context context, boolean enableFloatOutput, boolean enableAudioTrackPlaybackParams) {
+                        return new DefaultAudioSink.Builder(context)
+                                .setAudioProcessors(new AudioProcessor[] {levelingProcessor})
+                                .setEnableFloatOutput(enableFloatOutput)
+                                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                                .build();
+                    }
+                };
         ExoPlayer player =
                 new ExoPlayer.Builder(this)
+                        .setRenderersFactory(renderersFactory)
                         .setAudioAttributes(
                                 new AudioAttributes.Builder()
                                         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -42,6 +69,7 @@ public class RadioPlaybackService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        levelingInstance = null;
         if (session != null) {
             session.getPlayer().release();
             session.release();
