@@ -32,10 +32,12 @@ Radio switcher (`radioscout`). The Scout home-inventory app was purged
 - [x] Footer directory credit is a hyperlink (no trailing period)
 - [x] Title bitrate parser ("BBC Radio 1 128K" → clean title + `128k` subtitle)
 - [x] Old-snapshot schema hardening (`withStationDefaults` — fixes BBC `toFixed` crash)
+- [x] Listening stats: session clock on player transitions (5s tap threshold, pagehide/hide + native background checkpoints), `listening` table capped at 1000 sessions, Total/Daily SVG charts under Recently played, v4 backup envelope
+- [x] Loudness leveling: Settings → Audio switch (adaptive K-weighted RMS gain via Web Audio, volume-relative so 0–100 stays master; CORS-blocked hosts rescued to direct playback once per element and remembered for the session, v5 backup envelope)
+- [x] Vote counts refresh (optimistic +1 on the cached detail + list invalidation behind the sheet)
 
 ## Next
 
-- [ ] Vote wiring done via sheet; consider vote counts refresh
 - [ ] Sleep timer (web-side, ~30 lines)
 - [x] Station card skeletons (`StationCardSkeleton`/`StationListSkeleton` mirror row geometry — Saved, history, top, search swap with no shift; `aria-busy` on sections; `isFetching`-gated so empty states never flash)
 - [x] RadioScout mark (glass music note + sparkle): inline `Logo.tsx` (per-instance IDs, dark-scheme silver note), `generate-icons.mjs` + full regen (public SVGs/PNGs/ICO, `assets/`, 123 android drawables)
@@ -48,7 +50,7 @@ Radio switcher (`radioscout`). The Scout home-inventory app was purged
 ## Backlog (native)
 
 - [ ] Capacitor foreground-service audio plugin (Media3 + MediaSession) — true background, HLS, recording
-- [ ] Wake alarms, Android Auto, widgets (RadioDroid parity — only if needed)
+- [ ] Wake alarms, Android Auto, widgets
 
 ## Gotchas
 
