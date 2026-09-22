@@ -40,8 +40,10 @@ function parseStreamTitle(block: Uint8Array): string | null {
   return title === "" ? null : title;
 }
 
-function jsonTitle(title: string | null, cacheSeconds: number): Response {
-  return Response.json({ title }, { headers: { "Cache-Control": `public, max-age=${cacheSeconds}` } });
+function jsonTitle(title: string | null, cacheSeconds: number, reason?: string): Response {
+  return Response.json(reason === undefined ? { title } : { title, reason }, {
+    headers: { "Cache-Control": `public, max-age=${cacheSeconds}` },
+  });
 }
 
 export async function onRequestGet(context: PagesContext): Promise<Response> {
@@ -50,24 +52,33 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
   try {
     target = new URL(raw);
   } catch {
-    return jsonTitle(null, 60);
+    return jsonTitle(null, 60, "bad-url");
   }
-  if (target.protocol !== "http:" && target.protocol !== "https:") return jsonTitle(null, 60);
+  if (target.protocol !== "http:" && target.protocol !== "https:") return jsonTitle(null, 60, "bad-protocol");
   if (target.hostname === "localhost" || target.hostname === "127.0.0.1" || target.hostname === "[::1]") {
-    return jsonTitle(null, 60);
+    return jsonTitle(null, 60, "local-host");
   }
+  let upstream: Response;
   try {
-    const upstream = await fetch(target.toString(), {
+    upstream = await fetch(target.toString(), {
       headers: { "Icy-MetaData": "1", "User-Agent": "RadioScout/now-playing" },
       signal: AbortSignal.timeout(TOTAL_TIMEOUT_MS),
     });
+  } catch (error) {
+    return jsonTitle(null, 10, `fetch-fail:${error instanceof Error ? error.message : "unknown"}`);
+  }
+  try {
     const interval = Math.trunc(Number(upstream.headers.get("icy-metaint") ?? ""));
     if (!upstream.ok || !Number.isFinite(interval) || interval <= 0 || interval > MAX_INTERVAL_BYTES) {
       await upstream.body?.cancel().catch(() => {});
-      return jsonTitle(null, 30);
+      return jsonTitle(
+        null,
+        30,
+        `no-metaint:status=${upstream.status}:metaint=${upstream.headers.get("icy-metaint") ?? "absent"}`,
+      );
     }
     const reader = upstream.body?.getReader();
-    if (!reader) return jsonTitle(null, 30);
+    if (!reader) return jsonTitle(null, 30, "no-body");
     try {
       await readExactly(reader, interval);
       const lengthByte = await readExactly(reader, 1);
@@ -77,11 +88,13 @@ export async function onRequestGet(context: PagesContext): Promise<Response> {
       full[0] = lengthByte[0];
       full.set(block, 1);
       return jsonTitle(parseStreamTitle(full), 30);
+    } catch (error) {
+      return jsonTitle(null, 10, `short-read:${error instanceof Error ? error.message : "unknown"}`);
     } finally {
       reader.releaseLock();
       await upstream.body?.cancel().catch(() => {});
     }
   } catch {
-    return jsonTitle(null, 10);
+    return jsonTitle(null, 10, "unexpected");
   }
 }
