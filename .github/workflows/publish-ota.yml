@@ -1,5 +1,10 @@
 # Publish OTA — manual dispatch for sideloaded APKs.
 #
+# Tagged APK releases already auto-publish a `production` OTA bundle (the
+# `publish-ota` job in release-apk.yml). Use this workflow for everything
+# else: custom channels, `--keep` / `--min/max-native-code` overrides, and
+# backfills/re-runs when auto-OTA failed or was skipped.
+#
 # Human decides WHEN and SCOPING (web-only change? which native shells?);
 # the machine does build → prerelease → manifest → commit-back → verify.
 # Dispatch: Actions → Publish OTA → Run workflow.

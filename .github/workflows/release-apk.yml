@@ -1,9 +1,13 @@
-# Release APK — tag a version, get a signed downloadable APK on the GitHub Release.
+# Release APK — tag a version, get a signed downloadable APK on the GitHub Release,
+# plus a matching OTA bundle for sideloaded devices.
 #
 # Usage: bump `version` in package.json, commit, then
 # `git tag vX.Y.Z && git push origin vX.Y.Z`. Tagging is the deliberate
-# release act: every `v*` tag builds the release-signed APK from that commit
-# and attaches it to the release. `workflow_dispatch` builds without publishing.
+# release act: every `v*` tag builds the release-signed APK from that commit,
+# attaches it to the release, then publishes a `production` OTA bundle
+# (`publish-ota` job below — same web build devices already have baked in,
+# so older shells on this core catch up and the manifest stays in step).
+# `workflow_dispatch` builds without publishing (no APK, no OTA).
 #
 # The app is local-only (no backend), so the build needs no env vars beyond
 # the release-signing secrets below.
@@ -117,3 +121,84 @@ jobs:
         with:
           files: radioscout-v*.apk
           generate_release_notes: true
+
+  # Auto-OTA: every tagged APK release publishes a `production` OTA bundle
+  # right after, so the in-app updater never lags the release. The APK job
+  # above is the guard (it already verified tag == package.json), and the
+  # OTA script's `ota-` tags never re-trigger this workflow.
+  #
+  # Why a job here instead of triggering publish-ota.yml: same run, same
+  # commit, no PAT needed (`GITHUB_TOKEN` cannot chain workflows). The
+  # manual Publish OTA workflow stays for custom channels, `--keep` /
+  # `--min/max-native-code` overrides, and backfills.
+  #
+  # Tag builds check out detached; the manifest must land on `main` (Pages
+  # serves it, devices read it), so this job checks out `main` fresh. That
+  # assumes the tag points at main head (the documented flow) — the version
+  # check below fails fast otherwise instead of shipping the wrong core.
+  publish-ota:
+    needs: build-and-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: publish-ota-production
+      cancel-in-progress: false
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Check main matches the tag
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PKG="v$(node -p "require('./package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag $TAG does not match main's package.json version $PKG — the tag is not on main head, so auto-OTA would ship the wrong core. Publish OTA manually instead."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Publish OTA bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm ota:publish --channel production --keep 3
+
+      - name: Verify manifest URL + checksum
+        run: |
+          MANIFEST="public/ota/production.json"
+          URL="$(node -p "require('./$MANIFEST').versions[0].url")"
+          SUM="$(node -p "require('./$MANIFEST').versions[0].checksum")"
+          curl -sL "$URL" -o /tmp/ota-verify.zip
+          echo "$SUM  /tmp/ota-verify.zip" | sha256sum -c -
+
+      - name: Commit manifest back
+        run: |
+          MANIFEST="public/ota/production.json"
+          VERSION="$(node -p "require('./$MANIFEST').versions[0].version")"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin main
+          git add "$MANIFEST"
+          if git diff --cached --quiet; then
+            echo "Manifest unchanged — nothing to commit."
+          else
+            git commit -m "OTA: publish $VERSION to production (release ${GITHUB_REF_NAME})"
+            git push origin HEAD:main
+            echo "Committed $MANIFEST ($VERSION) — Pages deploys it and devices see it."
+          fi
