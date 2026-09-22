@@ -1,0 +1,25 @@
+# Line-ending policy: LF everywhere, on every OS.
+#
+# Why: without this, Windows checkouts materialize CRLF
+# (`core.autocrlf=true`) while oxfmt writes LF, so every `pnpm format`
+# rewrote every file's line endings ("no changes" that still dirtied the
+# tree) until the next checkout flipped them back. Pinning `eol=lf` makes
+# the checkout, the formatter, and the repo blobs agree, so format is a
+# true no-op on clean files.
+* text=auto eol=lf
+
+# Windows-only launchers must stay CRLF to execute.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary: never convert, never diff.
+*.jks binary
+*.keystore binary
+*.apk binary
+*.aab binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.zip binary
