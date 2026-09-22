@@ -717,8 +717,9 @@ function parkWebAudio(): void {
  * renders the standard system media UI (notification, lock-screen, headset,
  * Auto) and keeps playing after the WebView dies. `ok: false` on web, or
  * when the bridge rejects — callers fall through to `<audio>`. `handoff` is
- * true when the service kept the old station playing behind the new item
- * (no cut, no duck — so the caller skips its fade-in).
+ * true when the service overlapped the switch behind the old station (a
+ * second player pre-buffers, the two blend over 1s, the session swaps — so
+ * the caller skips its fade-in).
  */
 async function playViaNative(
   station: Station,
@@ -1126,8 +1127,13 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
   // a stillborn tune until `playing` says otherwise.
   playedThrough = false;
   // Handoff intent, captured BEFORE the loading emit below overwrites the
-  // evidence: true when the service owns audible output right now.
-  const serviceAudible = usingNative && snapshot.status === "playing";
+  // evidence: true when the service owns output right now — `playing`, or
+  // `loading` with a live service (a switch/rebuffer in flight never stops
+  // the old station, so it is still audible; a tap landing mid-resolve must
+  // still blend). Cold starts have no current item, so the service-side
+  // conditions reject a stale `true` there — the native guard owns the final
+  // say, this flag only stops suppressing it.
+  const serviceAudible = usingNative && (snapshot.status === "playing" || snapshot.status === "loading");
   // Pause state at tap time: a pause landing mid-resolve (below) is a fresh
   // user verdict that aborts this take — honor the silence.
   const pausedAtTap = snapshot.status === "paused";

@@ -25,6 +25,7 @@ public class RadioPlaybackService extends MediaSessionService {
     private MediaSession session;
     private LevelingAudioProcessor levelingProcessor;
     private static LevelingAudioProcessor levelingInstance;
+    private static RadioPlaybackService instance;
     private static final String LOG_TAG = "RadioPlayback";
 
     /** Live processor for the plugin bridge (null before onCreate / after onDestroy). */
@@ -32,9 +33,45 @@ public class RadioPlaybackService extends MediaSessionService {
         return levelingInstance;
     }
 
+    /**
+     * Hand the session to a pre-buffered crossfade player (station switch).
+     * The previous session player is released; the new player's leveling
+     * processor becomes the live one. Must be called on the players'
+     * application thread (main — both are built there). Returns false when
+     * there is no session to swap (caller cuts over classically instead).
+     */
+    public static boolean swapSessionPlayer(ExoPlayer newPlayer, LevelingAudioProcessor newProcessor) {
+        RadioPlaybackService self = instance;
+        if (self == null || self.session == null || newPlayer == null) return false;
+        try {
+            androidx.media3.common.Player old = self.session.getPlayer();
+            self.session.setPlayer(newPlayer);
+            levelingInstance = newProcessor;
+            try {
+                newPlayer.setHandleAudioBecomingNoisy(true);
+            } catch (Exception ignored) {
+                // Noisy handling stays with the released player — headset
+                // unplug just won't pause until the next cold start.
+            }
+            if (old instanceof ExoPlayer) {
+                try {
+                    ((ExoPlayer) old).release();
+                } catch (Exception ignored) {
+                    // Release races a dead surface — the session moved on.
+                }
+            }
+            Log.i(LOG_TAG, "crossfade swapped session player");
+            return true;
+        } catch (Exception e) {
+            Log.i(LOG_TAG, "crossfade swap failed: " + e.getMessage());
+            return false;
+        }
+    }
+
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         Log.i(LOG_TAG, "service created");
         levelingProcessor = new LevelingAudioProcessor();
         levelingInstance = levelingProcessor;
@@ -74,6 +111,7 @@ public class RadioPlaybackService extends MediaSessionService {
     public void onDestroy() {
         Log.i(LOG_TAG, "service destroyed");
         levelingInstance = null;
+        instance = null;
         if (session != null) {
             session.getPlayer().release();
             session.release();

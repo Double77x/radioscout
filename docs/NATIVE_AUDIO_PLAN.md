@@ -38,14 +38,17 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   `play({ url, title, artist, artwork })`, `pause()`, `resume()`, `stop()`,
   `setVolume()`, `setLeveling()`, `setSleepTimer({ seconds })`, event
   `playbackStatus` (`playing | paused | loading | error`).
-- **Station-switch handoff:** `play({ handoff: true })` while a station is
-  live enqueues behind it (`addMediaItem`) and advances after a pre-buffer
-  window instead of cutting over, then drops the old window on the seek
-  transition. A failed staged item cancels the advance and reports — the
-  old item keeps playing. Anything unexpected falls back to the classic
-  `setMediaItem` cutover, so a failed handoff is never worse than a cut.
-  Verify on device: logcat `handoff staged` + `handoff advanced`, no gap in
-  the transport notification, old window gone from the queue after.
+- **Station-switch crossfade:** `play({ handoff: true })` while a station is
+  live buffers the new URL on a second ExoPlayer (own leveling processor,
+  fresh settle) while the session player keeps playing. When the newcomer
+  reaches READY the two blend over 1s (old out, new in — same length as the
+  web crossfade), then the session swaps to the newcomer and the retiree is
+  released. Stalls/errors cut the session player over classically instead,
+  so a failed blend is never worse than a cut. Pauses/stops/new plays kill
+  the incoming player (pause also restores the user level first, in case the
+  ramp had ducked part-way). Verify on device: logcat `crossfade staged` +
+  `blending` + `complete`, continuous audio across the switch, one session
+  player after.
 - **Pause beats staging:** `pause()` cancels a pending advance (a seek
   behind an explicit pause would strand the snapshot), and `loading`
   service events never flip a paused/stopped dock to tuning — paused stays
