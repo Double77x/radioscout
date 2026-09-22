@@ -276,6 +276,24 @@ public class NativeAudioPlugin extends Plugin {
                     boolean wantHandoff = call.getBoolean("handoff", false);
                     cancelHandoff();
                     handoffAdvanced = false;
+                    // DIAGNOSTIC (device triage — keep until handoff is proven
+                    // on hardware, then trim to the branch outcome only).
+                    try {
+                        Log.i(
+                                LOG_TAG,
+                                "play handoff="
+                                        + wantHandoff
+                                        + " current="
+                                        + (mediaController.getCurrentMediaItem() != null)
+                                        + " windows="
+                                        + mediaController.getCurrentTimeline().getWindowCount()
+                                        + " playing="
+                                        + mediaController.isPlaying()
+                                        + " state="
+                                        + mediaController.getPlaybackState());
+                    } catch (Exception e) {
+                        Log.i(LOG_TAG, "play handoff probe failed: " + e.getMessage());
+                    }
                     if (wantHandoff
                             && mediaController.getCurrentMediaItem() != null
                             && mediaController.getCurrentTimeline().getWindowCount() == 1
@@ -322,6 +340,10 @@ public class NativeAudioPlugin extends Plugin {
     public void pause(PluginCall call) {
         withController(
                 (mediaController) -> {
+                    // A staged handoff dies with the pause (mirrors the web
+                    // killIncoming): seeking behind an explicit pause would
+                    // strand the snapshot on a station that never started.
+                    cancelHandoff();
                     mediaController.pause();
                     call.resolve();
                 },

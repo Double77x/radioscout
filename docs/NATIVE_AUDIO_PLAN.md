@@ -46,6 +46,11 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   `setMediaItem` cutover, so a failed handoff is never worse than a cut.
   Verify on device: logcat `handoff staged` + `handoff advanced`, no gap in
   the transport notification, old window gone from the queue after.
+- **Pause beats staging:** `pause()` cancels a pending advance (a seek
+  behind an explicit pause would strand the snapshot), and `loading`
+  service events never flip a paused/stopped dock to tuning — paused stays
+  paused through network hiccups (mirrors the gated web `waiting`
+  handler).
   Web stays canonical — every call keeps its `<audio>` fallback.
 - **Web wiring:** `playViaNative(station, url)` becomes: `if (!isNative())
   return false; if (await NativeAudio.play(...)) { emit({ status: "playing" });

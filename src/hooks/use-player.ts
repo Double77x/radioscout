@@ -682,8 +682,13 @@ function ensureNativeListener(): void {
       // Headset / lock-screen pauses are user intent — take over from the loop.
       cancelReconnect();
       emit({ status: "paused" });
-    } else if (event.status === "loading") emit({ status: "loading" });
-    else if (snapshot.status === "playing" && snapshot.station && !retryingReconnect) {
+    } else if (event.status === "loading" && (snapshot.status === "loading" || snapshot.status === "playing")) {
+      // A buffering blip on a paused/stopped player must not flip the dock
+      // to tuning — loading is only meaningful while starting or audible
+      // (mirrors the gated web `waiting` handler below). Paused stays paused
+      // through network hiccups; resume surfaces any real failure instead.
+      emit({ status: "loading" });
+    } else if (snapshot.status === "playing" && snapshot.station && !retryingReconnect) {
       // A service error while audible is a drop (ExoPlayer already retried
       // internally) — walk the same table; the replay goes native-first.
       beginReconnect(snapshot.station);
@@ -715,11 +720,18 @@ function parkWebAudio(): void {
  * true when the service kept the old station playing behind the new item
  * (no cut, no duck — so the caller skips its fade-in).
  */
-async function playViaNative(station: Station, url: string): Promise<{ ok: boolean; handoff: boolean }> {
+async function playViaNative(
+  station: Station,
+  url: string,
+  wantHandoff: boolean,
+): Promise<{ ok: boolean; handoff: boolean }> {
   if (!canUseNativeAudio()) return { ok: false, handoff: false };
   ensureNativeListener();
-  // Handoff only when the service actually owns audible output right now.
-  const handoff = usingNative && snapshot.status === "playing";
+  // `wantHandoff` arrives precomputed: the caller snapshots audibility
+  // BEFORE flipping status to loading (reading it here would always see
+  // this play's own loading state — exactly the race that made every
+  // switch a cold cutover).
+  const handoff = wantHandoff;
   try {
     // Cold start goes in silent — the caller sweeps up with
     // `fadeInFromSilence`, so station switches never blast (muted users stay
@@ -1113,6 +1125,12 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
   // A fresh load hasn't played through yet — a `loading` error from here is
   // a stillborn tune until `playing` says otherwise.
   playedThrough = false;
+  // Handoff intent, captured BEFORE the loading emit below overwrites the
+  // evidence: true when the service owns audible output right now.
+  const serviceAudible = usingNative && snapshot.status === "playing";
+  // Pause state at tap time: a pause landing mid-resolve (below) is a fresh
+  // user verdict that aborts this take — honor the silence.
+  const pausedAtTap = snapshot.status === "paused";
   const handoff = handoffToken;
   killIncoming();
   // Remember the live output for the handoff (and for the failure revert) —
@@ -1130,6 +1148,14 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
     const url = await resolveUrl(station);
     if (token !== playToken) return; // superseded by a newer play()
     if (handoff !== handoffToken) return; // paused/stopped mid-resolve
+    if (!pausedAtTap && snapshot.status === "paused") {
+      // User paused mid-resolve: honor the silence AND revert the snapshot
+      // (it already names the new station, which never started — resume must
+      // find the still-parked predecessor, not an empty take).
+      const prev = handoffPrev?.station;
+      if (prev) emit({ station: prev, status: "paused", error: null });
+      return;
+    }
     if (element !== audio) return; // element rebuilt mid-resolve (leveling toggle)
     if (url === "") {
       emit({ status: "error", error: "This station has no stream URL." });
@@ -1137,7 +1163,12 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
     }
     // APK first: the service plays every format (including HLS) with
     // system media UI. Web falls through to `<audio>`.
-    const takeover = await playViaNative(station, url);
+    // Drop a stale handoff intent if the user visibly took over mid-resolve
+    // (paused/stopped/errored); `loading` is this play's own state, and a
+    // `playing` arrival only reconfirms audible output.
+    const status = snapshot.status;
+    const wantHandoff = serviceAudible && (status === "loading" || status === "playing");
+    const takeover = await playViaNative(station, url, wantHandoff);
     if (takeover.ok) {
       if (token !== playToken) {
         // Superseded while the bridge connected — stop the stray start.
@@ -1198,6 +1229,12 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
 }
 
 export function pause(): void {
+  // Pausing mid-switch abandons it: revert to the still-parked predecessor
+  // first (pauseNow below then parks it) — otherwise the dock would name a
+  // station that never started, and resume would play the wrong one.
+  const prev = handoffPrev?.station ?? null;
+  killIncoming();
+  if (prev && snapshot.status === "loading") emit({ station: prev, status: "paused", error: null });
   // Only fade audible playback — a loading stream parks immediately.
   if (snapshot.status !== "playing") {
     pauseNow();
@@ -1232,10 +1269,24 @@ function pauseNow(): void {
 }
 
 export function resume(): Promise<void> {
-  // Resuming the live station cancels a staged switch to another one.
+  // Resuming mid-switch keeps the audible predecessor: kill the staged
+  // switch, then continue below on the reverted snapshot (playing straight
+  // away when it never stopped, replaying it otherwise).
+  const prevStation = handoffPrev?.station ?? null;
+  const prevEl = handoffPrev?.element ?? null;
   killIncoming();
   // A manual resume takes over from the retry loop too.
   cancelReconnect();
+  if (prevStation && snapshot.status === "loading") {
+    let audible = false;
+    try {
+      audible = prevEl !== null && !prevEl.paused;
+    } catch {
+      audible = false;
+    }
+    emit({ station: prevStation, status: audible ? "playing" : "paused", error: null });
+    if (audible) return Promise.resolve();
+  }
   if (usingNative) {
     if (!snapshot.station) return Promise.resolve();
     emit({ status: "loading", error: null });
