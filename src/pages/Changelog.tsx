@@ -8,6 +8,14 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.4 - Dance Wave fix and stream titles</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>Dance Wave! plays again on Android — its server redirects to an HTTP edge, which the player now follows on an allowlisted host</li>
+            <li>The dock shows the live track title under the station name, on Android and in the browser</li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.3 - Audible Android crossfade</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
