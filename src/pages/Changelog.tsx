@@ -8,11 +8,30 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.5 - Titles light up on Android</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Stream titles now reach the dock — the bridge was calling a native method that doesn't exist, so every
+              subscription failed silently
+            </li>
+            <li>
+              Browser titles removed: too few stations broadcast usable metadata over the web path to justify the moving
+              parts
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.4 - Dance Wave fix and stream titles</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
-            <li>Dance Wave! plays again on Android — its server redirects to an HTTP edge, which the player now follows on an allowlisted host</li>
-            <li>The dock shows the live track title under the station name, on Android and in the browser</li>
+            <li>
+              Dance Wave! plays again on Android — its server redirects to an HTTP edge, which the player now follows on
+              an allowlisted host
+            </li>
+            <li>
+              The dock shows the live track title under the station name on Android (stations that broadcast titles)
+            </li>
           </ul>
         </div>
         <div className='border-l-2 border-primary pb-2 pl-6'>

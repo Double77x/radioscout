@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 import { StationArt } from "@/components/radio/StationArt";
 import { focusRadioSearch } from "@/lib/focus-radio-search";
 import { usePlayer } from "@/hooks/use-player";
-import { useNowPlaying } from "@/hooks/use-now-playing";
 import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
 import { useSurpriseMe } from "@/hooks/use-radio";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
@@ -128,10 +127,6 @@ export function PlayerDock() {
 
   const busy = status === "loading";
   const playing = status === "playing";
-  // Stream title: native metadata on the APK, edge-polled ICY on web —
-  // genre tags when neither has anything.
-  const webTitle = useNowPlaying(station, playing);
-  const nowPlaying = track ?? webTitle;
   const level = muted ? 0 : volume;
   const VolumeIcon = level === 0 ? VolumeX : level < 0.5 ? Volume1 : Volume2;
   const overlayOpen = volumeOpen && station !== null;
@@ -216,7 +211,7 @@ export function PlayerDock() {
                 {busy
                   ? `Tuning in…${sleepSuffix}`
                   : playing
-                    ? `${nowPlaying ?? (formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live")}${sleepSuffix}`
+                    ? `${track ?? (formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live")}${sleepSuffix}`
                     : `${error ?? "Paused"}${sleepSuffix}`}
               </span>
             </button>

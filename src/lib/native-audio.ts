@@ -39,14 +39,10 @@ interface NativeAudioApi {
   setLeveling: (options: { enabled: boolean }) => Promise<void>;
   /** Native sleep-timer arm in seconds (`0` clears); survives WebView throttle. */
   setSleepTimer: (options: { seconds: number }) => Promise<void>;
-  addListener: (
-    event: "playbackStatus",
-    callback: (event: NativePlaybackEvent) => void,
-  ) => Promise<PluginListenerHandle>;
-  addTrackListener: (
-    event: "trackUpdate",
-    callback: (event: NativeTrackEvent) => void,
-  ) => Promise<PluginListenerHandle>;
+  addListener: {
+    (event: "playbackStatus", callback: (event: NativePlaybackEvent) => void): Promise<PluginListenerHandle>;
+    (event: "trackUpdate", callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle>;
+  };
 }
 
 /**
@@ -112,5 +108,5 @@ export function onNativePlaybackStatus(
  */
 export function onNativeTrackUpdate(callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle | null> {
   if (!isNative()) return Promise.resolve(null);
-  return NativeAudio.addTrackListener("trackUpdate", callback);
+  return NativeAudio.addListener("trackUpdate", callback);
 }

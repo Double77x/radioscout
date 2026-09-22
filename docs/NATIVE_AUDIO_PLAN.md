@@ -81,6 +81,10 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   `network_security_config.xml` allowlists cleartext for `dancewave.online`
   subdomains only — deny-by-default everywhere else. No global
   `usesCleartextTraffic`, no proxy.
+- [ ] N3 (ongoing): redirect-following is global, but cleartext permission is
+  per-host by platform design (no wildcards). Any other station that 302s to
+  an http edge fails the same way (`302` → Source error); the enriched error
+  log names the host, and each one is a one-line `domain-config` addition.
 - [ ] N4: headset/Auto handling, retry + audio-focus (calls) behavior, device QA
   matrix (offline start, rotation, 120Hz, back-button with mini-player).
 - [x] N5: loudness leveling in the Media3 pipeline (`LevelingAudioProcessor`,
