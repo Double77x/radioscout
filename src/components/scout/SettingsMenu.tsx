@@ -6,9 +6,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
+import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
 import { QualityPicker } from "@/components/radio/QualityPicker";
 import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
+import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
@@ -31,6 +33,7 @@ type ThemeChoice = (typeof THEME_OPTIONS)[number]["id"];
 /** Stable fallbacks for the persisted hooks (referential stability matters). */
 const WORLDWIDE_FALLBACK: string[] = [];
 const ANY_QUALITY_FALLBACK = "0";
+const LEVEL_OFF_FALLBACK = "0";
 
 /** Settings flyout: radio data plus style, one scroll view, no tabs. */
 export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) {
@@ -43,6 +46,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   // Accordion trigger summaries — the collapsed flyout still shows active filters.
   const [languages] = usePersistentStrings(LANGUAGES_KEY, WORLDWIDE_FALLBACK);
   const [quality] = usePersistentString(QUALITY_KEY, ANY_QUALITY_FALLBACK);
+  const [normalize] = usePersistentString(NORMALIZE_KEY, LEVEL_OFF_FALLBACK);
   const languageSummary =
     languages.length === 0
       ? "Worldwide"
@@ -73,7 +77,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         className='max-h-[calc(100dvh-10rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3'>
         <div className='px-2 pt-1'>
           <PopoverTitle>Settings</PopoverTitle>
-          <PopoverDescription>Radio data, filters and style.</PopoverDescription>
+          <PopoverDescription>Radio data, filters, audio and style.</PopoverDescription>
         </div>
 
         <Accordion className='mt-1'>
@@ -81,7 +85,8 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
             <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>Data</AccordionTrigger>
             <AccordionContent className='px-2'>
               <p className='pb-2 text-xs text-muted-foreground'>
-                Saved stations, history, listening stats, volume, votes, languages and quality in one JSON file — move it between browser and APK.
+                Saved stations, history, listening stats, volume, votes, languages, quality and audio leveling in one
+                JSON file — move it between browser and APK.
               </p>
               <RadioDataSection />
             </AccordionContent>
@@ -116,6 +121,20 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
                 Minimum stream bitrate for search results and charts. Saved stations always show.
               </p>
               <QualityPicker />
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value='audio' className='border-0'>
+            <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>
+              <span>Audio</span>
+              <span className='ml-auto pr-2 text-xs font-medium normal-case text-muted-foreground'>
+                {normalizeEnabled(normalize) ? "On" : "Off"}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className='px-2'>
+              <div className='rounded-2xl border border-border bg-card p-3'>
+                <NormalizeSwitch />
+              </div>
             </AccordionContent>
           </AccordionItem>
         </Accordion>

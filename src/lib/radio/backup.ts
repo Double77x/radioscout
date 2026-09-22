@@ -1,15 +1,17 @@
 import { z } from "zod";
+import { setNormalization } from "@/hooks/use-player";
 import { isNative } from "@/lib/capacitor";
 import { downloadBlob, shareFile } from "@/lib/files";
 import { readPlayerPrefs, type PlayerPrefs } from "@/lib/radio/prefs";
 import { LANGUAGES_KEY, normalizeLanguages, readLanguages, writeLanguages } from "@/lib/radio/languages";
 import { normalizeMinBitrate, QUALITY_KEY, readMinBitrate, writeMinBitrate } from "@/lib/radio/quality";
+import { readNormalizeEnabled, writeNormalizeEnabled, NORMALIZE_KEY } from "@/lib/radio/normalize";
 import { radioDb, type FavouriteRow, type HistoryRow, type ListeningRow, type RadioDB } from "@/lib/radio/store";
 import { stationSchema } from "@/lib/radio/types";
 import { readVotedIds, writeVotedIds } from "@/lib/radio/votes";
 
-/** v4 adds completed listening sessions (`listening`, defaults to empty). */
-export const RADIO_BACKUP_VERSION = 4 as const;
+/** v5 adds loudness leveling (`normalize`, defaults to off). */
+export const RADIO_BACKUP_VERSION = 5 as const;
 
 /**
  * Versioned envelope for everything RadioScout keeps locally. New feature
@@ -57,6 +59,8 @@ const radioBackupSchema = z.object({
   quality: z.number().optional().default(0),
   // Absent before v4 — no listening time banked, never a restore failure.
   listening: listeningRowSchema.array().optional().default([]),
+  // Absent before v5 — leveling off by default, never a restore failure.
+  normalize: z.boolean().optional().default(false),
 });
 
 export type RadioBackupPayload = {
@@ -70,6 +74,7 @@ export type RadioBackupPayload = {
   languages: string[];
   quality: number;
   listening: ListeningRow[];
+  normalize: boolean;
 };
 
 export function radioBackupFilename(now: Date = new Date()): string {
@@ -94,6 +99,7 @@ export async function collectRadioBackup(database: RadioDB = radioDb): Promise<R
     languages: readLanguages(),
     quality: readMinBitrate(),
     listening,
+    normalize: readNormalizeEnabled(),
   };
 }
 
@@ -123,7 +129,7 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   if (parsed.data.version > RADIO_BACKUP_VERSION) {
     throw new Error("That backup needs a newer RadioScout — update first, then restore.");
   }
-  const { favourites, history, prefs, voted, languages, quality, listening } = parsed.data;
+  const { favourites, history, prefs, voted, languages, quality, listening, normalize } = parsed.data;
   await database.transaction("rw", [database.favourites, database.history, database.listening], async () => {
     await database.favourites.clear();
     await database.history.clear();
@@ -137,8 +143,11 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   writeVotedIds(voted);
   writeLanguages(normalizeLanguages(languages));
   writeMinBitrate(normalizeMinBitrate(quality));
+  writeNormalizeEnabled(normalize);
+  setNormalization(normalize);
   notifyRestoredFilter(LANGUAGES_KEY);
   notifyRestoredFilter(QUALITY_KEY);
+  notifyRestoredFilter(NORMALIZE_KEY);
   return prefs;
 }
 

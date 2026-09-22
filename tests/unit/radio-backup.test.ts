@@ -102,6 +102,7 @@ describe("radio backup", () => {
     const payload = await collectRadioBackup(source);
     expect(payload.listening).toHaveLength(1);
     expect(payload.listening[0]).toMatchObject({ stationuuid: "stats-1", seconds: 600 });
+    expect(payload.normalize).toBe(false);
 
     const target = freshDatabase();
     await restoreRadioBackup(structuredClone(payload), target);
@@ -110,12 +111,27 @@ describe("radio backup", () => {
     expect(summary.stations.map((station) => station.stationuuid)).toEqual(["stats-1"]);
   });
 
+  it("round-trips the leveling toggle", async () => {
+    const source = freshDatabase();
+    const { writeNormalizeEnabled, readNormalizeEnabled } = await import("@/lib/radio/normalize");
+    writeNormalizeEnabled(true);
+    const payload = await collectRadioBackup(source);
+    expect(payload.normalize).toBe(true);
+
+    const target = freshDatabase();
+    writeNormalizeEnabled(false);
+    await restoreRadioBackup(structuredClone(payload), target);
+    expect(readNormalizeEnabled()).toBe(true);
+  });
+
   it("restores v1 backups without languages as worldwide", async () => {
     const target = freshDatabase();
     const { writeLanguages, readLanguages } = await import("@/lib/radio/languages");
     const { writeMinBitrate, readMinBitrate } = await import("@/lib/radio/quality");
+    const { writeNormalizeEnabled, readNormalizeEnabled } = await import("@/lib/radio/normalize");
     writeLanguages(["french"]);
     writeMinBitrate(192);
+    writeNormalizeEnabled(true);
     await restoreRadioBackup(
       {
         app: "radioscout",
@@ -130,6 +146,7 @@ describe("radio backup", () => {
     );
     expect(readLanguages()).toEqual([]);
     expect(readMinBitrate()).toBe(0);
+    expect(readNormalizeEnabled()).toBe(false);
     const { summarizeListening } = await import("@/lib/radio/store");
     const summary = await summarizeListening(target);
     expect(summary.totalSeconds).toBe(0);

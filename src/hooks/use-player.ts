@@ -12,6 +12,13 @@ import {
 } from "@/lib/native-audio";
 import { loadMuted, loadVolume, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
 import { readLastStation, writeLastStation } from "@/lib/radio/last-played";
+import {
+  adaptGain,
+  computeRms,
+  effectiveRms,
+  readNormalizeEnabled,
+  writeNormalizeEnabled,
+} from "@/lib/radio/normalize";
 import { queryClient } from "@/lib/query-client";
 import {
   isHlsUrl,
@@ -119,6 +126,20 @@ let sessionStart = 0;
 /** Station the running stretch belongs to (rolled over on mid-play swaps). */
 let sessionStation: Station | null = null;
 
+/** Leveling toggle (module-owned; synced by `setNormalization`). */
+let normalizeOn = readNormalizeEnabled();
+/** Web Audio graph for the live element (null while playing direct). */
+let audioCtx: AudioContext | null = null;
+let normGain: GainNode | null = null;
+let normAnalyser: AnalyserNode | null = null;
+/** True while the live element is routed through the graph. */
+let audioRouted = false;
+/** Hosts whose streams failed under analysis routing (session-only). */
+const blockedHosts = new Set<string>();
+/** One direct-replay rescue per element build (error listener below). */
+let retriedDirect = false;
+/** Scratch window for the analyser (allocated with the graph). */
+let analysisBuffer: Float32Array<ArrayBuffer> | null = null;
 
 function emit(next: Partial<PlayerSnapshot>): void {
   const wasPlaying = snapshot.status === "playing";
@@ -221,12 +242,24 @@ function getSnapshot(): PlayerSnapshot {
   return snapshot;
 }
 
+/** Lowercased hostname of a URL, null when unparseable. Never throws. */
+function hostOf(url: string): string | null {
+  try {
+    return new URL(url).hostname.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
 function ensureAudio(): HTMLAudioElement | null {
   if (globalThis.window === undefined) return null;
   if (!audio) {
     audio = new Audio();
     audio.preload = "none";
     audio.volume = snapshot.muted ? 0 : snapshot.volume;
+    // Leveling routes through Web Audio — decided BEFORE any src assignment
+    // (`crossOrigin` is load-time state and the source node binds once).
+    maybeRouteAudio(audio);
     // Quick resume: point the fresh element at the restored station (no
     // fetch until play — preload stays "none"). Empty URL means the stored
     // row can't play; resume() falls back to the full play path then.
@@ -253,6 +286,20 @@ function ensureAudio(): HTMLAudioElement | null {
     audio.addEventListener("error", () => {
       if (usingNative) return;
       if (snapshot.status === "loading") {
+        // A routed load fails when the host sends no CORS headers (the
+        // graph can only read CORS-clean streams). Rescue once per element:
+        // remember the host, rebuild direct, replay — genuinely offline
+        // stations just fail again with the standard error below.
+        if (audioRouted && normalizeOn && snapshot.station && !retriedDirect) {
+          retriedDirect = true;
+          const element = audio;
+          const host = element ? hostOf(element.src) : null;
+          if (host) blockedHosts.add(host);
+          const station = snapshot.station;
+          rebuildAudio();
+          play(station);
+          return;
+        }
         emit({
           status: "error",
           error: lastLoadInsecure
@@ -261,8 +308,174 @@ function ensureAudio(): HTMLAudioElement | null {
         });
       }
     });
+    audio.addEventListener("timeupdate", () => {
+      // RMS ticks ride the element clock (~4Hz, no timers): cheap enough to
+      // leave wired, gated to active leveling runs.
+      if (usingNative || !normalizeOn || !audioRouted || !normGain || !normAnalyser) return;
+      if (snapshot.status !== "playing") return;
+      adaptTick();
+    });
   }
   return audio;
+}
+
+/**
+ * Route a fresh (sourceless) element through the leveling graph. Skipped
+ * when the toggle is off, Web Audio is unavailable, or the pending station's
+ * host already proved unanalysable this session.
+ */
+function maybeRouteAudio(element: HTMLAudioElement): void {
+  audioRouted = false;
+  retriedDirect = false;
+  if (!normalizeOn || typeof AudioContext === "undefined") return;
+  if (snapshot.station) {
+    const host = hostOf(pickPlayableUrl(snapshot.station));
+    if (host !== null && blockedHosts.has(host)) return;
+  }
+  try {
+    element.crossOrigin = "anonymous";
+    const ctx = new AudioContext();
+    const source = ctx.createMediaElementSource(element);
+    const gain = ctx.createGain();
+    gain.gain.value = 1;
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    // Perceptual tap (K-inspired, measurement only): rumble high-pass plus
+    // presence shelf feed a dedicated analyser, whose whisper-quiet tail
+    // keeps the branch pulled without touching the audible mix.
+    const rumble = ctx.createBiquadFilter();
+    rumble.type = "highpass";
+    rumble.frequency.value = 60;
+    const presence = ctx.createBiquadFilter();
+    presence.type = "highshelf";
+    presence.frequency.value = 1500;
+    presence.gain.value = 4;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    const whisper = ctx.createGain();
+    whisper.gain.value = 0.001;
+    source.connect(rumble);
+    rumble.connect(presence);
+    presence.connect(analyser);
+    analyser.connect(whisper);
+    whisper.connect(ctx.destination);
+    audioCtx = ctx;
+    normGain = gain;
+    normAnalyser = analyser;
+    analysisBuffer = new Float32Array(analyser.fftSize);
+    audioRouted = true;
+  } catch {
+    // Graph unavailable — the element plays directly, leveling skipped.
+    audioRouted = false;
+  }
+}
+
+/** Resume a suspended context (autoplay policy parks it until a gesture). */
+function ensureLiveContext(): void {
+  if (audioCtx && audioCtx.state === "suspended") {
+    void audioCtx.resume().catch(() => {});
+  }
+}
+
+/** Discard the live element (toggle flips, CORS rescue) and build fresh. */
+function rebuildAudio(): HTMLAudioElement | null {
+  // No token bump: callers inside play() keep their token (stale-element
+  // guards below own the race); callers outside start a fresh play() anyway.
+  if (audio) {
+    try {
+      audio.pause();
+    } catch {
+      // Teardown races are harmless — the replacement owns audio now.
+    }
+    try {
+      audio.removeAttribute("src");
+      audio.load();
+    } catch {
+      // Same: the old element is detached below regardless.
+    }
+  }
+  if (audioCtx) {
+    void audioCtx.close().catch(() => {});
+    audioCtx = null;
+  }
+  normGain = null;
+  normAnalyser = null;
+  analysisBuffer = null;
+  audio = null;
+  audioRouted = false;
+  return ensureAudio();
+}
+
+/**
+ * Match the live element to a URL's routing needs. A direct element upgrades
+ * to routed when leveling is on and the host is clean; a routed element
+ * downgrades to direct for remembered-blocked hosts (a tainted graph would
+ * fail the load outright). Toggle-off freezes the live graph at unity gain —
+ * no rebuild, no playback glitch.
+ */
+function ensureRoutedForUrl(url: string): HTMLAudioElement | null {
+  const element = ensureAudio();
+  if (!element) return null;
+  const host = hostOf(url);
+  const blocked = host !== null && blockedHosts.has(host);
+  const wantRouted = normalizeOn && !blocked && typeof AudioContext !== "undefined";
+  if (wantRouted && !audioRouted) return rebuildAudio();
+  if (!wantRouted && audioRouted) {
+    if (blocked) return rebuildAudio();
+    freezeGain();
+  }
+  return element;
+}
+
+/** Park the leveling gain at unity (toggle-off path — analysis just stops). */
+function freezeGain(): void {
+  if (normGain && audioCtx) {
+    try {
+      normGain.gain.setTargetAtTime(1, audioCtx.currentTime, 0.05);
+    } catch {
+      normGain.gain.value = 1;
+    }
+  }
+}
+
+/** One RMS tick: ease the gain toward the target (never throws). */
+function adaptTick(): void {
+  const analyser = normAnalyser;
+  const gain = normGain;
+  const element = audio;
+  if (!analyser || !gain || !element) return;
+  try {
+    if (!analysisBuffer || analysisBuffer.length !== analyser.fftSize) {
+      analysisBuffer = new Float32Array(analyser.fftSize);
+    }
+    analyser.getFloatTimeDomainData(analysisBuffer);
+    const effective = effectiveRms(computeRms(analysisBuffer), element.volume);
+    if (effective === null) return;
+    gain.gain.value = adaptGain(gain.gain.value, effective);
+  } catch {
+    // Analysis is progressive enhancement — never break playback.
+  }
+}
+
+/**
+ * Flip the leveling toggle live. Enabling rebuilds a direct element so the
+ * next load routes (replaying the current station when audible); disabling
+ * just freezes the graph at unity — the stream never glitches.
+ */
+export function setNormalization(enabled: boolean): void {
+  writeNormalizeEnabled(enabled);
+  normalizeOn = enabled;
+  if (!enabled) {
+    freezeGain();
+    return;
+  }
+  ensureLiveContext();
+  if (audio && !audioRouted && snapshot.station && snapshot.status !== "idle") {
+    const station = snapshot.station;
+    const wasPlaying = snapshot.status === "playing";
+    rebuildAudio();
+    if (wasPlaying) play(station);
+  }
 }
 
 function updateMediaSession(station: Station): void {
@@ -389,6 +602,7 @@ export function play(station: Station): void {
     }
     const url = await resolveUrl(station);
     if (token !== playToken) return; // superseded by a newer play()
+    if (element !== audio) return; // element rebuilt mid-resolve (leveling toggle)
     if (url === "") {
       emit({ status: "error", error: "This station has no stream URL." });
       return;
@@ -406,7 +620,13 @@ export function play(station: Station): void {
       return;
     }
     usingNative = false;
-    if (isHlsUrl(url) && !element.canPlayType("application/vnd.apple.mpegurl")) {
+    // Match the element to the URL's leveling needs (routed for CORS-clean
+    // hosts when the toggle is on, direct otherwise). Each play gets one
+    // CORS-rescue replay (error listener below).
+    retriedDirect = false;
+    const active = ensureRoutedForUrl(url) ?? element;
+    ensureLiveContext();
+    if (isHlsUrl(url) && !active.canPlayType("application/vnd.apple.mpegurl")) {
       // Chrome/Android WebView can't play HLS in <audio> — and the native
       // bridge just declined — so flag it instead of spinning on an error.
       emit({ needsNative: true, status: "error", error: "This is an HLS stream — needs the native player (APK)." });
@@ -422,9 +642,18 @@ export function play(station: Station): void {
     // The native path above keeps the original URL — Media3 plays HTTP fine.
     lastLoadInsecure = isInsecureHttpStream(url) && globalThis.window?.location?.protocol === "https:";
     try {
-      element.src = upgradeInsecureUrl(url);
-      element.load();
-      await element.play();
+      active.src = upgradeInsecureUrl(url);
+      active.load();
+      await active.play();
+      if (active !== audio) {
+        // Rebuilt mid-play (leveling toggle) — park the stray element.
+        try {
+          active.pause();
+        } catch {
+          // Already torn down; the live element owns audio now.
+        }
+        return;
+      }
       if (token !== playToken) return;
       updateMediaSession(station);
       logPlay(station);
@@ -466,6 +695,7 @@ export function resume(): Promise<void> {
   }
   const element = ensureAudio();
   if (!element || !snapshot.station) return Promise.resolve();
+  ensureLiveContext();
   if (!element.getAttribute("src")) {
     // Restored row without a playable URL (or a parked element) — run the
     // full resolve path instead of playing silence.

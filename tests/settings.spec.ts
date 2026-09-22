@@ -50,6 +50,7 @@ test.describe("Settings", () => {
     await expect(panel.getByRole("button", { name: "Data" })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Languages" })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Quality" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Audio" })).toBeVisible();
     await expect(panel.getByRole("heading", { name: "Style" })).toBeVisible();
     await expect(panel.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
   });
@@ -68,6 +69,31 @@ test.describe("Settings", () => {
     await panel.getByRole("button", { name: "192 kbps+" }).click();
     await page.keyboard.press("Escape");
     await expect(page.getByText("Test Jazz FM")).toHaveCount(0);
+  });
+
+  test("leveling switch flips and persists", async ({ page }) => {
+    await page.locator("header").getByRole("button", { name: "Settings" }).click();
+    const panel = page.getByRole("dialog", { name: "Settings" });
+    await panel.getByRole("button", { name: "Audio" }).click();
+    const toggle = panel.getByRole("switch", { name: "Level volume across stations" });
+    await expect(toggle).toHaveAttribute("aria-checked", "false");
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+    await expect(panel.getByRole("button", { name: "Audio" })).toContainText("On");
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.locator("header").getByRole("button", { name: "Settings" }).click();
+    const reopened = page.getByRole("dialog", { name: "Settings" });
+    await reopened.getByRole("button", { name: "Audio" }).click();
+    await expect(reopened.getByRole("switch", { name: "Level volume across stations" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await reopened.getByRole("switch", { name: "Level volume across stations" }).click();
+    await expect(reopened.getByRole("switch", { name: "Level volume across stations" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
   });
   test("flyout also opens from the home logo", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
