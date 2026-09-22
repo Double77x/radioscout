@@ -8,6 +8,19 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.0 - Sleep timer, seamless switching and reconnects</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>Settings → Audio → Sleep timer fades out and pauses after a while, with the countdown in the dock</li>
+            <li>Play, pause and station switches fade in and out instead of starting and stopping abruptly</li>
+            <li>Switching stations is gapless: the old one plays until the new stream is ready, then blends over</li>
+            <li>Dropped streams reconnect automatically with backoff instead of stranding on an error</li>
+            <li>Recent searches under the search box for one-tap repeats</li>
+            <li>Level volume no longer breathes with the music — it settles per station and stays there</li>
+            <li>Fresh installs start at 25% volume instead of full blast</li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.2.2 - Android leveling and lockscreen fix</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
