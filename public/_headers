@@ -37,3 +37,8 @@
 
 /icon-*
   Cache-Control: public, max-age=31536000, immutable
+
+# OTA manifest: never cached anywhere (the in-app updater reads it to keep
+# versions in sync — a stale copy would pin devices to old bundles)
+/ota/*
+  Cache-Control: no-store

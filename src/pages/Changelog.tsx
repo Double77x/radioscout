@@ -8,6 +8,15 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.1 - Android switching and pause fixes</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>Station switching on Android is now actually gapless — the handoff fires every time, not just sometimes</li>
+            <li>Pausing during a switch keeps the old station paused instead of stranding the player</li>
+            <li>Paused playback stays paused through network blips instead of spinning on tuning-in</li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.0 - Sleep timer, seamless switching and reconnects</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
