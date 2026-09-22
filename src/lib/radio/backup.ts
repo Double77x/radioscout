@@ -2,13 +2,14 @@ import { z } from "zod";
 import { isNative } from "@/lib/capacitor";
 import { downloadBlob, shareFile } from "@/lib/files";
 import { readPlayerPrefs, type PlayerPrefs } from "@/lib/radio/prefs";
-import { normalizeLanguages, readLanguages, writeLanguages } from "@/lib/radio/languages";
-import { radioDb, type FavouriteRow, type HistoryRow, type RadioDB } from "@/lib/radio/store";
+import { LANGUAGES_KEY, normalizeLanguages, readLanguages, writeLanguages } from "@/lib/radio/languages";
+import { normalizeMinBitrate, QUALITY_KEY, readMinBitrate, writeMinBitrate } from "@/lib/radio/quality";
+import { radioDb, type FavouriteRow, type HistoryRow, type ListeningRow, type RadioDB } from "@/lib/radio/store";
 import { stationSchema } from "@/lib/radio/types";
 import { readVotedIds, writeVotedIds } from "@/lib/radio/votes";
 
-/** v2 adds the content-language filter (`languages`, defaults to worldwide). */
-export const RADIO_BACKUP_VERSION = 2 as const;
+/** v4 adds completed listening sessions (`listening`, defaults to empty). */
+export const RADIO_BACKUP_VERSION = 4 as const;
 
 /**
  * Versioned envelope for everything RadioScout keeps locally. New feature
@@ -29,6 +30,14 @@ const historyRowSchema = z.object({
   played_at: z.string(),
 });
 
+const listeningRowSchema = z.object({
+  id: z.number().optional(),
+  stationuuid: z.string().min(1),
+  name: z.string(),
+  started_at: z.string(),
+  seconds: z.number(),
+});
+
 const prefsSchema = z.object({
   volume: z.number().min(0).max(1),
   muted: z.boolean(),
@@ -44,6 +53,10 @@ const radioBackupSchema = z.object({
   voted: z.string().array(),
   // Absent in v1 backups — worldwide by default, never a restore failure.
   languages: z.string().array().optional().default([]),
+  // Absent before v3 — any quality by default, never a restore failure.
+  quality: z.number().optional().default(0),
+  // Absent before v4 — no listening time banked, never a restore failure.
+  listening: listeningRowSchema.array().optional().default([]),
 });
 
 export type RadioBackupPayload = {
@@ -55,6 +68,8 @@ export type RadioBackupPayload = {
   prefs: PlayerPrefs;
   voted: string[];
   languages: string[];
+  quality: number;
+  listening: ListeningRow[];
 };
 
 export function radioBackupFilename(now: Date = new Date()): string {
@@ -63,9 +78,10 @@ export function radioBackupFilename(now: Date = new Date()): string {
 
 /** Snapshot everything worth keeping into a portable payload. */
 export async function collectRadioBackup(database: RadioDB = radioDb): Promise<RadioBackupPayload> {
-  const [favourites, history] = await Promise.all([
+  const [favourites, history, listening] = await Promise.all([
     database.favourites.toArray(),
     database.history.orderBy("id").toArray(),
+    database.listening.orderBy("id").toArray(),
   ]);
   return {
     app: "radioscout",
@@ -76,7 +92,24 @@ export async function collectRadioBackup(database: RadioDB = radioDb): Promise<R
     prefs: readPlayerPrefs(),
     voted: readVotedIds(),
     languages: readLanguages(),
+    quality: readMinBitrate(),
+    listening,
   };
+}
+
+/**
+ * Notify same-tab persisted-state subscribers (the Home filter hooks read
+ * through `useSyncExternalStore`, so without this a restore wouldn't apply
+ * until reload). Guarded — backup also runs in non-DOM test environments.
+ */
+function notifyRestoredFilter(key: string): void {
+  try {
+    if (typeof globalThis.dispatchEvent === "function" && typeof StorageEvent !== "undefined") {
+      globalThis.dispatchEvent(new StorageEvent("storage", { key }));
+    }
+  } catch {
+    // Notification is best-effort; the values are already written.
+  }
 }
 
 /**
@@ -90,16 +123,22 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   if (parsed.data.version > RADIO_BACKUP_VERSION) {
     throw new Error("That backup needs a newer RadioScout — update first, then restore.");
   }
-  const { favourites, history, prefs, voted, languages } = parsed.data;
-  await database.transaction("rw", [database.favourites, database.history], async () => {
+  const { favourites, history, prefs, voted, languages, quality, listening } = parsed.data;
+  await database.transaction("rw", [database.favourites, database.history, database.listening], async () => {
     await database.favourites.clear();
     await database.history.clear();
+    await database.listening.clear();
     await database.favourites.bulkPut(favourites);
     const withoutIds = history.map(({ id: _dropped, ...row }) => row);
     await database.history.bulkPut(withoutIds);
+    const sessionsWithoutIds = listening.map(({ id: _dropped, ...row }) => row);
+    await database.listening.bulkPut(sessionsWithoutIds);
   });
   writeVotedIds(voted);
   writeLanguages(normalizeLanguages(languages));
+  writeMinBitrate(normalizeMinBitrate(quality));
+  notifyRestoredFilter(LANGUAGES_KEY);
+  notifyRestoredFilter(QUALITY_KEY);
   return prefs;
 }
 

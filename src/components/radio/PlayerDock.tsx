@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { LoaderCircle, Pause, Play, Radio, Square, Volume1, Volume2, VolumeX, X } from "lucide-react";
+import { Library, LoaderCircle, Pause, Play, Radio, Shuffle, Square, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StationArt } from "@/components/radio/StationArt";
 import { focusRadioSearch } from "@/lib/focus-radio-search";
 import { usePlayer } from "@/hooks/use-player";
+import { useSurpriseMe } from "@/hooks/use-radio";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
 
@@ -114,6 +115,7 @@ function VolumeSlider({
  */
 export function PlayerDock() {
   const { station, status, error, volume, muted, toggle, stop, play, setVolume, toggleMute } = usePlayer();
+  const { surprise, isSurprising } = useSurpriseMe();
   const [volumeOpen, setVolumeOpen] = useState(false);
   const openDetail = useOpenStationDetail();
   // Timeout ref (not state): the auto-hide timer is imperative by nature —
@@ -259,12 +261,25 @@ export function PlayerDock() {
               </button>
             </>
           ) : (
-            <button
-              type='button'
-              onClick={browse}
-              className='grid h-12 shrink-0 place-items-center rounded-full bg-primary px-5 text-sm font-semibold text-primary-foreground transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
-              Browse
-            </button>
+            <div className='flex shrink-0 items-center gap-2'>
+              <button
+                type='button'
+                onClick={browse}
+                aria-label='Browse stations'
+                title='Browse stations'
+                className='grid size-12 shrink-0 place-items-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                <Library className='size-5' />
+              </button>
+              <button
+                type='button'
+                onClick={() => surprise()}
+                disabled={isSurprising}
+                aria-label='Surprise me — play a random station'
+                title='Surprise me — play a random station'
+                className='grid size-12 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60'>
+                {isSurprising ? <LoaderCircle className='size-5 animate-spin' /> : <Shuffle className='size-5' />}
+              </button>
+            </div>
           )}
         </div>
 

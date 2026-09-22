@@ -3,6 +3,8 @@ import { splitQualityFromName, withStationDefaults, type Station } from "./types
 
 const HISTORY_LIMIT = 50;
 const FAVOURITE_LIMIT = 500;
+/** Completed listening sessions — enough for years of top-station charts. */
+const LISTENING_LIMIT = 1000;
 
 export interface FavouriteRow {
   stationuuid: string;
@@ -20,6 +22,51 @@ export interface HistoryRow {
 }
 
 /**
+ * One completed listening session. Slim on purpose (no full snapshot) —
+ * names refresh from the latest session, so renamed stations relabel
+ * themselves in the charts.
+ */
+export interface ListeningRow {
+  id?: number;
+  stationuuid: string;
+  name: string;
+  started_at: string;
+  /** Whole seconds actually audible (`playing` → pause/stop/switch/error). */
+  seconds: number;
+}
+
+export interface ListeningStation {
+  stationuuid: string;
+  name: string;
+  seconds: number;
+  plays: number;
+}
+
+/** Monday-first weekday bucket for the daily-average chart. */
+export interface DayBucket {
+  /** 0 = Monday … 6 = Sunday. */
+  day: number;
+  label: string;
+  seconds: number;
+  plays: number;
+  /** Distinct calendar dates behind the bucket (local time). */
+  days: number;
+}
+
+export interface ListeningSummary {
+  totalSeconds: number;
+  /** Sessions recorded (after the short-tap threshold — see use-player). */
+  plays: number;
+  /** Every station with time banked, most-listened first. */
+  stations: ListeningStation[];
+  /** Seven buckets, Monday first (zeros included so the chart never shifts). */
+  byDay: DayBucket[];
+}
+
+/** Weekday labels, Monday first (matches `(getDay() + 6) % 7`). */
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+/**
  * Isolated radio database — deliberately NOT part of ScoutDB, so the
  * household sync engine never sees favourites/history and version bumps
  * here can't disturb scout data. Local-only, like RadioDroid's
@@ -28,12 +75,18 @@ export interface HistoryRow {
 export class RadioDB extends Dexie {
   favourites!: EntityTable<FavouriteRow, "stationuuid">;
   history!: EntityTable<HistoryRow, "id">;
+  listening!: EntityTable<ListeningRow, "id">;
 
   constructor(name = "scout-radio") {
     super(name);
     this.version(1).stores({
       favourites: "stationuuid",
       history: "++id, stationuuid",
+    });
+    this.version(2).stores({
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
     });
   }
 }
@@ -170,4 +223,71 @@ export function listHistory(database: RadioDB = radioDb): Promise<HistoryRow[]> 
 
 export async function clearHistory(database: RadioDB = radioDb): Promise<void> {
   await database.history.clear();
+}
+
+/**
+ * Bank one completed session. Callers enforce the audibility threshold
+ * (short taps never reach here) — the store just appends and caps.
+ */
+export async function logListening(row: Omit<ListeningRow, "id">, database: RadioDB = radioDb): Promise<void> {
+  await database.listening.add(row);
+  const count = await database.listening.count();
+  if (count > LISTENING_LIMIT) {
+    const oldest = await database.listening
+      .orderBy("id")
+      .limit(count - LISTENING_LIMIT)
+      .primaryKeys();
+    await database.listening.bulkDelete(oldest);
+  }
+}
+
+/** Aggregate sessions per station/day/genre for the charts (latest name wins). */
+export async function summarizeListening(database: RadioDB = radioDb): Promise<ListeningSummary> {
+  const rows = await database.listening.toArray();
+  const byStation = new Map<string, { name: string; started_at: string; seconds: number; plays: number }>();
+  const byDay: DayBucket[] = DAY_LABELS.map((label, day) => ({ day, label, seconds: 0, plays: 0, days: 0 }));
+  const seenDates = new Map<number, Set<string>>();
+  let totalSeconds = 0;
+  for (const row of rows) {
+    totalSeconds += row.seconds;
+    const current = byStation.get(row.stationuuid);
+    if (current) {
+      current.seconds += row.seconds;
+      current.plays += 1;
+      if (row.started_at > current.started_at) {
+        current.name = row.name;
+        current.started_at = row.started_at;
+      }
+    } else {
+      byStation.set(row.stationuuid, { name: row.name, started_at: row.started_at, seconds: row.seconds, plays: 1 });
+    }
+    const started = new Date(row.started_at);
+    const weekday = (started.getDay() + 6) % 7;
+    const bucket = byDay[weekday];
+    if (bucket) {
+      bucket.seconds += row.seconds;
+      bucket.plays += 1;
+      // Distinct local dates: two Mondays average against each other.
+      const key = `${started.getFullYear()}-${started.getMonth()}-${started.getDate()}`;
+      let dates = seenDates.get(weekday);
+      if (!dates) {
+        dates = new Set<string>();
+        seenDates.set(weekday, dates);
+      }
+      dates.add(key);
+      bucket.days = dates.size;
+    }
+  }
+  const stations: ListeningStation[] = [...byStation.entries()].map(([stationuuid, entry]) => ({
+    stationuuid,
+    name: entry.name,
+    seconds: entry.seconds,
+    plays: entry.plays,
+  }));
+  stations.sort((a, b) => b.seconds - a.seconds);
+  return { totalSeconds, plays: rows.length, stations, byDay };
+}
+
+export function clearListening(database: RadioDB = radioDb): Promise<void> {
+  return database.listening.clear();
 }

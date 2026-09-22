@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
+import { QualityPicker } from "@/components/radio/QualityPicker";
+import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
+import { LANGUAGES_KEY } from "@/lib/radio/languages";
+import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 
 /** Query client stays out of the initial bundle — loaded on demand. */
@@ -23,6 +28,10 @@ const THEME_OPTIONS = [
 
 type ThemeChoice = (typeof THEME_OPTIONS)[number]["id"];
 
+/** Stable fallbacks for the persisted hooks (referential stability matters). */
+const WORLDWIDE_FALLBACK: string[] = [];
+const ANY_QUALITY_FALLBACK = "0";
+
 /** Settings flyout: radio data plus style, one scroll view, no tabs. */
 export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) {
   const [open, setOpen] = useState(false);
@@ -31,6 +40,15 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   // open upward — the cog sits right of centre, so trigger-anchoring skews right.
   const triggerRef = useRef<HTMLButtonElement>(null);
   const [navAnchor, setNavAnchor] = useState<HTMLElement | null>(null);
+  // Accordion trigger summaries — the collapsed flyout still shows active filters.
+  const [languages] = usePersistentStrings(LANGUAGES_KEY, WORLDWIDE_FALLBACK);
+  const [quality] = usePersistentString(QUALITY_KEY, ANY_QUALITY_FALLBACK);
+  const languageSummary =
+    languages.length === 0
+      ? "Worldwide"
+      : languages.length === 1
+        ? (languages[0] ?? "")
+        : `${languages[0]} +${languages.length - 1}`;
   const onOpenChange = (next: boolean) => {
     if (next && variant === "tab") setNavAnchor(triggerRef.current?.closest("nav") ?? null);
     setOpen(next);
@@ -55,39 +73,55 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         className='max-h-[calc(100dvh-10rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3'>
         <div className='px-2 pt-1'>
           <PopoverTitle>Settings</PopoverTitle>
-          <PopoverDescription>Radio data and style.</PopoverDescription>
+          <PopoverDescription>Radio data, filters and style.</PopoverDescription>
         </div>
 
-        <section aria-labelledby='settings-data-heading' className='mt-2'>
-          <h2
-            id='settings-data-heading'
-            className='px-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase'>
-            Data
-          </h2>
-          <p className='px-2 pt-1 pb-2 text-xs text-muted-foreground'>
-            Saved stations, history, volume, votes and languages in one JSON file — move it between browser and APK.
-          </p>
-          <RadioDataSection />
-        </section>
+        <Accordion className='mt-1'>
+          <AccordionItem value='data' className='border-0'>
+            <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>Data</AccordionTrigger>
+            <AccordionContent className='px-2'>
+              <p className='pb-2 text-xs text-muted-foreground'>
+                Saved stations, history, listening stats, volume, votes, languages and quality in one JSON file — move it between browser and APK.
+              </p>
+              <RadioDataSection />
+            </AccordionContent>
+          </AccordionItem>
 
-        <section aria-labelledby='settings-language-heading' className='mt-5'>
-          <h2
-            id='settings-language-heading'
-            className='px-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase'>
-            Languages
-          </h2>
-          <p className='px-2 pt-1 pb-2 text-xs text-muted-foreground'>
-            Filter search results and charts to these languages. Empty means worldwide.
-          </p>
-          <div className='rounded-2xl border border-border bg-card p-3'>
-            <LanguagePicker />
-          </div>
-        </section>
+          <AccordionItem value='languages' className='border-0'>
+            <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>
+              <span>Languages</span>
+              <span className='ml-auto pr-2 text-xs font-medium text-muted-foreground capitalize'>
+                {languageSummary}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className='px-2'>
+              <p className='pb-2 text-xs text-muted-foreground'>
+                Filter search results and charts to these languages. Empty means worldwide.
+              </p>
+              <div className='rounded-2xl border border-border bg-card p-3'>
+                <LanguagePicker />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
 
-        <section aria-labelledby='settings-style-heading' className='mt-5'>
-          <h2
-            id='settings-style-heading'
-            className='px-2 text-xs font-semibold tracking-widest text-muted-foreground uppercase'>
+          <AccordionItem value='quality' className='border-0'>
+            <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>
+              <span>Quality</span>
+              <span className='ml-auto pr-2 text-xs font-medium normal-case text-muted-foreground'>
+                {qualityLabel(normalizeMinBitrate(quality))}
+              </span>
+            </AccordionTrigger>
+            <AccordionContent className='px-2'>
+              <p className='pb-2 text-xs text-muted-foreground'>
+                Minimum stream bitrate for search results and charts. Saved stations always show.
+              </p>
+              <QualityPicker />
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+
+        <section aria-labelledby='settings-style-heading' className='mt-1'>
+          <h2 id='settings-style-heading' className='px-2 py-3 text-sm font-semibold'>
             Style
           </h2>
           <fieldset className='mx-0 min-w-0 border-0 p-0'>
@@ -127,7 +161,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   );
 }
 
-/** Radio export/import: favourites, history, volume, votes and languages in one JSON file. */
+/** Radio export/import: favourites, history, stats, volume, votes, languages and quality in one JSON file. */
 function RadioDataSection() {
   const [exportState, setExportState] = useState<"idle" | "working" | "shared" | "downloaded" | "error">("idle");
   const [importState, setImportState] = useState<"idle" | "working" | "done" | "error">("idle");
@@ -158,7 +192,7 @@ function RadioDataSection() {
       .then(([, { queryClient }]) => {
         queryClient.invalidateQueries({ queryKey: ["radio"] });
         setImportState("done");
-        toast("Restore complete", { description: "Saved stations, history, volume and languages are back." });
+        toast("Restore complete", { description: "Stations, history, stats, volume, filters and votes are back." });
       })
       .catch((error: unknown) => {
         setImportState("error");

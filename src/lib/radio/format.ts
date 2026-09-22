@@ -8,6 +8,21 @@ export function formatStationCount(count: number): string {
 }
 
 /**
+ * Compact listening time: 45 → "45s", 90 → "1m", 2700 → "45m",
+ * 3600 → "1h", 7380 → "2h 3m". Floored, never "0s" for positive input.
+ */
+export function formatListeningTime(totalSeconds: number): string {
+  if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) return "0s";
+  const seconds = Math.floor(totalSeconds);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours}h` : `${hours}h ${rest}m`;
+}
+
+/**
  * Tidy a comma-separated tag list for display:
  * "christian,christian music,jesus" → "Christian, Christian music, Jesus".
  */

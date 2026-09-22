@@ -1,8 +1,10 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, getRouteApi } from "@tanstack/react-router";
-import { Heart, SearchX, Star, TextAlignStart } from "lucide-react";
+import { ChartColumn, Heart, SearchX, Star, TextAlignStart, Trash2 } from "lucide-react";
 import { SEO } from "@/components/Seo";
 import { AppShell } from "@/components/scout/AppShell";
+import { ListeningStats } from "@/components/radio/ListeningStats";
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { RadioHeader } from "@/components/radio/RadioHeader";
 import { SavedStations } from "@/components/radio/SavedStations";
 import { StationCard } from "@/components/radio/StationCard";
@@ -11,15 +13,17 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useIsClient } from "@/hooks/use-is-client";
-import { usePersistentStrings } from "@/hooks/use-persistent-state";
+import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
-import { formatTags } from "@/lib/radio/format";
+import { formatListeningTime, formatTags } from "@/lib/radio/format";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
+import { normalizeMinBitrate, QUALITY_KEY } from "@/lib/radio/quality";
 import {
   useClearHistory,
   useFavourites,
   useHistory,
+  useListeningStats,
   useServerStats,
   useStationSearch,
   useToggleFavourite,
@@ -31,9 +35,10 @@ const routeApi = getRouteApi("/");
 
 const HOME_SECTIONS_KEY = "radioscout:home-sections";
 const HOME_SECTIONS_DEFAULT = ["saved", "top"];
-const HOME_SECTION_IDS = new Set(["saved", "top", "recent"]);
+const HOME_SECTION_IDS = new Set(["saved", "top", "recent", "stats"]);
 /** Hoisted: the persisted hook needs a referentially stable fallback. */
 const LANGUAGES_FALLBACK: string[] = [];
+const QUALITY_FALLBACK = "0";
 
 export default function HomePage() {
   const { q = "", tag = "all" } = routeApi.useSearch();
@@ -42,21 +47,31 @@ export default function HomePage() {
   const [openSections, setOpenSections] = usePersistentStrings(HOME_SECTIONS_KEY, HOME_SECTIONS_DEFAULT);
   const visibleSections = openSections.filter((id) => HOME_SECTION_IDS.has(id));
   const [languages] = usePersistentStrings(LANGUAGES_KEY, LANGUAGES_FALLBACK);
+  const [quality] = usePersistentString(QUALITY_KEY, QUALITY_FALLBACK);
+  const minBitrate = normalizeMinBitrate(quality);
   const languageLabel = languages.length > 0 ? formatTags(languages.join(",")) : "";
-  const top = useTopStations("votes", languages);
+  const top = useTopStations("votes", languages, minBitrate);
   // Matches RadioHeader's hydration gate: the prerender has no search state,
   // so a direct `/?q=` / `/?tag=` load renders home sections until the client
   // takes over instead of mismatching the results branch (React #418).
   const filtering = isClient && (q.trim() !== "" || tag !== "all");
   const search = useStationSearch(
-    { name: q.trim() || undefined, tag: tag === "all" ? undefined : tag, limit: 50, languages },
+    {
+      name: q.trim() || undefined,
+      tag: tag === "all" ? undefined : tag,
+      limit: 50,
+      languages,
+      minBitrate: minBitrate || undefined,
+    },
     filtering,
   );
   const favourites = useFavourites();
   const history = useHistory();
+  const listening = useListeningStats();
   const stats = useServerStats();
   const toggleFavourite = useToggleFavourite();
   const clearHistory = useClearHistory();
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false);
   const player = usePlayer();
 
   const favouriteIds = useMemo(() => new Set(favourites.data.map((row) => row.stationuuid)), [favourites.data]);
@@ -174,18 +189,53 @@ export default function HomePage() {
                     </span>
                   </AccordionTrigger>
                   <AccordionContent>
-                    <Button
-                      type='button'
-                      variant='ghost'
-                      size='sm'
-                      onClick={() => clearHistory.mutate()}
-                      disabled={clearHistory.isPending}
-                      className='mb-2 rounded-full'>
-                      Clear history
-                    </Button>
                     <ul className='flex flex-col gap-2'>
                       {history.data.slice(0, 10).map((row) => renderRow(row.snapshot, `${row.id}-${row.played_at}`))}
                     </ul>
+                    <div className='mt-4 flex justify-center'>
+                      <Button
+                        type='button'
+                        variant='ghost'
+                        size='sm'
+                        onClick={() => setConfirmClearHistory(true)}
+                        className='min-w-36 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'>
+                        <Trash2 aria-hidden='true' />
+                        Clear history
+                      </Button>
+                    </div>
+                    <ConfirmDialog
+                      open={confirmClearHistory}
+                      onOpenChange={setConfirmClearHistory}
+                      title='Clear history?'
+                      description='This erases your recently played list. Saved stations and listening stats stay put.'
+                      confirmLabel='Clear'
+                      pending={clearHistory.isPending}
+                      onConfirm={() => {
+                        clearHistory.mutate();
+                        setConfirmClearHistory(false);
+                      }}
+                    />
+                  </AccordionContent>
+                </AccordionItem>
+              ) : null}
+
+              {listening.data.totalSeconds > 0 ? (
+                <AccordionItem value='stats' className='border-0'>
+                  <AccordionTrigger className='py-4 hover:no-underline'>
+                    <span className='flex items-center gap-3'>
+                      <span
+                        aria-hidden='true'
+                        className='grid size-10 place-items-center rounded-2xl bg-scout-mint text-scout-coal'>
+                        <ChartColumn className='size-5' />
+                      </span>
+                      <span className='text-lg font-semibold tracking-tight'>Listening</span>
+                      <span className='truncate text-xs font-medium text-muted-foreground'>
+                        {formatListeningTime(listening.data.totalSeconds)}
+                      </span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <ListeningStats />
                   </AccordionContent>
                 </AccordionItem>
               ) : null}

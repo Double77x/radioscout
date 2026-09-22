@@ -28,6 +28,7 @@ async function mockDirectory(page: Page) {
   await page.route(/https:\/\/.*\.api\.radio-browser\.info\/.*/, (route) => {
     const url = route.request().url();
     if (url.includes("/json/stations/topvote/")) return route.fulfill({ json: STATIONS });
+    if (url.includes("/json/stations/search")) return route.fulfill({ json: STATIONS });
     if (url.includes("/json/stats"))
       return route.fulfill({ json: { stations: 81_234, tags: 1, clicks: 1, languages: 1, countries: 1 } });
     return route.fulfill({ json: [] });
@@ -41,16 +42,33 @@ test.describe("Settings", () => {
     await page.waitForLoadState("networkidle");
   });
 
-  test("flyout opens with data and style sections, no tabs", async ({ page }) => {
+  test("flyout opens with data, language, quality and style sections, no tabs", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     const panel = page.getByRole("dialog", { name: "Settings" });
     await expect(panel).toBeVisible();
     await expect(panel.getByRole("tab")).toHaveCount(0);
-    await expect(panel.getByRole("heading", { name: "Data" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Data" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Languages" })).toBeVisible();
+    await expect(panel.getByRole("button", { name: "Quality" })).toBeVisible();
     await expect(panel.getByRole("heading", { name: "Style" })).toBeVisible();
     await expect(panel.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  test("quality filter hides stations below the minimum bitrate", async ({ page }) => {
+    await expect(page.getByText("Test Jazz FM").first()).toBeVisible();
+    await page.locator("header").getByRole("button", { name: "Settings" }).click();
+    const panel = page.getByRole("dialog", { name: "Settings" });
+    await panel.getByRole("button", { name: "Quality" }).click();
+    await panel.getByRole("button", { name: "128 kbps+" }).click();
+    await expect(panel.getByText("Only 128 kbps+ streams")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText("Test Jazz FM").first()).toBeVisible();
+    await page.locator("header").getByRole("button", { name: "Settings" }).click();
+    await panel.getByRole("button", { name: "Quality" }).click();
+    await panel.getByRole("button", { name: "192 kbps+" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText("Test Jazz FM")).toHaveCount(0);
+  });
   test("flyout also opens from the home logo", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
@@ -59,6 +77,7 @@ test.describe("Settings", () => {
   test("data section exports radio backup as JSON", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     const panel = page.getByRole("dialog", { name: "Settings" });
+    await panel.getByRole("button", { name: "Data" }).click();
     const downloadPromise = page.waitForEvent("download");
     await panel.getByRole("button", { name: "Export radio data" }).click();
     const download = await downloadPromise;
@@ -68,6 +87,7 @@ test.describe("Settings", () => {
   test("data section restores radio backup from JSON", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     const panel = page.getByRole("dialog", { name: "Settings" });
+    await panel.getByRole("button", { name: "Data" }).click();
     await panel.locator('input[type="file"]').setInputFiles("tests/fixtures/radio-backup.json");
     await expect(panel.getByText("Restore complete — your stations are back.")).toBeVisible();
   });

@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
 import { pickOtaUpdate } from "@/lib/ota";
 import { playBackTransition } from "@/lib/animated-back";
+import { checkpointListeningSession } from "@/hooks/use-player";
 
 /**
  * Native-shell bootstrap (Capacitor only — no-op on web).
@@ -135,6 +136,32 @@ export function NativeShell() {
       void handle?.remove();
     };
   }, [router]);
+
+  // Listening checkpoint on background/kill (native): bank the partial
+  // session when the app leaves the foreground — the OS may kill the WebView
+  // with no further events. Same subscribe-race ownership as the back-button
+  // effect above (checkpointing is idempotent: sub-threshold banks no-op).
+  // eslint-disable-next-line react-doctor/effect-needs-cleanup
+  useEffect(() => {
+    if (!isNative()) return;
+    let handle: { remove: () => Promise<void> } | undefined = undefined;
+    let cancelled = false;
+    void App.addListener("appStateChange", (event) => {
+      if (!event.isActive) checkpointListeningSession();
+    })
+      .then((listener) => {
+        if (cancelled) {
+          listener.remove().catch((error: unknown) => console.error("[native] listening", error));
+          return;
+        }
+        handle = listener;
+      })
+      .catch((error: unknown) => console.error("[native] listening", error));
+    return () => {
+      cancelled = true;
+      void handle?.remove();
+    };
+  }, []);
 
   // OTA update check (static in-repo manifest + GitHub Release zips, see
   // `src/lib/ota.ts` and `scripts/publish-ota.mjs`), once per mount. The work lives in `runOtaUpdateCheck` above; the effect only

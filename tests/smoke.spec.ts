@@ -179,6 +179,121 @@ test.describe("RadioScout home", () => {
     await expect(page.getByText("Nothing playing")).toBeVisible();
   });
 
+  test("listening stats render banked sessions as charts", async ({ page }) => {
+    // No real audio in headless runs — seed two sessions straight into
+    // IndexedDB, then reload so the stats query picks them up.
+    await page.evaluate(() => {
+      const request = indexedDB.open("scout-radio");
+      return new Promise<void>((resolve, reject) => {
+        request.addEventListener("error", () => reject(request.error));
+        request.addEventListener("success", () => {
+          const db = request.result;
+          const tx = db.transaction("listening", "readwrite");
+          const sessions = [
+            { stationuuid: "stats-1", name: "Stats FM", started_at: new Date().toISOString(), seconds: 600 },
+            { stationuuid: "stats-2", name: "News FM", started_at: new Date().toISOString(), seconds: 300 },
+          ];
+          for (const session of sessions) tx.objectStore("listening").add(session);
+          tx.addEventListener("complete", () => {
+            db.close();
+            resolve();
+          });
+          tx.addEventListener("error", () => reject(tx.error));
+        });
+      });
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    const section = page.getByRole("button", { name: /Listening/ });
+    await expect(section).toBeVisible();
+    await section.click();
+    await expect(page.getByText("Stats FM")).toBeVisible();
+    await expect(page.getByText("News FM")).toBeVisible();
+    await page.getByRole("button", { name: "Daily", exact: true }).click();
+    await expect(page.getByText("average day")).toBeVisible();
+    await expect(page.getByText("Mon", { exact: true })).toBeVisible();
+  });
+
+  test("clearing stats asks first and erases the charts", async ({ page }) => {
+    await page.evaluate(() => {
+      const request = indexedDB.open("scout-radio");
+      return new Promise<void>((resolve, reject) => {
+        request.addEventListener("error", () => reject(request.error));
+        request.addEventListener("success", () => {
+          const db = request.result;
+          const tx = db.transaction("listening", "readwrite");
+          tx.objectStore("listening").add({
+            stationuuid: "stats-1",
+            name: "Stats FM",
+            started_at: new Date().toISOString(),
+            seconds: 600,
+          });
+          tx.addEventListener("complete", () => {
+            db.close();
+            resolve();
+          });
+          tx.addEventListener("error", () => reject(tx.error));
+        });
+      });
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: /Listening/ }).click();
+    await expect(page.getByText("Stats FM")).toBeVisible();
+    await page.getByRole("button", { name: "Clear stats" }).click();
+    const dialog = page.getByRole("dialog", { name: "Clear stats?" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(page.getByText("Stats FM")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Listening/ })).toHaveCount(0);
+  });
+
+  test("clearing history asks first and empties recently played", async ({ page }) => {
+    await page.evaluate(() => {
+      const request = indexedDB.open("scout-radio");
+      return new Promise<void>((resolve, reject) => {
+        request.addEventListener("error", () => reject(request.error));
+        request.addEventListener("success", () => {
+          const db = request.result;
+          const tx = db.transaction("history", "readwrite");
+          tx.objectStore("history").add({
+            stationuuid: "11111111-1111-1111-1111-111111111111",
+            snapshot: {
+              stationuuid: "11111111-1111-1111-1111-111111111111",
+              name: "Test Jazz FM",
+              url: "https://example.com/jazz.mp3",
+              tags: "jazz",
+              country: "Testland",
+              countrycode: "TT",
+              language: "english",
+              codec: "MP3",
+              bitrate: 128,
+            },
+            played_at: new Date().toISOString(),
+          });
+          tx.addEventListener("complete", () => {
+            db.close();
+            resolve();
+          });
+          tx.addEventListener("error", () => reject(tx.error));
+        });
+      });
+    });
+    await page.reload();
+    await page.waitForLoadState("networkidle");
+    await page.getByRole("button", { name: /Recently played/ }).click();
+    await page.getByRole("button", { name: "Clear history" }).click();
+    const dialog = page.getByRole("dialog", { name: "Clear history?" });
+    await expect(dialog).toBeVisible();
+    // Backing out keeps everything.
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByRole("button", { name: /Recently played/ })).toBeVisible();
+    await page.getByRole("button", { name: "Clear history" }).click();
+    await dialog.getByRole("button", { name: "Clear", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Recently played/ })).toHaveCount(0);
+  });
+
   test("station details open in a bottom sheet", async ({ page }) => {
     await page.getByRole("button", { name: "Details for Test Jazz FM" }).first().click();
     const dialog = page.getByRole("dialog");
@@ -187,6 +302,16 @@ test.describe("RadioScout home", () => {
     await expect(dialog.getByRole("button", { name: "Share Test Jazz FM" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close details" }).click();
     await expect(dialog).toBeHidden();
+  });
+
+  test("voting bumps the count in the sheet", async ({ page }) => {
+    await page.getByRole("button", { name: "Details for Test Jazz FM" }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByText("Test Jazz FM").first()).toBeVisible();
+    await expect(dialog.getByText("10", { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "Vote +1" }).click();
+    await expect(dialog.getByText("11", { exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Voted ✓" })).toBeDisabled();
   });
 
   test("dead station links explain instead of stranding", async ({ page }) => {

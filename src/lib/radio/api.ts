@@ -55,6 +55,8 @@ export interface StationSearch {
    * param only matches a single literal) and merge deduped.
    */
   languages?: string[];
+  /** Minimum stream bitrate in kbps (`0`/absent = any quality). Client-side. */
+  minBitrate?: number;
 }
 
 /** Merge parallel language requests, first language wins on duplicates. */
@@ -67,6 +69,69 @@ function dedupeStations(stations: Station[]): Station[] {
   });
 }
 
+/**
+ * Filters (languages, quality) shrink every server page, so chart/genre
+ * lists walk `offset` pages until `want` playable rows are collected or the
+ * directory runs dry — a filtered Top 50 stays 50 instead of ~22.
+ * Free-text (`name`) searches manage their own candidate pool in
+ * `searchStationsIlike`, so they keep the single-request path below.
+ */
+const CHART_PAGE_SIZE = 200;
+const CHART_MAX_PAGES = 4;
+
+/** Single unfiltered chart fetch still over-fetches: HTTP rows drop after fetch. */
+const MAX_SERVER_LIMIT = 300;
+
+function chartFetchCount(limit: number): number {
+  return Math.min(MAX_SERVER_LIMIT, Math.max(limit, limit * 3));
+}
+
+/** Minimum-bitrate predicate over parsed bitrates (API value + title parse). */
+function filterByMinBitrate(stations: Station[], minBitrate: number): Station[] {
+  if (minBitrate <= 0) return stations;
+  return stations.filter((station) => Number.isFinite(station.bitrate) && station.bitrate >= minBitrate);
+}
+
+interface ChartPage {
+  tag?: string;
+  country?: string;
+  language?: string;
+  order: "clickcount" | "votes";
+  minBitrate: number;
+  want: number;
+}
+
+async function searchPaged(page: ChartPage): Promise<Station[]> {
+  const seen = new Set<string>();
+  const out: Station[] = [];
+  for (let index = 0; index < CHART_MAX_PAGES && out.length < page.want; index++) {
+    const query = searchParams({
+      tag: page.tag,
+      country: page.country,
+      language: page.language,
+      limit: CHART_PAGE_SIZE,
+      offset: index * CHART_PAGE_SIZE,
+      hidebroken: "true",
+      order: page.order,
+      reverse: "true",
+    });
+    const raw = parseStations(await fetchJson(`/json/stations/search${query}`));
+    if (raw.length === 0) break;
+    // HTTP-only rows can never play on an https page or in the APK WebView —
+    // drop them so every visible station is playable.
+    const rows = filterByMinBitrate(filterPlayableStations(raw), page.minBitrate);
+    for (const station of rows) {
+      if (out.length >= page.want) break;
+      if (!seen.has(station.stationuuid)) {
+        seen.add(station.stationuuid);
+        out.push(station);
+      }
+    }
+    if (raw.length < CHART_PAGE_SIZE) break;
+  }
+  return out;
+}
+
 /** Mirrors the browse/search lists (stations, categories, tags fragments). */
 export async function searchStations(search: StationSearch): Promise<Station[]> {
   const languages = (search.languages ?? []).filter((language) => language !== "");
@@ -76,6 +141,19 @@ export async function searchStations(search: StationSearch): Promise<Station[]> 
     );
     // Inner calls are already playable-filtered; just dedupe the merge.
     return dedupeStations(batched.flat());
+  }
+  const minBitrate = search.minBitrate ?? 0;
+  // Chart/genre lists page until full; free-text anchors keep one request —
+  // the ILIKE matcher manages its own candidate pool from those rows.
+  if ((search.name ?? "").trim() === "") {
+    return searchPaged({
+      tag: search.tag,
+      country: search.country,
+      language: languages[0],
+      order: search.order ?? "clickcount",
+      minBitrate,
+      want: search.limit ?? 50,
+    });
   }
   const query = searchParams({
     name: search.name,
@@ -89,7 +167,8 @@ export async function searchStations(search: StationSearch): Promise<Station[]> 
   });
   // HTTP-only rows can never play on an https page or in the APK WebView —
   // drop them so every visible station is playable.
-  return filterPlayableStations(parseStations(await fetchJson(`/json/stations/search${query}`)));
+  const playable = filterPlayableStations(parseStations(await fetchJson(`/json/stations/search${query}`)));
+  return filterByMinBitrate(playable, minBitrate);
 }
 
 function normalize(text: string): string {
@@ -117,6 +196,7 @@ export async function searchStationsIlike(
   tag?: string,
   limit = 50,
   languages: string[] = [],
+  minBitrate = 0,
 ): Promise<Station[]> {
   const terms = normalize(query)
     .split(/[\s,/_-]+/)
@@ -126,7 +206,7 @@ export async function searchStationsIlike(
   // Longest terms first, fetched together — the server ranks each by clicks.
   // Language fan-out (if any) happens inside `searchStations`.
   const batched = await Promise.all(
-    anchors.slice(0, 2).map((anchor) => searchStations({ name: anchor, limit: 100, languages })),
+    anchors.slice(0, 2).map((anchor) => searchStations({ name: anchor, limit: 100, languages, minBitrate })),
   );
   const seen = new Set<string>();
   const candidates: Station[] = [];
@@ -157,33 +237,39 @@ export async function searchStationsIlike(
 }
 
 /** Most-voted stations — the default landing list (unplayable rows filtered). */
-export async function topVotedStations(limit = 50, languages: string[] = []): Promise<Station[]> {
-  if (languages.length === 0) {
-    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${limit}`)));
+export async function topVotedStations(limit = 50, languages: string[] = [], minBitrate = 0): Promise<Station[]> {
+  if (languages.length === 0 && minBitrate <= 0) {
+    const count = chartFetchCount(limit);
+    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${count}`))).slice(0, limit);
   }
-  // `topvote` ignores `?language=` — rank through the search endpoint instead.
-  return rankedTopStations("votes", limit, languages);
+  // `topvote` ignores `?language=`, and filtered charts page until full —
+  // rank through the search endpoint instead.
+  return rankedTopStations("votes", limit, languages, minBitrate);
 }
 
 /** Most-clicked stations (unplayable rows filtered). */
-export async function topClickedStations(limit = 50, languages: string[] = []): Promise<Station[]> {
-  if (languages.length === 0) {
-    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${limit}`)));
+export async function topClickedStations(limit = 50, languages: string[] = [], minBitrate = 0): Promise<Station[]> {
+  if (languages.length === 0 && minBitrate <= 0) {
+    const count = chartFetchCount(limit);
+    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${count}`))).slice(0, limit);
   }
-  return rankedTopStations("clickcount", limit, languages);
+  return rankedTopStations("clickcount", limit, languages, minBitrate);
 }
 
 /**
- * Language-filtered chart: top `limit` per language, merged by rank.
- * Each leg is server-ranked and playable-filtered; the merge re-sorts.
+ * Filtered chart: top `limit` per language, merged by rank. Each leg pages
+ * until full (server-ranked, playable- and quality-filtered); the merge
+ * re-sorts. No languages means one worldwide leg.
  */
 async function rankedTopStations(
   order: "clickcount" | "votes",
   limit: number,
   languages: string[],
+  minBitrate = 0,
 ): Promise<Station[]> {
+  const legs = languages.length === 0 ? [undefined] : languages;
   const batched = await Promise.all(
-    languages.map((language) => searchStations({ order, languages: [language], limit })),
+    legs.map((language) => searchStations({ order, languages: language ? [language] : [], limit, minBitrate })),
   );
   return dedupeStations(batched.flat())
     .toSorted((a, b) => b[order] - a[order])

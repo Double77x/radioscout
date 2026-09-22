@@ -17,6 +17,8 @@ import { formatCountryName, formatTags } from "@/lib/radio/format";
 
 /** API stays out of the initial bundle — loaded when the sheet votes. */
 const loadDetailApi = () => import("@/lib/radio/api");
+/** Query client stays out of the initial bundle — loaded when the sheet votes. */
+const loadQueryClient = () => import("@/lib/query-client");
 
 function formatChecked(iso: string): string {
   const match = /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})/.exec(iso);
@@ -54,9 +56,19 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
 
   const vote = () => {
     if (!live || alreadyVoted) return;
-    void loadDetailApi().then((api) => api.voteStation(live.stationuuid));
-    markVoted(live.stationuuid);
+    const station = live;
+    void loadDetailApi().then((api) => api.voteStation(station.stationuuid));
+    markVoted(station.stationuuid);
     setVoted(true);
+    // Optimistic +1: directory counts refresh every few minutes, so bump the
+    // cached detail (this sheet) and refetch the lists behind it. The server
+    // dedupes per IP/day and the local guard allows one vote per device, so
+    // a rejected duplicate overshooting by one is accepted.
+    void loadQueryClient().then(({ queryClient }) => {
+      queryClient.setQueryData(["radio", "detail", station.stationuuid], { ...station, votes: station.votes + 1 });
+      queryClient.invalidateQueries({ queryKey: ["radio", "top"] });
+      queryClient.invalidateQueries({ queryKey: ["radio", "search"] });
+    });
   };
 
   return (
