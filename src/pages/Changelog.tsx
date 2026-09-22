@@ -8,7 +8,16 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
-          <h2 className='text-2xl font-semibold'>v0.2.1 - Level volume on Android</h2>
+          <h2 className='text-2xl font-semibold'>v0.2.2 - Android leveling and lockscreen fix</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>The Level volume switch now evens out stations in the Android player too</li>
+            <li>Fixed lockscreen controls going missing when playback starts</li>
+            <li>A compatibility notice names it if the system player cannot start</li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.2.1 - Level volume on web</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
             <li>The Level volume switch now evens out stations in the Android player too</li>
