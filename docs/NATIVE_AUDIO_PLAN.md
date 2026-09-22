@@ -1,6 +1,7 @@
 # Native Audio Plan — Media3 foreground-service player (APK)
 
-Status: N1 + N2 done (plugin + service + web wiring ship together).
+Status: N1 + N2 done (plugin + service + web wiring ship together), N5 done
+(leveling processor + main-thread controller traffic + compat notice).
 N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
 
 ## Why the WebView is not enough
@@ -59,6 +60,38 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   copy in `use-player.ts` updated to match whichever lands.
 - [ ] N4: headset/Auto handling, retry + audio-focus (calls) behavior, device QA
   matrix (offline start, rotation, 120Hz, back-button with mini-player).
+- [x] N5: loudness leveling in the Media3 pipeline (`LevelingAudioProcessor`,
+  same DSP as the web loop, JVM-tested) via `setLeveling` bridge + per-play
+  flag — one Settings switch drives both players. Volume-safe: ExoPlayer
+  applies user volume downstream at the AudioTrack, so no slider fighting.
+
+## Threading rule (2026-09-22 — the silent-fallback outage)
+
+Capacitor invokes `@PluginMethod`s on a background thread (logcat shows
+`CapacitorPlugins`, never main). `MediaController` rejects every call from
+any other thread (`MediaController method is called from a wrong thread`),
+and our bridge caught that rejection into the silent `<audio>` fallback —
+audio played, no lockscreen/shade UI, zero errors anywhere. It looked
+version-related because only the *first* play after launch takes the connect
+path; later plays reuse the controller through the one call site that was
+already main-threaded.
+
+- **Rule:** every `MediaController` touch — `buildAsync`, listener attach,
+  and all ops — goes through `mainHandler.post` (`withControllerOnMain` in
+  `NativeAudioPlugin.java`). Never call the controller from a plugin method
+  body, a future callback, or any background executor directly.
+- **Diagnostics:** the plugin logs the `RadioPlayback` tag at play entry
+  (with the notification permission state), controller connect, op
+  success/failure with the reason, and service create/destroy. A WebView
+  fallback additionally raises a one-time "Compatibility playback" toast
+  naming the missing lockscreen controls, so a silent bridge failure is
+  visible on-device without logcat.
+- **Verification:** emulator + debug APK (`pnpm build:android:apk`), tap
+  play, then confirm `play dispatched` + foreground-service start in logcat
+  and a `category=transport` notification in
+  `dumpsys notification`; `dumpsys media_session` must show the session
+  PLAYING, never NONE-while-audible (that combination means WebView
+  fallback — check `AudioFocusDelegate` in the focus log to confirm).
 
 ## Open questions
 

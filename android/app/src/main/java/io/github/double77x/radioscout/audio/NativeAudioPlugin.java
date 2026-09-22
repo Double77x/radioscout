@@ -7,6 +7,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import androidx.core.content.ContextCompat;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
@@ -39,6 +40,7 @@ import java.util.concurrent.ExecutionException;
 public class NativeAudioPlugin extends Plugin {
 
     private static final String EVENT_STATUS = "playbackStatus";
+    private static final String LOG_TAG = "RadioPlayback";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private MediaController controller;
@@ -73,15 +75,21 @@ public class NativeAudioPlugin extends Plugin {
     }
 
     private void withController(ControllerOp op, PluginCall call) {
+        // Every MediaController call on the main thread: the controller
+        // rejects calls from any other thread, and plugin methods do not run
+        // on main. (One silent web fallback with no lockscreen UI taught us.)
+        Log.i(LOG_TAG, "withController on " + Thread.currentThread().getName());
+        mainHandler.post(() -> withControllerOnMain(op, call));
+    }
+
+    private void withControllerOnMain(ControllerOp op, PluginCall call) {
         if (controller != null && controller.isConnected()) {
-            mainHandler.post(
-                    () -> {
-                        try {
-                            op.run(controller);
-                        } catch (Exception e) {
-                            call.reject(e.getMessage(), e);
-                        }
-                    });
+            try {
+                op.run(controller);
+            } catch (Exception e) {
+                Log.i(LOG_TAG, "controller op failed: " + e.getMessage());
+                call.reject(e.getMessage(), e);
+            }
             return;
         }
         Context context = getContext();
@@ -100,13 +108,16 @@ public class NativeAudioPlugin extends Plugin {
                         if (e instanceof InterruptedException) {
                             Thread.currentThread().interrupt();
                         }
+                        Log.i(LOG_TAG, "controller connect failed", e);
                         call.reject("Native player unavailable", e);
                         return;
                     }
+                    Log.i(LOG_TAG, "controller connected");
                     controller.addListener(listener);
                     try {
                         op.run(controller);
                     } catch (Exception e) {
+                        Log.i(LOG_TAG, "controller op failed: " + e.getMessage());
                         call.reject(e.getMessage(), e);
                     }
                 },
@@ -142,6 +153,13 @@ public class NativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void play(PluginCall call) {
+        String permissionState;
+        try {
+            permissionState = String.valueOf(getPermissionState("notifications"));
+        } catch (Exception e) {
+            permissionState = "unknown";
+        }
+        Log.i(LOG_TAG, "play: notifications=" + permissionState);
         if (needsNotificationPermission()) {
             // First playback on Android 13+: ask for the notification
             // permission in context, then start regardless — denied just
@@ -175,6 +193,7 @@ public class NativeAudioPlugin extends Plugin {
     private void startPlay(PluginCall call) {
         String url = call.getString("url", "");
         if (url == null || url.isEmpty()) {
+            Log.i(LOG_TAG, "play rejected: missing stream URL");
             call.reject("Missing stream URL");
             return;
         }
@@ -210,6 +229,7 @@ public class NativeAudioPlugin extends Plugin {
                     mediaController.setMediaItem(item);
                     mediaController.prepare();
                     mediaController.play();
+                    Log.i(LOG_TAG, "play dispatched: " + url);
                     call.resolve();
                 },
                 call);

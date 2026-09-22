@@ -1,6 +1,7 @@
 package io.github.double77x.radioscout.audio;
 
 import android.content.Context;
+import android.util.Log;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
@@ -24,6 +25,7 @@ public class RadioPlaybackService extends MediaSessionService {
     private MediaSession session;
     private LevelingAudioProcessor levelingProcessor;
     private static LevelingAudioProcessor levelingInstance;
+    private static final String LOG_TAG = "RadioPlayback";
 
     /** Live processor for the plugin bridge (null before onCreate / after onDestroy). */
     public static LevelingAudioProcessor getLevelingProcessor() {
@@ -33,6 +35,7 @@ public class RadioPlaybackService extends MediaSessionService {
     @Override
     public void onCreate() {
         super.onCreate();
+        Log.i(LOG_TAG, "service created");
         levelingProcessor = new LevelingAudioProcessor();
         levelingInstance = levelingProcessor;
         DefaultRenderersFactory renderersFactory =
@@ -69,6 +72,7 @@ public class RadioPlaybackService extends MediaSessionService {
 
     @Override
     public void onDestroy() {
+        Log.i(LOG_TAG, "service destroyed");
         levelingInstance = null;
         if (session != null) {
             session.getPlayer().release();
