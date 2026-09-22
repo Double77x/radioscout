@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
 import { pickOtaUpdate } from "@/lib/ota";
 import { playBackTransition } from "@/lib/animated-back";
-import { checkpointListeningSession } from "@/hooks/use-player";
+import { checkpointListeningSession } from "@/lib/player/store";
 
 /**
  * Native-shell bootstrap (Capacitor only — no-op on web).

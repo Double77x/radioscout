@@ -5,7 +5,7 @@ import { StationDetailSheet } from "../radio/StationDetailSheet";
 import { SwipeBack } from "./SwipeBack";
 import Footer from "@/components/Footer";
 import { useCloseStationDetail } from "@/hooks/use-station-detail";
-import { armListeningFlush, disarmListeningFlush } from "@/hooks/use-player";
+import { armListeningFlush, disarmListeningFlush } from "@/lib/player/store";
 
 interface AppShellProps {
   children: ReactNode;

@@ -48,6 +48,18 @@ public class NativeAudioPlugin extends Plugin {
     private String lastStatus = "";
     private boolean levelingEnabled = false;
 
+    /**
+     * Station-switch handoff: the next item buffers in the background while
+     * the current one keeps playing, then we advance and drop the old item.
+     * All three flags live and die on the main thread (controller ops and
+     * listener callbacks both run there).
+     */
+    private boolean handoffArmed;
+    private boolean handoffAdvanced;
+    private Runnable handoffAdvanceRunnable;
+    /** Pre-buffer window before advancing (radio handshakes land inside it). */
+    private static final long HANDOFF_ADVANCE_MS = 2000;
+
     private final Player.Listener listener =
             new Player.Listener() {
                 @Override
@@ -57,8 +69,39 @@ public class NativeAudioPlugin extends Plugin {
 
                 @Override
                 public void onPlayerError(PlaybackException error) {
+                    // A failed staged item must never strand the advance: drop
+                    // the handoff and report — the current item keeps playing.
+                    // (No pruning: the error may belong to the current item,
+                    // and pruning the wrong window is worse than a stale one.
+                    // The next play() resets the playlist either way.)
+                    cancelHandoff();
                     Player active = controller;
                     emitStatus(active, error.getMessage());
+                }
+
+                @Override
+                public void onMediaItemTransition(MediaItem mediaItem, int reason) {
+                    // Prune the predecessor after OUR advance only (seek
+                    // reason, parked on the new window): every other
+                    // transition (cold start, clears) leaves the list alone.
+                    // No player arg in this Media3 version — the attached
+                    // controller is the source (null-guarded for teardown).
+                    Player active = controller;
+                    if (active == null) {
+                        handoffAdvanced = false;
+                        return;
+                    }
+                    if (handoffAdvanced
+                            && reason == Player.MEDIA_ITEM_TRANSITION_REASON_SEEK
+                            && active.getCurrentMediaItemIndex() == 1
+                            && active.getCurrentTimeline().getWindowCount() == 2) {
+                        try {
+                            active.removeMediaItem(0);
+                        } catch (Exception e) {
+                            Log.i(LOG_TAG, "handoff prune failed: " + e.getMessage());
+                        }
+                    }
+                    handoffAdvanced = false;
                 }
             };
 
@@ -224,6 +267,45 @@ public class NativeAudioPlugin extends Plugin {
                                     .setMediaId("radioscout-live")
                                     .setMediaMetadata(metadata.build())
                                     .build();
+                    // Gapless handoff when the web layer asks for it and the
+                    // service is mid-station: enqueue behind the live item so
+                    // it buffers in the background, then advance and drop the
+                    // old window. Anything unexpected (stale 2-item list,
+                    // idle player) falls back to the classic cutover below —
+                    // a failed handoff must never be worse than a cut.
+                    boolean wantHandoff = call.getBoolean("handoff", false);
+                    cancelHandoff();
+                    handoffAdvanced = false;
+                    if (wantHandoff
+                            && mediaController.getCurrentMediaItem() != null
+                            && mediaController.getCurrentTimeline().getWindowCount() == 1
+                            && (mediaController.isPlaying()
+                                    || mediaController.getPlaybackState() == Player.STATE_BUFFERING)) {
+                        mediaController.addMediaItem(item);
+                        mediaController.prepare();
+                        applyLeveling();
+                        handoffArmed = true;
+                        handoffAdvanceRunnable =
+                                () -> {
+                                    handoffAdvanceRunnable = null;
+                                    if (!handoffArmed) return;
+                                    handoffArmed = false;
+                                    try {
+                                        // Fresh settle for the new station —
+                                        // the old correction dies with it.
+                                        resetLeveling();
+                                        handoffAdvanced = true;
+                                        mediaController.seekToNextMediaItem();
+                                        Log.i(LOG_TAG, "handoff advanced: " + url);
+                                    } catch (Exception e) {
+                                        Log.i(LOG_TAG, "handoff advance failed: " + e.getMessage());
+                                    }
+                                };
+                        mainHandler.postDelayed(handoffAdvanceRunnable, HANDOFF_ADVANCE_MS);
+                        Log.i(LOG_TAG, "handoff staged: " + url);
+                        call.resolve();
+                        return;
+                    }
                     mediaController.setVolume(muted ? 0f : volume);
                     applyLeveling();
                     resetLeveling();
@@ -260,6 +342,7 @@ public class NativeAudioPlugin extends Plugin {
     public void stop(PluginCall call) {
         withController(
                 (mediaController) -> {
+                    cancelHandoff();
                     mediaController.stop();
                     mediaController.clearMediaItems();
                     call.resolve();
@@ -291,10 +374,56 @@ public class NativeAudioPlugin extends Plugin {
         call.resolve();
     }
 
+    /** Pending native sleep deadline (main-thread only — posted and cleared there). */
+    private Runnable sleepPauseRunnable;
+
+    /**
+     * Sleep timer, native arm: pause when the deadline hits even if the
+     * WebView timers are throttled with the screen off. Best-effort — if the
+     * service is gone there is nothing audible to pause. A later call with 0
+     * seconds (or firing) clears it. No controller touch except the pause
+     * itself, on main like every other op.
+     */
+    @PluginMethod
+    public void setSleepTimer(PluginCall call) {
+        long seconds = Math.max(0, Math.round(call.getDouble("seconds", 0.0)));
+        mainHandler.post(
+                () -> {
+                    if (sleepPauseRunnable != null) {
+                        mainHandler.removeCallbacks(sleepPauseRunnable);
+                        sleepPauseRunnable = null;
+                    }
+                    if (seconds > 0) {
+                        sleepPauseRunnable =
+                                () -> {
+                                    sleepPauseRunnable = null;
+                                    if (controller != null && controller.isConnected()) {
+                                        try {
+                                            controller.pause();
+                                        } catch (Exception e) {
+                                            Log.i(LOG_TAG, "sleep pause failed: " + e.getMessage());
+                                        }
+                                    }
+                                };
+                        mainHandler.postDelayed(sleepPauseRunnable, seconds * 1000);
+                    }
+                });
+        call.resolve();
+    }
+
     private void applyLeveling() {
         LevelingAudioProcessor processor = RadioPlaybackService.getLevelingProcessor();
         if (processor != null) {
             processor.setLevelingEnabled(levelingEnabled);
+        }
+    }
+
+    /** Cancel a staged handoff (superseded play, stop, or item error). */
+    private void cancelHandoff() {
+        handoffArmed = false;
+        if (handoffAdvanceRunnable != null) {
+            mainHandler.removeCallbacks(handoffAdvanceRunnable);
+            handoffAdvanceRunnable = null;
         }
     }
 
@@ -312,6 +441,16 @@ public class NativeAudioPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        // Staged timers must never fire into a dead plugin — the service
+        // dies with the activity, so there is nothing to advance to.
+        mainHandler.post(
+                () -> {
+                    cancelHandoff();
+                    if (sleepPauseRunnable != null) {
+                        mainHandler.removeCallbacks(sleepPauseRunnable);
+                        sleepPauseRunnable = null;
+                    }
+                });
         if (controller != null) {
             try {
                 controller.removeListener(listener);

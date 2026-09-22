@@ -39,7 +39,13 @@ Radio switcher (`radioscout`). The Scout home-inventory app was purged
 
 ## Next
 
-- [ ] Sleep timer (web-side, ~30 lines)
+- [x] Sleep timer with fade-out (wall-clock deadline in `use-player` + service-side arm `setSleepTimer` surviving screen-off throttle, 3s fade, countdown in dock + Settings → Audio, `sleep.ts` unit-tested, never persisted)
+- [x] Play/pause/station-switch fades (900ms sweep in from silence on every start, 250ms fade on pause/stop; shared token-guarded ramp, manual volume cancels)
+- [x] Station-switch gapless handoff (old plays until the new stream is ready, then a 1s crossfade; web staged element + native playlist advance; failures keep the old station with a toast)
+- [x] Auto-reconnect dropped streams (backoff retry + quiet toast)
+- [x] Recent searches (history chips under search)
+- [ ] Now-playing track titles on APK (ExoPlayer ICY StreamTitle → dock + notification)
+- [ ] Player engine split follow-up (store core + pure leaves extracted; remaining transport/handoff/leveling/sleep share element/volume/fade singletons — needs a state-container pass, same move-gate-prove discipline)
 - [x] Station card skeletons (`StationCardSkeleton`/`StationListSkeleton` mirror row geometry — Saved, history, top, search swap with no shift; `aria-busy` on sections; `isFetching`-gated so empty states never flash)
 - [x] RadioScout mark (glass music note + sparkle): inline `Logo.tsx` (per-instance IDs, dark-scheme silver note), `generate-icons.mjs` + full regen (public SVGs/PNGs/ICO, `assets/`, 123 android drawables)
 - [x] Settings redo (no tabs): Data (radio export/import) + Style stacked in one scroll view; household/backup sections gone with the purge

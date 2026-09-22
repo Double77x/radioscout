@@ -8,6 +8,8 @@ import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
 import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
 import { QualityPicker } from "@/components/radio/QualityPicker";
+import { SleepTimerPicker } from "@/components/radio/SleepTimerPicker";
+import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
 import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
@@ -47,6 +49,8 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   const [languages] = usePersistentStrings(LANGUAGES_KEY, WORLDWIDE_FALLBACK);
   const [quality] = usePersistentString(QUALITY_KEY, ANY_QUALITY_FALLBACK);
   const [normalize] = usePersistentString(NORMALIZE_KEY, LEVEL_OFF_FALLBACK);
+  const sleepCountdown = useSleepCountdown();
+  const audioSummary = `${normalizeEnabled(normalize) ? "On" : "Off"}${sleepCountdown ? ` · Sleep ${sleepCountdown}` : ""}`;
   const languageSummary =
     languages.length === 0
       ? "Worldwide"
@@ -74,7 +78,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         align={variant === "tab" ? "center" : "start"}
         side={variant === "tab" ? "top" : undefined}
         anchor={variant === "tab" ? navAnchor : undefined}
-        className='max-h-[calc(100dvh-10rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3'>
+        className='max-h-[calc(100dvh-10rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3 scrollbar-gutter-stable'>
         <div className='px-2 pt-1'>
           <PopoverTitle>Settings</PopoverTitle>
           <PopoverDescription>Radio data, filters, audio and style.</PopoverDescription>
@@ -127,13 +131,14 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
           <AccordionItem value='audio' className='border-0'>
             <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>
               <span>Audio</span>
-              <span className='ml-auto pr-2 text-xs font-medium normal-case text-muted-foreground'>
-                {normalizeEnabled(normalize) ? "On" : "Off"}
-              </span>
+              <span className='ml-auto pr-2 text-xs font-medium normal-case text-muted-foreground'>{audioSummary}</span>
             </AccordionTrigger>
             <AccordionContent className='px-2'>
               <div className='rounded-2xl border border-border bg-card p-3'>
                 <NormalizeSwitch />
+              </div>
+              <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                <SleepTimerPicker />
               </div>
             </AccordionContent>
           </AccordionItem>

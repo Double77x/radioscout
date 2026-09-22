@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { StationArt } from "@/components/radio/StationArt";
 import { focusRadioSearch } from "@/lib/focus-radio-search";
 import { usePlayer } from "@/hooks/use-player";
+import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
 import { useSurpriseMe } from "@/hooks/use-radio";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { formatCountryName, formatTags } from "@/lib/radio/format";
@@ -115,6 +116,8 @@ function VolumeSlider({
  */
 export function PlayerDock() {
   const { station, status, error, volume, muted, toggle, stop, play, setVolume, toggleMute } = usePlayer();
+  const sleepCountdown = useSleepCountdown();
+  const sleepSuffix = sleepCountdown ? ` · Sleep ${sleepCountdown}` : "";
   const { surprise, isSurprising } = useSurpriseMe();
   const [volumeOpen, setVolumeOpen] = useState(false);
   const openDetail = useOpenStationDetail();
@@ -206,10 +209,10 @@ export function PlayerDock() {
               </span>
               <span className='block truncate text-xs text-muted-foreground'>
                 {busy
-                  ? "Tuning in…"
+                  ? `Tuning in…${sleepSuffix}`
                   : playing
-                    ? formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live"
-                    : (error ?? "Paused")}
+                    ? `${formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live"}${sleepSuffix}`
+                    : `${error ?? "Paused"}${sleepSuffix}`}
               </span>
             </button>
           ) : (

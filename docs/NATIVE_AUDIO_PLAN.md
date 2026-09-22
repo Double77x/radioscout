@@ -36,7 +36,16 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   globally. Prefer this over per-host `usesCleartextTraffic`.
 - **Bridge:** one Capacitor plugin (`NativeAudio`, no third-party dep):
   `play({ url, title, artist, artwork })`, `pause()`, `resume()`, `stop()`,
-  `setVolume()`, event `playbackStatus` (`playing | paused | loading | error`).
+  `setVolume()`, `setLeveling()`, `setSleepTimer({ seconds })`, event
+  `playbackStatus` (`playing | paused | loading | error`).
+- **Station-switch handoff:** `play({ handoff: true })` while a station is
+  live enqueues behind it (`addMediaItem`) and advances after a pre-buffer
+  window instead of cutting over, then drops the old window on the seek
+  transition. A failed staged item cancels the advance and reports — the
+  old item keeps playing. Anything unexpected falls back to the classic
+  `setMediaItem` cutover, so a failed handoff is never worse than a cut.
+  Verify on device: logcat `handoff staged` + `handoff advanced`, no gap in
+  the transport notification, old window gone from the queue after.
   Web stays canonical — every call keeps its `<audio>` fallback.
 - **Web wiring:** `playViaNative(station, url)` becomes: `if (!isNative())
   return false; if (await NativeAudio.play(...)) { emit({ status: "playing" });

@@ -3,7 +3,8 @@ import "fake-indexeddb/auto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import { radioDb, summarizeListening } from "@/lib/radio/store";
-import { checkpointListeningSession, pause, play, stop } from "@/hooks/use-player";
+import { checkpointListeningSession } from "@/lib/player/store";
+import { pause, play, stop } from "@/hooks/use-player";
 
 type AudioHandler = () => void;
 

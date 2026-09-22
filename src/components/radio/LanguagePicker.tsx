@@ -170,7 +170,7 @@ export function LanguagePicker() {
       </button>
 
       {open ? (
-        <div id={panelId} className='mt-2 rounded-2xl border border-border bg-card p-2'>
+        <div id={panelId} className='mt-2 animate-dropdown-in rounded-2xl border border-border bg-card p-2'>
           <div className='relative'>
             <Search
               aria-hidden='true'

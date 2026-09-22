@@ -95,6 +95,46 @@ test.describe("Settings", () => {
       "false",
     );
   });
+  test("opening dropdowns never shifts the panel width (stable scrollbar gutter)", async ({ page }) => {
+    // Short viewport forces the panel into overflow, so opening a dropdown
+    // would summon a width-stealing scrollbar without the gutter reserve.
+    // Widths must match to the pixel throughout.
+    await page.setViewportSize({ width: 1280, height: 500 });
+    await page.locator("header").getByRole("button", { name: "Settings" }).click();
+    const panel = page.getByRole("dialog", { name: "Settings" });
+    await expect(panel).toBeVisible();
+    await expect.poll(() => panel.evaluate((el) => getComputedStyle(el).scrollbarGutter)).toBe("stable");
+    const width = () => panel.evaluate((el) => el.clientWidth);
+
+    await panel.getByRole("button", { name: "Audio" }).click();
+    const baseline = await width();
+
+    await panel.getByRole("button", { name: "After 30 min" }).click();
+    await expect(panel.getByRole("button", { name: "15 min", exact: true })).toBeVisible();
+    expect(await width()).toBe(baseline);
+
+    await panel.getByRole("button", { name: "Languages" }).click();
+    await panel.getByRole("button", { name: "Worldwide — all languages" }).click();
+    await expect(panel.getByPlaceholder("Search 600+ languages…")).toBeVisible();
+    expect(await width()).toBe(baseline);
+  });
+  test("dropdown panels animate open like the accordion", async ({ page }) => {
+    await page.locator("header").getByRole("button", { name: "Settings" }).click();
+    const panel = page.getByRole("dialog", { name: "Settings" });
+    await expect(panel).toBeVisible();
+
+    await panel.getByRole("button", { name: "Audio" }).click();
+    await panel.getByRole("button", { name: "After 30 min" }).click();
+    const sleepPanel = panel.locator(".animate-dropdown-in").first();
+    await expect(sleepPanel).toBeVisible();
+    await expect.poll(() => sleepPanel.evaluate((el) => getComputedStyle(el).animationName)).toBe("dropdown-in");
+
+    await panel.getByRole("button", { name: "Languages" }).click();
+    await panel.getByRole("button", { name: "Worldwide — all languages" }).click();
+    const langPanel = panel.locator(".animate-dropdown-in").first();
+    await expect(langPanel).toBeVisible();
+    await expect.poll(() => langPanel.evaluate((el) => getComputedStyle(el).animationName)).toBe("dropdown-in");
+  });
   test("flyout also opens from the home logo", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
