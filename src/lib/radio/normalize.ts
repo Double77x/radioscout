@@ -1,10 +1,16 @@
 /**
- * Loudness leveling for the web `<audio>` player: an adaptive gain stage
+ * Loudness leveling for the web `<audio>` player: a two-phase gain stage
  * that steers each station toward the same reference, so switching stations
- * stops jumping in volume. The player measures K-inspired perceptual RMS on
- * the audio `timeupdate` tick (~4Hz — no timers, no FFT) and eases a GainNode
- * toward the target. Deliberately gentle: slow release, frozen during quiet
- * passages (no speech-pause pumping), hard clamps against blasts.
+ * stops jumping in volume — without riding the music inside a station.
+ *
+ * Phase 1 (settle, ~8s after tune-in): fast attack/release kills the
+ * inter-station jump quickly. Phase 2 (steady): a crawl tracks only slow
+ * station drift, so verses, choruses and ads play untouched — no pumping.
+ * The player measures K-inspired perceptual RMS on the audio `timeupdate`
+ * tick (~4Hz — no timers, no FFT) and eases a GainNode toward the target.
+ * Gain freezes during quiet passages (no speech-pause wind-up) and the
+ * clamps are deliberately narrow (±6 dB): anything bigger stays the volume
+ * slider's job, and a wrong-but-bounded gain can never blast.
  *
  * Graph shape (measurement never touches the mix):
  *   audible:     source → gain → destination (gain is the only coloration)
@@ -29,17 +35,22 @@ export const NORMALIZE_KEY = "radioscout:normalize";
 
 /** Target short-term RMS (~−17 dBFS — typical mastered-radio ballpark). */
 export const TARGET_RMS = 0.14;
-/** Fast pull-down when louder than target (per tick, ~4Hz). */
+/** Settle pull-down when louder than target (per tick, ~4Hz — tune-in only). */
 export const ATTACK = 0.3;
-/** Slow ride-up when quieter (no pumping on speech pauses). */
+/** Settle ride-up when quieter (tune-in only). */
 export const RELEASE = 0.05;
+/** Settle window after tune-in, in ticks (~8s at ~4Hz). */
+export const SETTLE_TICKS = 32;
+/** Steady crawl once settled: songs play untouched, drift tracked barely. */
+export const STEADY_ATTACK = 0.002;
+export const STEADY_RELEASE = 0.001;
 /** Below this RMS the gain freezes (silence/intros must not wind it up). */
 export const FREEZE_FLOOR = 0.01;
 /** Element volume below this freezes leveling (muted/zeroed — nothing to steer). */
 export const VOLUME_FLOOR = 0.01;
-/** Hard gain clamps: −12 dB … +18 dB (fast attack covers loud resumes). */
-export const MIN_GAIN = 0.25;
-export const MAX_GAIN = 8;
+/** Hard gain clamps: ±6 dB (fast settle covers loud resumes). */
+export const MIN_GAIN = 0.5;
+export const MAX_GAIN = 2;
 
 /** Short-term RMS of time-domain samples (0 for silence, ~1 for full-scale DC). */
 export function computeRms(samples: ArrayLike<number> & Iterable<number>): number {
@@ -63,14 +74,27 @@ export function effectiveRms(measuredRms: number, volume: number): number | null
 
 /**
  * One easing step toward the gain that would hit the target (`target / rms`).
- * Louder-than-target bites fast, quieter rides up slow, sub-floor input
- * freezes (returns `current` untouched), and the result never leaves the
- * clamps. Pure — trivially unit-testable, no audio graph required.
+ * Settle-phase step: louder-than-target bites fast, quieter rides up briskly,
+ * sub-floor input freezes (returns `current` untouched), and the result never
+ * leaves the clamps. Pure — trivially unit-testable, no audio graph required.
  */
 export function adaptGain(currentGain: number, rms: number, target: number = TARGET_RMS): number {
+  return stepGain(currentGain, rms, target, ATTACK, RELEASE);
+}
+
+/**
+ * Steady-phase step: same target and clamps, but a crawl — a 3 dB song
+ * section moves the gain under 1 dB over its whole duration, so settled
+ * playback never breathes. Only slow station drift gets tracked.
+ */
+export function adaptGainSteady(currentGain: number, rms: number, target: number = TARGET_RMS): number {
+  return stepGain(currentGain, rms, target, STEADY_ATTACK, STEADY_RELEASE);
+}
+
+function stepGain(currentGain: number, rms: number, target: number, attack: number, release: number): number {
   if (!Number.isFinite(rms) || rms < FREEZE_FLOOR) return currentGain;
   const desired = Math.min(MAX_GAIN, Math.max(MIN_GAIN, target / Math.max(rms, 1e-3)));
-  const coefficient = desired < currentGain ? ATTACK : RELEASE;
+  const coefficient = desired < currentGain ? attack : release;
   return currentGain + (desired - currentGain) * coefficient;
 }
 

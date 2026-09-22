@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   adaptGain,
+  adaptGainSteady,
   ATTACK,
   computeRms,
   effectiveRms,
@@ -9,6 +10,9 @@ import {
   normalizeEnabled,
   readNormalizeEnabled,
   RELEASE,
+  SETTLE_TICKS,
+  STEADY_ATTACK,
+  STEADY_RELEASE,
   TARGET_RMS,
   writeNormalizeEnabled,
   NORMALIZE_KEY,
@@ -96,6 +100,46 @@ describe("adaptGain", () => {
 
   it("holds near the target", () => {
     expect(adaptGain(1, TARGET_RMS)).toBeCloseTo(1, 5);
+  });
+});
+
+describe("adaptGainSteady", () => {
+  it("crawls where the settle step strides", () => {
+    const settle = Math.abs(adaptGain(1, TARGET_RMS * 2) - 1);
+    const steady = Math.abs(adaptGainSteady(1, TARGET_RMS * 2) - 1);
+    expect(steady).toBeLessThan(settle / 10);
+    expect(STEADY_ATTACK).toBeLessThan(ATTACK / 10);
+    expect(STEADY_RELEASE).toBeLessThan(RELEASE / 10);
+  });
+
+  it("clamps to ±6 dB and freezes below the floor", () => {
+    expect(adaptGainSteady(1, 1e-4)).toBeLessThanOrEqual(MAX_GAIN);
+    expect(adaptGainSteady(MAX_GAIN, TARGET_RMS * 100)).toBeGreaterThanOrEqual(MIN_GAIN);
+    expect(MIN_GAIN).toBe(0.5);
+    expect(MAX_GAIN).toBe(2);
+    expect(adaptGainSteady(1.4, 0)).toBe(1.4);
+    expect(adaptGainSteady(1.4, Number.NaN)).toBe(1.4);
+  });
+
+  it("settles a station jump inside the window, then ignores the song", () => {
+    // Station jump: unity gain converges on a 2x-loud station inside the
+    // settle window (~8s at ~4Hz), so the jump is short-lived.
+    let gain = 1;
+    for (let index = 0; index < SETTLE_TICKS; index++) gain = adaptGain(gain, TARGET_RMS * 2);
+    expect(gain).toBeCloseTo(0.5, 1);
+    // Settled station at target level, then two minutes of ±3 dB
+    // verse/chorus: breathing must stay under 1 dB (the old always-fast
+    // loop swung ~15 dB here by chasing every section).
+    gain = 1;
+    for (let index = 0; index < SETTLE_TICKS; index++) gain = adaptGain(gain, TARGET_RMS);
+    const settled = gain;
+    let peak = 0;
+    for (let index = 0; index < 480; index++) {
+      const rms = Math.floor(index / 80) % 2 === 0 ? TARGET_RMS / 1.41 : TARGET_RMS * 1.41;
+      gain = adaptGainSteady(gain, rms);
+      peak = Math.max(peak, Math.abs(20 * Math.log10(gain / settled)));
+    }
+    expect(peak).toBeLessThan(1);
   });
 });
 

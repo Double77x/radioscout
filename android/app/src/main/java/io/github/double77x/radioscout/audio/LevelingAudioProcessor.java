@@ -7,10 +7,20 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * Adaptive loudness-leveling processor: steers every station toward the same
- * short-term RMS so switching stations stops jumping in volume. Java port of
- * the web leveling loop ({@code src/lib/radio/normalize.ts}) — same target,
- * attack, release, freeze floor and clamps, so both players agree.
+ * Two-phase loudness-leveling processor: steers every station toward the same
+ * short-term RMS so switching stations stops jumping in volume — without
+ * riding the music inside a station. Java port of the web leveling loop
+ * ({@code src/lib/radio/normalize.ts}) — same target, settle/steady
+ * coefficients, clamps and freeze floor, so both players agree.
+ *
+ * <p>Phase 1 (settle, 8s after {@link #resetForNewStation}): fast
+ * attack/release kills the inter-station jump. Phase 2 (steady): a crawl
+ * tracks only slow drift, so songs play untouched — no pumping.
+ *
+ * <p>Adaptation runs on a ~250ms wall-clock cadence (RMS accumulated across
+ * buffers), matching the web ~4Hz tick: per-buffer stepping would converge
+ * tens of times faster and ride every beat. Gain resets to unity on every
+ * station change, so one station's correction never blasts the next.
  *
  * <p>PCM-16 only; anything else passes through untouched (throwing in
  * {@code onConfigure} would fail playback instead of skipping leveling).
@@ -24,16 +34,46 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     private static final float TARGET_RMS = 0.14f;
     private static final float ATTACK = 0.3f;
     private static final float RELEASE = 0.05f;
+    private static final float STEADY_ATTACK = 0.002f;
+    private static final float STEADY_RELEASE = 0.001f;
     private static final float FREEZE_FLOOR = 0.01f;
-    private static final float MIN_GAIN = 0.25f;
-    private static final float MAX_GAIN = 8f;
+    private static final float MIN_GAIN = 0.5f;
+    private static final float MAX_GAIN = 2f;
+    /** Adaptation cadence: match the web tick so coefficients agree. */
+    private static final long ADAPT_INTERVAL_NS = 250_000_000L;
+    /** Fast-settle window after tune-in: kill the jump, then hold. */
+    private static final long SETTLE_NS = 8_000_000_000L;
 
     private volatile boolean levelingEnabled;
-    private float gain = 1f;
+    private volatile float gain = 1f;
+    private volatile long settleDeadlineNanos = System.nanoTime() + SETTLE_NS;
+    private long lastAdaptNanos = 0L;
+    private double rmsAccum = 0;
+    private long rmsFrames = 0;
 
-    /** Flip leveling live (bridge thread-safe via volatile). */
+    /**
+     * Flip leveling live (bridge thread-safe via volatile). Enabling
+     * restarts the settle window at unity, like a fresh tune-in.
+     */
     public void setLevelingEnabled(boolean enabled) {
         levelingEnabled = enabled;
+        if (enabled) {
+            resetForNewStation();
+        }
+    }
+
+    /**
+     * Restart leveling for a new station: unity gain plus a fresh
+     * fast-settle window. Called from the plugin's play path; safe from any
+     * thread (worst case one short RMS window misreads and self-corrects).
+     */
+    public void resetForNewStation() {
+        gain = 1f;
+        settleDeadlineNanos = System.nanoTime() + SETTLE_NS;
+        rmsAccum = 0;
+        rmsFrames = 0;
+        // Adapt on the next buffer so the new station settles immediately.
+        lastAdaptNanos = 0L;
     }
 
     public boolean isLevelingEnabled() {
@@ -41,14 +81,26 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     }
 
     /**
-     * Pure gain step, mirrored in unit tests: fast pull-down when louder
-     * than target, slow ride-up when quieter, frozen below the floor,
-     * clamped to the hard range.
+     * Pure gain step, mirrored in unit tests: settle-phase attack/release
+     * (fast pull-down when louder, brisk ride-up when quieter), frozen below
+     * the floor, clamped to the hard range.
      */
     static float adaptGain(float currentGain, float rms) {
+        return stepGain(currentGain, rms, ATTACK, RELEASE);
+    }
+
+    /**
+     * Steady-phase step: same target and clamps, but a crawl — settled
+     * playback never breathes.
+     */
+    static float adaptGainSteady(float currentGain, float rms) {
+        return stepGain(currentGain, rms, STEADY_ATTACK, STEADY_RELEASE);
+    }
+
+    private static float stepGain(float currentGain, float rms, float attack, float release) {
         if (!Float.isFinite(rms) || rms < FREEZE_FLOOR) return currentGain;
         float desired = Math.min(MAX_GAIN, Math.max(MIN_GAIN, TARGET_RMS / Math.max(rms, 1e-3f)));
-        float coefficient = desired < currentGain ? ATTACK : RELEASE;
+        float coefficient = desired < currentGain ? attack : release;
         return currentGain + (desired - currentGain) * coefficient;
     }
 
@@ -89,18 +141,31 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         }
         int frames = bytes / 2;
         inputBuffer.order(ByteOrder.LITTLE_ENDIAN);
+        // Accumulate energy across buffers; the gain step runs at most every
+        // ~250ms (web-tick parity) no matter how small the buffers are.
         double sum = 0;
         for (int i = 0; i < frames; i++) {
             short sample = inputBuffer.getShort(position + i * 2);
             sum += (double) sample * sample;
         }
-        float rms = (float) (Math.sqrt(sum / frames) / 32768.0);
-        gain = adaptGain(gain, rms);
+        rmsAccum += sum;
+        rmsFrames += frames;
+        long now = System.nanoTime();
+        if (rmsFrames > 0 && now - lastAdaptNanos >= ADAPT_INTERVAL_NS) {
+            float rms = (float) (Math.sqrt(rmsAccum / rmsFrames) / 32768.0);
+            rmsAccum = 0;
+            rmsFrames = 0;
+            lastAdaptNanos = now;
+            float stepped =
+                    now < settleDeadlineNanos ? adaptGain(gain, rms) : adaptGainSteady(gain, rms);
+            gain = stepped;
+        }
+        float applied = gain;
         ByteBuffer output = replaceOutputBuffer(bytes);
         output.order(ByteOrder.LITTLE_ENDIAN);
         for (int i = 0; i < frames; i++) {
             short sample = inputBuffer.getShort(position + i * 2);
-            int scaled = Math.round(sample * gain);
+            int scaled = Math.round(sample * applied);
             if (scaled > 32767) {
                 scaled = 32767;
             } else if (scaled < -32768) {

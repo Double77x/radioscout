@@ -226,6 +226,7 @@ public class NativeAudioPlugin extends Plugin {
                                     .build();
                     mediaController.setVolume(muted ? 0f : volume);
                     applyLeveling();
+                    resetLeveling();
                     mediaController.setMediaItem(item);
                     mediaController.prepare();
                     mediaController.play();
@@ -294,6 +295,18 @@ public class NativeAudioPlugin extends Plugin {
         LevelingAudioProcessor processor = RadioPlaybackService.getLevelingProcessor();
         if (processor != null) {
             processor.setLevelingEnabled(levelingEnabled);
+        }
+    }
+
+    /**
+     * New station, new correction: restart the settle window at unity so the
+     * last station's gain never blasts or ducks the next one. Null-safe for
+     * the pre-service race (a fresh processor already starts settled-ready).
+     */
+    private void resetLeveling() {
+        LevelingAudioProcessor processor = RadioPlaybackService.getLevelingProcessor();
+        if (processor != null) {
+            processor.resetForNewStation();
         }
     }
 

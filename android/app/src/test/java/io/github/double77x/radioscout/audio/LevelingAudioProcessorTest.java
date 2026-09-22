@@ -47,6 +47,49 @@ public class LevelingAudioProcessorTest {
     }
 
     @Test
+    public void adaptGainSteadyCrawlsWhereSettleStrides() {
+        float settle = Math.abs(LevelingAudioProcessor.adaptGain(1f, TARGET_RMS * 2) - 1f);
+        float steady = Math.abs(LevelingAudioProcessor.adaptGainSteady(1f, TARGET_RMS * 2) - 1f);
+        assertEquals(1 + (0.5f - 1) * 0.002f, LevelingAudioProcessor.adaptGainSteady(1f, TARGET_RMS * 2), 1e-5f);
+        org.junit.Assert.assertTrue(steady < settle / 10);
+    }
+
+    @Test
+    public void adaptGainSteadyClampsToPlusMinusSixDb() {
+        org.junit.Assert.assertTrue(LevelingAudioProcessor.adaptGainSteady(1f, 1e-4f) <= 2f);
+        org.junit.Assert.assertTrue(LevelingAudioProcessor.adaptGainSteady(2f, TARGET_RMS * 100) >= 0.5f);
+    }
+
+    @Test
+    public void adaptGainSteadyFreezesBelowTheFloor() {
+        assertEquals(1.4f, LevelingAudioProcessor.adaptGainSteady(1.4f, 0f), 0f);
+        assertEquals(1.4f, LevelingAudioProcessor.adaptGainSteady(1.4f, Float.NaN), 0f);
+    }
+
+    @Test
+    public void steadyPhaseIgnoresSongSections() {
+        // Settle on a 2x-loud station, then ±3 dB verse/chorus for two
+        // minutes at web-tick parity (4 steps/sec): breathing under 1 dB.
+        float gain = 1f;
+        for (int i = 0; i < 32; i++) {
+            gain = LevelingAudioProcessor.adaptGain(gain, TARGET_RMS * 2);
+        }
+        assertEquals(0.5f, gain, 0.05f);
+        gain = 1f;
+        for (int i = 0; i < 32; i++) {
+            gain = LevelingAudioProcessor.adaptGain(gain, TARGET_RMS);
+        }
+        float settled = gain;
+        float peakDb = 0f;
+        for (int i = 0; i < 480; i++) {
+            float rms = (i / 80) % 2 == 0 ? TARGET_RMS / 1.41f : TARGET_RMS * 1.41f;
+            gain = LevelingAudioProcessor.adaptGainSteady(gain, rms);
+            peakDb = Math.max(peakDb, Math.abs(20 * (float) Math.log10(gain / settled)));
+        }
+        org.junit.Assert.assertTrue("breathing " + peakDb + " dB", peakDb < 1f);
+    }
+
+    @Test
     public void adaptGainConvergesOnTheExactCorrection() {
         float gain = 1f;
         for (int i = 0; i < 200; i++) {

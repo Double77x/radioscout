@@ -16,9 +16,11 @@ import { loadMuted, loadVolume, persistVolume, type PlayerPrefs } from "@/lib/ra
 import { readLastStation, writeLastStation } from "@/lib/radio/last-played";
 import {
   adaptGain,
+  adaptGainSteady,
   computeRms,
   effectiveRms,
   readNormalizeEnabled,
+  SETTLE_TICKS,
   writeNormalizeEnabled,
 } from "@/lib/radio/normalize";
 import { queryClient } from "@/lib/query-client";
@@ -138,6 +140,8 @@ let normGain: GainNode | null = null;
 let normAnalyser: AnalyserNode | null = null;
 /** True while the live element is routed through the graph. */
 let audioRouted = false;
+/** Settle ticks left in the fast tune-in phase (0 = steady crawl). */
+let settleTicksLeft = 0;
 /** Hosts whose streams failed under analysis routing (session-only). */
 const blockedHosts = new Set<string>();
 /** One direct-replay rescue per element build (error listener below). */
@@ -368,6 +372,8 @@ function maybeRouteAudio(element: HTMLAudioElement): void {
     normAnalyser = analyser;
     analysisBuffer = new Float32Array(analyser.fftSize);
     audioRouted = true;
+    // Fresh graph starts at unity in the fast settle phase (see play()).
+    settleTicksLeft = SETTLE_TICKS;
   } catch {
     // Graph unavailable — the element plays directly, leveling skipped.
     audioRouted = false;
@@ -442,7 +448,7 @@ function freezeGain(): void {
   }
 }
 
-/** One RMS tick: ease the gain toward the target (never throws). */
+/** One RMS tick: settle fast after tune-in, then crawl (never throws). */
 function adaptTick(): void {
   const analyser = normAnalyser;
   const gain = normGain;
@@ -455,9 +461,31 @@ function adaptTick(): void {
     analyser.getFloatTimeDomainData(analysisBuffer);
     const effective = effectiveRms(computeRms(analysisBuffer), element.volume);
     if (effective === null) return;
-    gain.gain.value = adaptGain(gain.gain.value, effective);
+    if (settleTicksLeft > 0) {
+      settleTicksLeft -= 1;
+      gain.gain.value = adaptGain(gain.gain.value, effective);
+    } else {
+      gain.gain.value = adaptGainSteady(gain.gain.value, effective);
+    }
   } catch {
     // Analysis is progressive enhancement — never break playback.
+  }
+}
+
+/**
+ * Restart leveling for a new station: unity gain plus a fresh fast-settle
+ * window, so the previous station's correction never blasts or ducks the
+ * next one. Only `play()` calls this (`togglePlay` routes same-station taps
+ * to pause/resume), and a rebuilt graph already starts settled-ready.
+ */
+function resetLevelingForStation(): void {
+  settleTicksLeft = SETTLE_TICKS;
+  if (normGain) {
+    try {
+      normGain.gain.value = 1;
+    } catch {
+      // Graph torn down mid-swap — the rebuild starts at unity anyway.
+    }
   }
 }
 
@@ -604,6 +632,8 @@ export function play(station: Station): void {
   const token = ++playToken;
   writeLastStation(station);
   emit({ station, status: "loading", error: null, needsNative: false });
+  // New station, new correction: never inherit the last station's gain.
+  resetLevelingForStation();
 
   void (async () => {
     const element = ensureAudio();
