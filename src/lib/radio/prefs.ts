@@ -3,6 +3,9 @@
 const VOLUME_KEY = "radioscout:volume";
 const MUTED_KEY = "radioscout:muted";
 
+/** Fresh-install output level (stored prefs win once the user touches volume). */
+export const DEFAULT_VOLUME = 0.25;
+
 export interface PlayerPrefs {
   volume: number;
   muted: boolean;
@@ -11,9 +14,9 @@ export interface PlayerPrefs {
 export function loadVolume(): number {
   try {
     const value = Number(globalThis.localStorage?.getItem(VOLUME_KEY));
-    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.9;
+    return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : DEFAULT_VOLUME;
   } catch {
-    return 0.9;
+    return DEFAULT_VOLUME;
   }
 }
 
@@ -36,6 +39,6 @@ export function persistVolume(volume: number, muted: boolean): void {
 
 /** Read persisted prefs (backup). Never throws. */
 export function readPlayerPrefs(): PlayerPrefs {
-  if (globalThis.window === undefined) return { volume: 0.9, muted: false };
+  if (globalThis.window === undefined) return { volume: DEFAULT_VOLUME, muted: false };
   return { volume: loadVolume(), muted: loadMuted() };
 }

@@ -4,9 +4,11 @@ import { ArrowLeft, Search, X } from "lucide-react";
 import { SettingsMenu } from "@/components/scout/SettingsMenu";
 import { Input } from "@/components/ui/input";
 import { useIsClient } from "@/hooks/use-is-client";
+import { usePersistentStrings } from "@/hooks/use-persistent-state";
 import { FOCUS_RADIO_SEARCH_EVENT } from "@/lib/focus-radio-search";
 import { GENRE_FILTERS } from "@/lib/radio/genres";
 import { formatStationCount } from "@/lib/radio/format";
+import { clearRecentSearches, RECENT_SEARCHES_KEY, recordRecentSearch } from "@/lib/radio/recent-searches";
 import { cn } from "@/lib/utils";
 
 interface RadioHeaderProps {
@@ -24,6 +26,9 @@ interface RadioHeaderProps {
 function openPalette() {
   globalThis.dispatchEvent(new Event("open-command-palette"));
 }
+
+/** Hoisted: the persisted hook needs a referentially stable fallback. */
+const RECENT_SEARCHES_FALLBACK: string[] = [];
 
 /** Greeting header, station search and genre chips. Same skeleton as HomeHeader. */
 export function RadioHeader({
@@ -43,6 +48,11 @@ export function RadioHeader({
   // client takes over — one silent extra render, only for param URLs.
   const shownQuery = isClient ? query : "";
   const shownGenre = isClient ? genre : "all";
+  const [recentSearches] = usePersistentStrings(RECENT_SEARCHES_KEY, RECENT_SEARCHES_FALLBACK);
+  // Recents only make sense on the client with an empty box: while typing,
+  // results own the space below. Gated on `isClient` like the query above
+  // so the prerender never mismatches hydration.
+  const showRecents = isClient && searchable && shownQuery === "" && recentSearches.length > 0;
   const searchRef = useRef<HTMLInputElement | null>(null);
   // Drag-to-scroll state for the chip rail (mouse only — touch keeps
   // native momentum scrolling). Refs only, no effects: pointer handlers
@@ -173,6 +183,10 @@ export function RadioHeader({
                 }
                 value={shownQuery}
                 onChange={(event) => setSearch({ q: event.target.value, tag: shownGenre })}
+                onBlur={() => recordRecentSearch(shownQuery)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") recordRecentSearch(shownQuery);
+                }}
                 className='h-12 rounded-full border-border bg-card pr-12 pl-11 text-base shadow-sm placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden'
               />
               {shownQuery === "" ? null : (
@@ -186,6 +200,30 @@ export function RadioHeader({
               )}
             </div>
           </search>
+
+          {showRecents ? (
+            <section aria-label='Recent searches' className='mt-3 flex flex-wrap items-center gap-2'>
+              {recentSearches.map((term) => (
+                <button
+                  key={term}
+                  type='button'
+                  onClick={() => {
+                    recordRecentSearch(term);
+                    setSearch({ q: term, tag: shownGenre });
+                  }}
+                  className='shrink-0 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                  {term}
+                </button>
+              ))}
+              <button
+                type='button'
+                onClick={clearRecentSearches}
+                aria-label='Clear recent searches'
+                className='shrink-0 rounded-full p-2 text-xs font-medium text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                Clear
+              </button>
+            </section>
+          ) : null}
 
           <fieldset className='m-0 min-w-0 border-0 p-0'>
             <legend className='sr-only'>Filter by genre</legend>
