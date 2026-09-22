@@ -101,7 +101,10 @@ jobs:
           VERSION="$(node -p "require('./$MANIFEST').versions[0].version")"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git pull --rebase origin "${{ github.ref_name }}"
+          # The publish step above rewrote the (tracked) manifest, so the
+          # tree is dirty by design — autostash it across the rebase.
+          git status --porcelain
+          git pull --rebase --autostash origin "${{ github.ref_name }}"
           git add "$MANIFEST"
           if git diff --cached --quiet; then
             echo "Manifest unchanged — nothing to commit."
