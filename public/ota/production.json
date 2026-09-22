@@ -2,6 +2,13 @@
   "channel": "production",
   "versions": [
     {
+      "version": "0.2.2+ota.1",
+      "min_version_code": 202,
+      "max_version_code": null,
+      "url": "https://github.com/Double77x/radioscout/releases/download/ota-production-0.2.2+ota.1/0.2.2%2Bota.1.zip",
+      "checksum": "b4a78c771cab34b23c1cc81b8e2f16101e6a25eea29d0fa6015a7e2ecc3f5837"
+    },
+    {
       "version": "0.1.6+ota.1",
       "min_version_code": 106,
       "max_version_code": null,
