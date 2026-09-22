@@ -95,6 +95,7 @@ public class NativeAudioPlugin extends Plugin {
                 public void onPlayerError(PlaybackException error) {
                     // A session-player error reports — fade-player errors have
                     // their own listener with a cutover fallback (below).
+                    Log.i(LOG_TAG, "session player error: " + describeError(error));
                     emitStatus(controller, error.getMessage());
                 }
             };
@@ -109,6 +110,34 @@ public class NativeAudioPlugin extends Plugin {
         if (value < 0) return 0f;
         if (value > 1) return 1f;
         return (float) value;
+    }
+
+    /**
+     * One-line root cause for a player failure (the dock only shows the bare
+     * message, e.g. "Source error"): numeric code + code name + the cause
+     * chain, so logcat says whether it was cleartext policy, HTTP status,
+     * timeout, or a dead socket.
+     */
+    private static String describeError(PlaybackException error) {
+        StringBuilder out = new StringBuilder();
+        try {
+            out.append(error.getMessage())
+                    .append(" code=")
+                    .append(error.errorCode)
+                    .append(" ")
+                    .append(PlaybackException.getErrorCodeName(error.errorCode));
+        } catch (Exception e) {
+            out.append(error);
+        }
+        Throwable cause = error.getCause();
+        for (int depth = 0; cause != null && depth < 3; depth++) {
+            String detail = cause.getMessage();
+            if (detail != null && !detail.isEmpty()) {
+                out.append(" <- ").append(detail);
+            }
+            cause = cause.getCause();
+        }
+        return out.toString();
     }
 
     private void withController(ControllerOp op, PluginCall call) {
@@ -465,9 +494,13 @@ public class NativeAudioPlugin extends Plugin {
                                     .build();
                         }
                     };
-            // Focus stays with the session player until the swap (audio focus
-            // is app-level, so the mix is clean); noisy stays off so only the
-            // session player answers headset unplug mid-blend.
+            // Focus stays OFF until the swap: requesting permanent focus here
+            // would steal it from the session player mid-blend, pausing (or
+            // ducking) the old station — the user would hear stop-then-start
+            // instead of an overlap. Audio focus is per-player even in one
+            // app, so the newcomer must not ask until it owns the session.
+            // Noisy stays off for the same reason (only the session player
+            // answers headset unplug); both flip at the swap.
             ExoPlayer player =
                     new ExoPlayer.Builder(app)
                             .setRenderersFactory(renderersFactory)
@@ -476,7 +509,7 @@ public class NativeAudioPlugin extends Plugin {
                                             .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                                             .setUsage(C.USAGE_MEDIA)
                                             .build(),
-                                    /* handleAudioFocus= */ true)
+                                    /* handleAudioFocus= */ false)
                             .setHandleAudioBecomingNoisy(false)
                             .setWakeMode(C.WAKE_MODE_NETWORK)
                             .build();
@@ -499,7 +532,7 @@ public class NativeAudioPlugin extends Plugin {
                         @Override
                         public void onPlayerError(PlaybackException error) {
                             if (fadePlayer != player) return;
-                            Log.i(LOG_TAG, "crossfade incoming failed, cutting over: " + error.getMessage());
+                            Log.i(LOG_TAG, "crossfade incoming failed, cutting over: " + describeError(error));
                             fallbackCutover(mediaController, item, url);
                         }
                     };

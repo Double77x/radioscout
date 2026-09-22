@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
+import androidx.media3.common.Player;
 import androidx.media3.exoplayer.DefaultRenderersFactory;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.exoplayer.audio.AudioSink;
@@ -44,9 +45,24 @@ public class RadioPlaybackService extends MediaSessionService {
         RadioPlaybackService self = instance;
         if (self == null || self.session == null || newPlayer == null) return false;
         try {
-            androidx.media3.common.Player old = self.session.getPlayer();
+            Player old = self.session.getPlayer();
             self.session.setPlayer(newPlayer);
             levelingInstance = newProcessor;
+            // The newcomer takes over focus/noisy handling only NOW that it
+            // owns the session: asking earlier would steal focus from the
+            // still-playing predecessor mid-blend. The retiree is already at
+            // zero, so its focus-loss response is inaudible either way.
+            try {
+                newPlayer.setAudioAttributes(
+                        new AudioAttributes.Builder()
+                                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                                .setUsage(C.USAGE_MEDIA)
+                                .build(),
+                        /* handleAudioFocus= */ true);
+            } catch (Exception ignored) {
+                // Focus stays with the released player until the next cold
+                // start — transient ducking just won't apply meanwhile.
+            }
             try {
                 newPlayer.setHandleAudioBecomingNoisy(true);
             } catch (Exception ignored) {
