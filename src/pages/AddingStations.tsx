@@ -24,7 +24,7 @@ export default function AddingStationsPage() {
             href={DIRECTORY_URL}
             target='_blank'
             rel='noreferrer'
-            className='text-primary underline-offset-4 hover:underline'>
+            className='text-foreground underline-offset-4 hover:underline'>
             radio-browser.info
           </a>
           , the free community-run directory of internet radio. It is the source of truth: add a station there once and
@@ -57,7 +57,7 @@ export default function AddingStationsPage() {
               href={ADD_STATION_URL}
               target='_blank'
               rel='noreferrer'
-              className='text-primary underline-offset-4 hover:underline'>
+              className='text-foreground underline-offset-4 hover:underline'>
               radio-browser.info/add
             </a>{" "}
             and fill in the form.
