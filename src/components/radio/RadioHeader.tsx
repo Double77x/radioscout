@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Search, X } from "lucide-react";
 import { SettingsMenu } from "@/components/scout/SettingsMenu";
 import { Input } from "@/components/ui/input";
+import { useDragScroll } from "@/hooks/use-drag-scroll";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePersistentStrings } from "@/hooks/use-persistent-state";
 import { FOCUS_RADIO_SEARCH_EVENT } from "@/lib/focus-radio-search";
@@ -49,6 +50,7 @@ export function RadioHeader({
   const shownQuery = isClient ? query : "";
   const shownGenre = isClient ? genre : "all";
   const [recentSearches] = usePersistentStrings(RECENT_SEARCHES_KEY, RECENT_SEARCHES_FALLBACK);
+  const searchRef = useRef<HTMLInputElement | null>(null);
   // The box is typed into faster than router navigations commit: driving
   // `value` straight from the URL lets a still-committing keystroke rewrite
   // the field mid-word and collapse the cursor. So the draft owns the box
@@ -61,13 +63,12 @@ export function RadioHeader({
   // results own the space below. Gated on `isClient` like the query above
   // so the prerender never mismatches hydration.
   const showRecents = isClient && searchable && draft === "" && recentSearches.length > 0;
-  const searchRef = useRef<HTMLInputElement | null>(null);
-  // Drag-to-scroll state for the chip rail (mouse only — touch keeps
-  // native momentum scrolling). Refs only, no effects: pointer handlers
-  // below own the whole gesture.
-  const railRef = useRef<HTMLDivElement | null>(null);
-  const railDrag = useRef<{ startX: number; startScroll: number } | null>(null);
-  const railMoved = useRef(false);
+  // Drag-to-scroll rails (genre chips + recent searches; mouse only — touch
+  // keeps native momentum scrolling). Hook refs only, no effects: the
+  // handlers own the whole gesture. Destructured (not dotted) so the
+  // react-doctor refs rule sees plain identifiers, not ref member access.
+  const { ref: genreRef, handlers: genreHandlers } = useDragScroll<HTMLDivElement>();
+  const { ref: recentsRef, handlers: recentsHandlers } = useDragScroll<HTMLDivElement>();
 
   // Search is the app's front door: focus it on load for precise pointers
   // (touch devices keep the keyboard down), and on `focus-radio-search`
@@ -107,41 +108,6 @@ export function RadioHeader({
     setDraft("");
     setSearch({ tag: shownGenre });
     searchRef.current?.focus();
-  };
-
-  const onRailPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === "touch" || (event.pointerType === "mouse" && event.button !== 0)) return;
-    const rail = railRef.current;
-    if (!rail) return;
-    railDrag.current = { startX: event.clientX, startScroll: rail.scrollLeft };
-    railMoved.current = false;
-  };
-
-  const onRailPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = railDrag.current;
-    const rail = railRef.current;
-    if (!drag || !rail) return;
-    const dx = event.clientX - drag.startX;
-    if (!railMoved.current && Math.abs(dx) > 6) {
-      // A real drag: capture so the trailing click lands on the rail
-      // (where the capture-click guard swallows it) instead of a chip.
-      railMoved.current = true;
-      event.currentTarget.setPointerCapture?.(event.pointerId);
-    }
-    if (railMoved.current) rail.scrollLeft = drag.startScroll - dx;
-  };
-
-  const endRailDrag = () => {
-    railDrag.current = null;
-  };
-
-  // Swallow the click that lands a real drag (capture runs before the
-  // chip link sees it); plain clicks pass through untouched.
-  const onRailClickCapture = (event: SyntheticEvent) => {
-    if (!railMoved.current) return;
-    railMoved.current = false;
-    event.preventDefault();
-    event.stopPropagation();
   };
 
   return (
@@ -236,26 +202,31 @@ export function RadioHeader({
           </search>
 
           {showRecents ? (
-            <section aria-label='Recent searches' className='mt-3 flex flex-wrap items-center gap-2'>
-              {recentSearches.map((term) => (
-                <button
-                  key={term}
-                  type='button'
-                  onClick={() => {
-                    recordRecentSearch(term);
-                    pushedRef.current = term;
-                    setDraft(term);
-                    setSearch({ q: term, tag: shownGenre });
-                  }}
-                  className='shrink-0 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
-                  {term}
-                </button>
-              ))}
+            <section aria-label='Recent searches' className='mt-3 flex items-center gap-2'>
+              <div
+                ref={recentsRef}
+                {...recentsHandlers}
+                className='scout-no-scrollbar scout-mask-fade-r flex min-w-0 flex-1 cursor-grab items-center gap-2 overflow-x-auto pb-1 select-none active:cursor-grabbing'>
+                {recentSearches.map((term) => (
+                  <button
+                    key={term}
+                    type='button'
+                    onClick={() => {
+                      recordRecentSearch(term);
+                      pushedRef.current = term;
+                      setDraft(term);
+                      setSearch({ q: term, tag: shownGenre });
+                    }}
+                    className='shrink-0 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium whitespace-nowrap text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                    {term}
+                  </button>
+                ))}
+              </div>
               <button
                 type='button'
                 onClick={clearRecentSearches}
                 aria-label='Clear recent searches'
-                className='shrink-0 rounded-full p-2 text-xs font-medium text-muted-foreground underline-offset-4 transition hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+                className='-ml-12 shrink-0 rounded-full bg-background py-2 pr-2 pl-12 text-sm font-medium whitespace-nowrap text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
                 Clear
               </button>
             </section>
@@ -264,12 +235,8 @@ export function RadioHeader({
           <fieldset className='m-0 min-w-0 border-0 p-0'>
             <legend className='sr-only'>Filter by genre</legend>
             <div
-              ref={railRef}
-              onPointerDown={onRailPointerDown}
-              onPointerMove={onRailPointerMove}
-              onPointerUp={endRailDrag}
-              onPointerCancel={endRailDrag}
-              onClickCapture={onRailClickCapture}
+              ref={genreRef}
+              {...genreHandlers}
               className='scout-no-scrollbar -mx-4 mt-3 flex cursor-grab gap-2 overflow-x-auto px-4 pb-1 select-none active:cursor-grabbing'>
               {GENRE_FILTERS.map((filter) => {
                 const active = shownGenre === filter.id;

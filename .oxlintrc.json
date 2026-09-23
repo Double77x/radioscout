@@ -413,6 +413,7 @@
           "blur-0",
           "grayscale-0",
           "scout-no-scrollbar",
+          "scout-mask-fade-r",
           "scout-segmented",
           "volume-slider",
           "bar-swap",

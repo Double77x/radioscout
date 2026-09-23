@@ -427,6 +427,14 @@
     display: none;
   }
 
+  /* Scout — dissolve a chip rail's trailing edge into an overlapping pill
+    (recent searches under Clear): chips fade over the last stretch instead
+    of clipping on a hard vertical line. */
+  .scout-mask-fade-r {
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 4.5rem), transparent 100%);
+    mask-image: linear-gradient(to right, #000 calc(100% - 4.5rem), transparent 100%);
+  }
+
   /* Scout — sliding-pill segmented control (listening breakdowns, sorts).
      Native radios own the checked state; `--active-index` (set from React)
      glides the ::before pill with no DOM measuring. */
