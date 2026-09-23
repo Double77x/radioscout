@@ -104,7 +104,12 @@ const Footer = () => {
             © {year} {siteConfig.name}. All rights reserved.
           </p>
           <p className='flex items-center gap-2 text-xs text-muted-foreground'>
-            <span>v{appVersion}</span>
+            <Link
+              to='/legal/changelog'
+              aria-label={`Changelog for version ${appVersion}`}
+              className='transition-colors hover:text-foreground'>
+              v{appVersion}
+            </Link>
             <span aria-hidden='true'>·</span>
             <span>Built By ❤️ Dan</span>
           </p>

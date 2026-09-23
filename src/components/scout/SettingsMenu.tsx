@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { version as appVersion } from "../../../package.json";
 import { Download, Monitor, Moon, Settings as SettingsIcon, Sun, Upload } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -193,7 +194,15 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         </section>
 
         <p className='px-2 pt-3 pb-1 text-center text-xs text-muted-foreground'>
-          RadioScout v{appVersion} · Built By ❤️ Dan
+          RadioScout{" "}
+          <Link
+            to='/legal/changelog'
+            onClick={() => setOpen(false)}
+            aria-label={`Changelog for version ${appVersion}`}
+            className='underline underline-offset-4 hover:text-foreground'>
+            v{appVersion}
+          </Link>{" "}
+          · Built By ❤️ Dan
         </p>
       </PopoverContent>
     </Popover>
