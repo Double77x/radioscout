@@ -137,9 +137,11 @@ test.describe("RadioScout home", () => {
 
     await page.getByRole("button", { name: "Reorder Test Jazz FM" }).hover();
     await page.mouse.down();
-    // The grabbed row lifts (scale + shadow) while the drag is active.
+    // The grabbed row lifts (shadow, no scale — scaling clipped at the column edge) while the drag is active.
     const lifted = page.locator('li[data-uuid="11111111-1111-1111-1111-111111111111"]');
-    await expect.poll(() => lifted.evaluate((el) => getComputedStyle(el).scale), { timeout: 5000 }).toBe("1.04");
+    await expect
+      .poll(() => lifted.evaluate((el) => getComputedStyle(el).boxShadow), { timeout: 5000 })
+      .not.toBe("none");
     const target = await plays.nth(1).boundingBox();
     if (!target) throw new Error("saved Rock row has no bounding box");
     await page.mouse.move(target.x + target.width / 2, target.y + target.height + 48, { steps: 12 });
@@ -170,6 +172,45 @@ test.describe("RadioScout home", () => {
     await page.mouse.move(box.x + 80, box.y + box.height + 96, { steps: 12 });
     await page.mouse.up();
 
+    await expect(plays.nth(0)).toHaveAttribute("aria-label", "Play Test Rock FM");
+  });
+
+  test("dropping does not jolt settled siblings", async ({ page }) => {
+    await page.getByRole("button", { name: "Save Test Rock FM to favourites" }).click();
+    await page.getByRole("button", { name: "Save Test Jazz FM to favourites" }).click();
+    await page.getByRole("button", { name: /Most loved/ }).click();
+    const plays = page.getByRole("button", { name: /Play Test (?<station>Jazz|Rock) FM/ });
+    await expect(plays.nth(0)).toHaveAttribute("aria-label", "Play Test Jazz FM");
+    await expect(page.getByText("Saved to favourites")).toHaveCount(0);
+
+    // Drag Jazz down past Rock; Rock rides shifted up while held.
+    const rock = page.locator('li[data-uuid="22222222-2222-2222-2222-222222222222"]');
+    const jazz = page.locator('li[data-uuid="11111111-1111-1111-1111-111111111111"]');
+    const box = await jazz.boundingBox();
+    if (!box) throw new Error("saved Jazz row has no bounding box");
+    await page.mouse.move(box.x + 80, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 80, box.y + box.height + 96, { steps: 12 });
+    const shiftedTop = await rock.evaluate((el) => el.getBoundingClientRect().top);
+    // Sample Rock across the drop: it must snap straight into its new slot,
+    // never jump a row further and glide back (a full row height excursion).
+    const trace = page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) throw new Error("no rock li");
+      return new Promise<number[]>((resolve) => {
+        const out: number[] = [];
+        const end = performance.now() + 600;
+        const loop = () => {
+          out.push(el.getBoundingClientRect().top);
+          if (performance.now() < end) requestAnimationFrame(loop);
+          else resolve(out);
+        };
+        requestAnimationFrame(loop);
+      });
+    }, 'li[data-uuid="22222222-2222-2222-2222-222222222222"]');
+    await page.mouse.up();
+    const tops = await trace;
+    expect(Math.min(...tops)).toBeGreaterThanOrEqual(shiftedTop - 12);
     await expect(plays.nth(0)).toHaveAttribute("aria-label", "Play Test Rock FM");
   });
 
@@ -207,9 +248,9 @@ test.describe("RadioScout home", () => {
     const section = page.getByRole("button", { name: /Listening/ });
     await expect(section).toBeVisible();
     await section.click();
-    await expect(page.getByText("Stats FM")).toBeVisible();
-    await expect(page.getByText("News FM")).toBeVisible();
-    await page.getByRole("button", { name: "Daily", exact: true }).click();
+    await expect(page.getByText("Stats FM").first()).toBeVisible();
+    await expect(page.getByText("News FM").first()).toBeVisible();
+    await page.getByText("Daily", { exact: true }).click();
     await expect(page.getByText("average day")).toBeVisible();
     await expect(page.getByText("Mon", { exact: true })).toBeVisible();
   });
@@ -239,7 +280,7 @@ test.describe("RadioScout home", () => {
     await page.reload();
     await page.waitForLoadState("networkidle");
     await page.getByRole("button", { name: /Listening/ }).click();
-    await expect(page.getByText("Stats FM")).toBeVisible();
+    await expect(page.getByText("Stats FM").first()).toBeVisible();
     await page.getByRole("button", { name: "Clear stats" }).click();
     const dialog = page.getByRole("dialog", { name: "Clear stats?" });
     await expect(dialog).toBeVisible();
