@@ -130,7 +130,6 @@ function TotalView({ stats }: { stats: ListeningSummary }) {
     key: string;
     name: string;
     label: string;
-    detail: ChipDetail;
     display: number;
     share: number;
     tone: string;
@@ -140,7 +139,6 @@ function TotalView({ stats }: { stats: ListeningSummary }) {
       key: station.stationuuid,
       name: station.name,
       label: row.label,
-      detail: detailChip(station.name, station.seconds, station.plays),
       display: row.value,
       share: total <= 0 ? 0 : (shareMetric(station) / total) * 100,
       tone: BAR_TONES[index] ?? BAR_TONES[0],
@@ -151,7 +149,6 @@ function TotalView({ stats }: { stats: ListeningSummary }) {
       key: "__other__",
       name: other.name,
       label: other.label,
-      detail: other.detail,
       display: other.value,
       share: total <= 0 ? 0 : (other.share / total) * 100,
       tone: "fill-muted-foreground",
@@ -185,7 +182,6 @@ function TotalView({ stats }: { stats: ListeningSummary }) {
             offset={cascade ? (starts[index] ?? 0) : 0}
             valueLabel={row.label}
             barClass={row.tone}
-            chip={row.detail}
           />
         ))}
       </ul>
@@ -235,27 +231,14 @@ function stationRow(station: ListeningStation, total: number, sort: SortMode): {
   return { value, label: `${modeLabel(station, sort)} (${share}%)` };
 }
 
-/** Full-stat chip parts: the station name (truncates) plus the numerical
- * detail (always fully visible) — the detail the row caption leaves out. */
-interface ChipDetail {
-  name: string;
-  stats: string;
-}
-
-function detailChip(name: string, seconds: number, plays: number): ChipDetail {
-  const average = formatListeningTime(Math.round(seconds / Math.max(1, plays)));
-  const sessions = `${plays} ${plays === 1 ? "session" : "sessions"}`;
-  return { name, stats: `${formatListeningTime(seconds)} · ${sessions} · ${average} avg` };
-}
-
 /** Muted "Other" row for everything outside the ranked top. Null when the
- * top accounts for every session. `share` backs the cascade position (and
- * formerly the ring); `value` is the displayed bar caption basis. */
+ * top accounts for every session. `share` backs the cascade position;
+ * `value` is the displayed bar caption basis. */
 function otherRow(
   top: ListeningStation[],
   stats: ListeningSummary,
   sort: SortMode,
-): { name: string; value: number; label: string; share: number; detail: ChipDetail } | null {
+): { name: string; value: number; label: string; share: number } | null {
   const topPlays = top.reduce((sum, station) => sum + station.plays, 0);
   const topSeconds = top.reduce((sum, station) => sum + station.seconds, 0);
   const otherPlays = stats.plays - topPlays;
@@ -267,12 +250,10 @@ function otherRow(
       value: otherPlays,
       label: `${otherPlays} ${otherPlays === 1 ? "session" : "sessions"} (${sharePct(otherPlays, stats.plays)}%)`,
       share: otherPlays,
-      detail: detailChip("Other sessions", otherSeconds, otherPlays),
     };
   }
   if (otherSeconds <= 0) return null;
   const timeShare = sharePct(otherSeconds, stats.totalSeconds);
-  const detail = detailChip("Other stations", otherSeconds, otherPlays);
   if (sort === "average") {
     const mean = Math.round(otherSeconds / Math.max(1, otherPlays));
     return {
@@ -280,7 +261,6 @@ function otherRow(
       value: mean,
       label: `${formatListeningTime(mean)} avg (${timeShare}%)`,
       share: otherSeconds,
-      detail,
     };
   }
   return {
@@ -288,7 +268,6 @@ function otherRow(
     value: otherSeconds,
     label: `${formatListeningTime(otherSeconds)} (${timeShare}%)`,
     share: otherSeconds,
-    detail,
   };
 }
 
@@ -501,18 +480,10 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub: st
   );
 }
 
-/** Chip alignment: edge chips pin to their side so the chip never clips,
- * middle chips centre over their bar. */
-function chipAlign(midPercent: number): string {
-  if (midPercent < 20) return "left-0";
-  if (midPercent > 80) return "right-0";
-  return "left-1/2 -translate-x-1/2";
-}
-
 /** Horizontal bar row: HTML labels (readers) + decorative SVG bar (sight).
  * `offset` (same units as `value`/`max`) shifts the bar right so ranked rows
- * tile end to end in cascade mode. With `chip`, the bar becomes a button:
- * hover shows the detail popover on desktop, tap toggles it on touch. */
+ * tile end to end in cascade mode. Plain list content — the caption carries
+ * the numbers, so there is no popover to maintain. */
 function BarRow({
   name,
   value,
@@ -520,7 +491,6 @@ function BarRow({
   offset = 0,
   valueLabel,
   barClass,
-  chip,
 }: {
   name: string;
   value: number;
@@ -528,67 +498,44 @@ function BarRow({
   offset?: number;
   valueLabel?: string;
   barClass?: string;
-  chip?: ChipDetail;
 }) {
-  const [open, setOpen] = useState(false);
   const width = Math.max(2, Math.min(100, (value / max) * 100));
   const x = Math.max(0, Math.min(100 - width, (offset / max) * 100));
-  const bar = (
-    <svg aria-hidden='true' className='block h-2 w-full'>
-      <rect x={0} y={0} width='100%' height={8} rx={4} className='fill-muted' />
-      <rect
-        x={`${x}%`}
-        y={0}
-        width={`${width}%`}
-        height={8}
-        rx={4}
-        className={cn("bar-swap", barClass ?? "fill-primary")}
-      />
-    </svg>
-  );
   return (
     <li>
-      <div className='flex items-baseline justify-between gap-2'>
+      <span className='flex items-baseline justify-between gap-2'>
         <span className='min-w-0 flex-1 truncate text-sm font-medium'>{name}</span>
         <span className='shrink-0 text-sm font-semibold text-muted-foreground tabular-nums'>
           {valueLabel ?? formatListeningTime(value)}
         </span>
-      </div>
-      {chip ? (
-        <button
-          type='button'
-          aria-label={`${chip.name}, ${chip.stats}`}
-          aria-expanded={open}
-          onClick={() => setOpen((isOpen) => !isOpen)}
-          onBlur={() => setOpen(false)}
-          className='group relative mt-1 block w-full cursor-pointer border-0 bg-transparent p-0'>
-          {bar}
-          <span
-            aria-hidden='true'
-            className={cn(
-              "absolute -top-9 z-10 flex max-w-64 items-baseline gap-1.5 rounded-full bg-scout-ink px-2.5 py-1 text-xs font-medium text-scout-paper",
-              open ? "flex" : "hidden",
-              "group-hover:flex group-focus-visible:flex",
-              chipAlign(x + width / 2),
-            )}>
-            <span className='min-w-0 flex-1 truncate'>{chip.name}</span>
-            <span className='shrink-0 whitespace-nowrap tabular-nums'>{chip.stats}</span>
-          </span>
-        </button>
-      ) : (
-        <div className='mt-1'>{bar}</div>
-      )}
+      </span>
+      <span className='mt-1 block' aria-hidden='true'>
+        <svg className='block h-2 w-full'>
+          <rect x={0} y={0} width='100%' height={8} rx={4} className='fill-muted' />
+          <rect
+            x={`${x}%`}
+            y={0}
+            width={`${width}%`}
+            height={8}
+            rx={4}
+            className={cn("bar-swap", barClass ?? "fill-primary")}
+          />
+        </svg>
+      </span>
     </li>
   );
 }
 
 /** One weekday column: the weekday's share of a typical week above a
- * fixed-height SVG bar. */
+ * fixed-height SVG bar. The native tooltip sits on the whole column so bar,
+ * captions and the gaps between all trigger it. */
 function DayColumn({ bucket, total }: { bucket: DayBucket; total: number }) {
   const average = averageOf(bucket);
   const barPx = average <= 0 || total <= 0 ? 0 : Math.max(8, (average / total) * DAY_COLUMN_PX);
   return (
-    <div className='flex min-w-0 flex-1 flex-col items-center gap-1'>
+    <div
+      title={`${bucket.label} — ${formatListeningTime(Math.round(averageOf(bucket)))} average across ${bucket.days} ${bucket.days === 1 ? "day" : "days"}`}
+      className='flex min-w-0 flex-1 flex-col items-center gap-1'>
       <span className='text-xs font-medium whitespace-nowrap text-muted-foreground tabular-nums'>
         {bucket.days === 0 ? "–" : formatListeningTime(Math.round(average))}
       </span>
@@ -605,17 +552,15 @@ function DayColumn({ bucket, total }: { bucket: DayBucket; total: number }) {
           />
         ) : null}
       </svg>
-      <abbr
-        title={`${bucket.label} — ${formatListeningTime(Math.round(averageOf(bucket)))} average across ${bucket.days} ${bucket.days === 1 ? "day" : "days"}`}
-        className='text-xs font-medium whitespace-nowrap text-muted-foreground no-underline'>
-        {bucket.label}
-      </abbr>
+      <abbr className='text-xs font-medium whitespace-nowrap text-muted-foreground no-underline'>{bucket.label}</abbr>
     </div>
   );
 }
 
 /** One trend column: raw seconds with a short caption below (the tooltip and
- * the screen-reader list carry the full date, time and session count). */
+ * the screen-reader list carry the full date, time and session count). The
+ * native tooltip sits on the whole column so bar, captions and the gaps
+ * between all trigger it. */
 function TrendColumn({
   label,
   sublabel,
@@ -640,7 +585,7 @@ function TrendColumn({
 }) {
   const barPx = seconds <= 0 ? 0 : Math.max(6, (seconds / max) * height);
   return (
-    <div className='flex min-w-0 flex-1 flex-col items-center gap-1'>
+    <div title={title} className='flex min-w-0 flex-1 flex-col items-center gap-1'>
       <svg aria-hidden='true' className='block w-full' style={{ height }}>
         <rect x={0} y={0} width='100%' height={height} rx={4} className='fill-muted' />
         {barPx > 0 ? (
@@ -655,7 +600,6 @@ function TrendColumn({
         ) : null}
       </svg>
       <abbr
-        title={title}
         className={cn(
           "text-center text-[10px] font-medium whitespace-nowrap tabular-nums no-underline",
           isToday ? "text-foreground" : "text-muted-foreground",
