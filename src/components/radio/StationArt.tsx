@@ -44,6 +44,7 @@ export function StationArt({ src, className, fallbackClassName, iconClassName }:
       alt=''
       loading='lazy'
       decoding='async'
+      draggable={false}
       referrerPolicy='no-referrer'
       onError={() => setFailed(true)}
       className={cn("shrink-0 object-cover", className)}
