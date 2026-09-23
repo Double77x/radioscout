@@ -12,6 +12,7 @@ import {
   Heart,
   History,
   Languages,
+  MapPin,
   MoonStar,
   Play,
   Radio,
@@ -79,7 +80,14 @@ const GROUPS: FeatureGroup[] = [
         Icon: Languages,
         tint: TINTS[2],
         title: "Language filter",
-        body: "Top-40 quick picks plus the full directory list. Empty means worldwide; applies to charts and results.",
+        body: "Top-40 quick picks plus the full directory list. Applies to charts and results, empty means worldwide.",
+        platform: "Web + APK",
+      },
+      {
+        Icon: MapPin,
+        tint: TINTS[3],
+        title: "Location filter",
+        body: "Flag-bearing country picker with top-country quick picks plus the full directory list. Applies to charts and results, empty means worldwide.",
         platform: "Web + APK",
       },
       {
@@ -114,7 +122,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: ChartColumn,
         tint: TINTS[1],
         title: "Listening stats",
-        body: "Total time and daily averages, banked when the tab hides or the app goes to the background, even if it gets killed.",
+        body: "Total time, trends, streaks and sortable top stations, all banked when the tab hides or the app goes to the background, even if it gets killed.",
         platform: "Web + APK",
       },
       {
@@ -198,7 +206,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: Command,
         tint: TINTS[5],
         title: "Quick Find",
-        body: "A fuzzy palette across sections, pages and theme actions on Mod+K. No mouse needed.",
+        body: "A fuzzy palette across home sections, pages and theme actions on Mod+K. No mouse needed.",
         platform: "Web + APK",
       },
       {

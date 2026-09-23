@@ -68,6 +68,11 @@ ignoreExports = [
     "toggleMute",
     "togglePlay",
   ] },
+  # Lazily-loaded directory chunk (dynamic import in LocationPicker — the
+  # static graph can't see the member access, same as language-all).
+  { file = "src/lib/radio/country-all.ts", exports = [
+    "DIRECTORY_COUNTRIES",
+  ] },
 ]
 production = false
 
