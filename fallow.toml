@@ -37,6 +37,39 @@ ignoreDependencies = [
   "@capacitor/share", # radio backup export share sheet (dynamic import in lib/files.ts)
 ]
 ignoreExportsUsedInFile = true
+# Player engine facade (Phase 1e): hooks/use-player re-exports lib/player/engine
+# so consumer import paths stay stable. Intentional barrel — scoped to the 12
+# shared names so genuinely dead exports elsewhere are still flagged.
+ignoreExports = [
+  { file = "src/hooks/use-player.ts", exports = [
+    "applyPlayerPrefs",
+    "cancelSleepTimer",
+    "pause",
+    "play",
+    "resume",
+    "setNormalization",
+    "setSleepTimer",
+    "setVolume",
+    "stop",
+    "toggle",
+    "toggleMute",
+    "togglePlay",
+  ] },
+  { file = "src/lib/player/engine.ts", exports = [
+    "applyPlayerPrefs",
+    "cancelSleepTimer",
+    "pause",
+    "play",
+    "resume",
+    "setNormalization",
+    "setSleepTimer",
+    "setVolume",
+    "stop",
+    "toggle",
+    "toggleMute",
+    "togglePlay",
+  ] },
+]
 production = false
 
 [rules]
