@@ -45,7 +45,7 @@ Radio switcher (`radioscout`). The Scout home-inventory app was purged
 - [x] Auto-reconnect dropped streams (backoff retry + quiet toast)
 - [x] Recent searches (history chips under search)
 - [ ] Now-playing track titles on APK (ExoPlayer ICY StreamTitle → dock + notification)
-- [ ] Player engine split follow-up (store core + pure leaves extracted; remaining transport/handoff/leveling/sleep share element/volume/fade singletons — needs a state-container pass, same move-gate-prove discipline)
+- [x] Player engine split (2026-09-23, zero-regression, move-gate-prove per phase): `lib/player/{fades,sleep-timer,native-bridge,leveling}.ts` unit-tested leaves extracted, state machine relocated verbatim to `lib/player/engine.ts`, `hooks/use-player.ts` left a 48-line facade (`usePlayer` + explicit re-exports, consumer paths untouched). Handoff/transport seam deliberately NOT cut — one state machine sharing live/staged elements, tokens, `usingNative`, leveling refs and reconnect flags (splitting moves complexity without concentrating it); see `docs/REFACTOR_PLAYER_ENGINE_PLAN.md`
 - [x] Station card skeletons (`StationCardSkeleton`/`StationListSkeleton` mirror row geometry — Saved, history, top, search swap with no shift; `aria-busy` on sections; `isFetching`-gated so empty states never flash)
 - [x] RadioScout mark (glass music note + sparkle): inline `Logo.tsx` (per-instance IDs, dark-scheme silver note), `generate-icons.mjs` + full regen (public SVGs/PNGs/ICO, `assets/`, 123 android drawables)
 - [x] Settings redo (no tabs): Data (radio export/import) + Style stacked in one scroll view; household/backup sections gone with the purge

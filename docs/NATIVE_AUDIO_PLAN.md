@@ -13,9 +13,10 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
    `AndroidManifest.xml`). Do NOT fix with `cleartext: true` — Play policy and
    security downgrade for the whole app.
 2. **HLS (`.m3u8`) streams.** Chrome/Android WebView cannot play them in
-   `<audio>` — `use-player.ts` already gates these behind `needsNative`, but
-   `playViaNative` (`use-player.ts:115`) is a stub returning `false`, so they
-   never play anywhere today.
+   `<audio>` — the web path gates these behind `needsNative` and the APK
+   takeover lives in `playViaNative` (`lib/player/engine.ts`), which hands
+   the resolved URL to the Media3 service; WebView-alone still cannot play
+   them, so they need the native player everywhere.
 3. **Background playback.** When the WebView dies, audio dies. Radio needs a
    foreground service + MediaSession to survive.
 
