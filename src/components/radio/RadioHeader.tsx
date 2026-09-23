@@ -139,6 +139,8 @@ export function RadioHeader({
           type='button'
           onClick={openPalette}
           aria-label='Quick find'
+          aria-keyshortcuts='Control+k Meta+k'
+          title='Quick find (Ctrl+K)'
           className='grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
           <Search className='size-5' />
         </button>
