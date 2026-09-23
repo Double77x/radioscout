@@ -145,13 +145,14 @@ export function pickPlayableUrl(station: Station): string {
 /**
  * Hosts verified to serve the same stream over TLS when the directory still
  * lists `http://` (checked 2026-09-23: BBC HLS on Akamai 301s http→https and
- * plays, yet both `url` and `url_resolved` stay http — the directory can't
- * prove the upgrade, so the client canonicalizes it). Exact-host allowlist
- * on purpose: blind scheme-swaps on unverified hosts surface as misleading
- * TLS errors. Verify a candidate by loading its https variant directly
- * before adding it here.
+ * plays, yet both `url` and `url_resolved` stay http; Global's
+ * media-the.musicradio.com serves byte-identical Icecast audio + ICY
+ * metadata over TLS — the directory can't prove the upgrade, so the client
+ * canonicalizes it). Exact-host allowlist on purpose: blind scheme-swaps on
+ * unverified hosts surface as misleading TLS errors. Verify a candidate by
+ * loading its https variant directly before adding it here.
  */
-const HTTPS_UPGRADE_HOSTS = new Set(["as-hls-ww-live.akamaized.net"]);
+const HTTPS_UPGRADE_HOSTS = new Set(["as-hls-ww-live.akamaized.net", "media-the.musicradio.com"]);
 
 /** Lowercase hostname of an absolute URL, or "" when unparseable. Never throws. */
 export function hostOfUrl(raw: string): string {
