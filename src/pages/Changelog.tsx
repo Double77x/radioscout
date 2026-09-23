@@ -8,6 +8,33 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.6 - Listening stats, smoother toggles, more playable stations</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Listening section grows a Trend tab — last-14-days and last-12-weeks strips, daypart rhythm, day streaks
+              and records (best day, longest session)
+            </li>
+            <li>
+              Top stations sort by total, sessions or average, with tinted bars, share percentages, an Other stations
+              row, an optional cascade layout and detail popovers on every bar
+            </li>
+            <li>
+              Command palette (Ctrl+K) jumps straight to Saved, Most loved, Recently played and Listening — expanding
+              the section and scrolling to it
+            </li>
+            <li>Most loved header now shows the active quality floor next to the language filter</li>
+            <li>
+              Pill toggles glide a sliding indicator everywhere (listening, quality, theme), the settings flyout fades
+              in and out, and bars animate between layouts
+            </li>
+            <li>
+              Stations on verified https-upgrade hosts (BBC Radio 2 and friends) are back in every list instead of being
+              filtered out as HTTP-only
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.5 - Titles light up on Android</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
