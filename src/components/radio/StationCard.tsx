@@ -22,6 +22,12 @@ interface StationCardProps {
   outerClassName?: string;
   /** Row press handler for drag-from-anywhere (Saved reorder). */
   onRowPointerDown?: (event: React.PointerEvent<HTMLLIElement>, uuid: string) => void;
+  /**
+   * Mount enter animation. Off for reorderable rows: DOM moves re-trigger
+   * the fill animation on drop (opacity flash + translateY replay over the
+   * settle glide), so Saved rows mount plain and move cleanly.
+   */
+  animate?: boolean;
 }
 
 /** One row in the station lists. 40px targets, lazy favicons. */
@@ -37,6 +43,7 @@ export function StationCard({
   outerStyle,
   outerClassName,
   onRowPointerDown,
+  animate = true,
 }: StationCardProps) {
   const meta = [
     station.bitrate > 0 ? `${station.bitrate}k` : null,
@@ -49,15 +56,19 @@ export function StationCard({
   return (
     <li
       data-uuid={dataUuid}
+      data-testid='station-row'
+      data-playing={playing ? "true" : "false"}
       style={outerStyle}
       onPointerDown={onRowPointerDown ? (event) => dataUuid && onRowPointerDown(event, dataUuid) : undefined}
       className={cn(
-        "flex min-h-16 animate-scout-enter items-center gap-2 rounded-3xl border border-border bg-card p-3 pr-2",
+        "flex min-h-16 items-center gap-2 rounded-3xl border border-border bg-card p-3 pr-2",
+        animate && "animate-scout-enter",
         outerClassName,
       )}>
       <Button
         type='button'
         size='icon'
+        data-testid='station-play'
         aria-label={playing ? `Pause ${station.name}` : `Play ${station.name}`}
         onClick={() => onPlay(station)}
         className={cn(

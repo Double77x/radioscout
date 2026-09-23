@@ -5,6 +5,7 @@ import { StationDetailSheet } from "../radio/StationDetailSheet";
 import { SwipeBack } from "./SwipeBack";
 import Footer from "@/components/Footer";
 import { useCloseStationDetail } from "@/hooks/use-station-detail";
+import { useAgenticPlay } from "@/hooks/use-agentic-play";
 import { armListeningFlush, disarmListeningFlush } from "@/lib/player/store";
 
 interface AppShellProps {
@@ -21,6 +22,7 @@ interface AppShellProps {
  */
 export function AppShell({ children }: AppShellProps) {
   const closeDetail = useCloseStationDetail();
+  useAgenticPlay();
 
   // Page-lifecycle flush for listening stats: banks the partial session when
   // the tab hides or unloads (the OS may kill the page with no later events).

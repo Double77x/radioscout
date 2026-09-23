@@ -167,7 +167,10 @@ export function PlayerDock() {
   }, []);
 
   return (
-    <section aria-label='Player' className='sticky bottom-0 z-40 px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]'>
+    <section
+      aria-label='Player'
+      data-testid='player-dock'
+      className='sticky bottom-0 z-40 px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]'>
       <div className='relative rounded-full border border-border bg-card p-2 shadow-lg shadow-black/5 backdrop-blur-xl'>
         <div className='relative flex items-center gap-2'>
           {station ? (
@@ -240,6 +243,7 @@ export function PlayerDock() {
               </button>
               <button
                 type='button'
+                data-testid='player-toggle'
                 aria-label={playing ? `Pause ${station.name}` : `Play ${station.name}`}
                 onClick={() => {
                   if (!playing && !busy) play(station);

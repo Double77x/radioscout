@@ -8,6 +8,8 @@ const homeSearchSchema = z.object({
   tag: z.string().optional(),
   /** Shareable station link (`/?station=<uuid>`) — opens the detail sheet. */
   station: z.string().optional(),
+  /** Agentic autoplay (`/?play=<uuid|alias|name>`, or `&play=1` with `?station=`). Stripped after resolving. */
+  play: z.string().optional(),
 });
 
 export const Route = createFileRoute("/")({

@@ -14,9 +14,29 @@ For agents working on the RadioScout codebase, read the guidance files below bef
 - [TECH_STACK.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/TECH_STACK.md): Complete list of libraries and versions.
 - [ROADMAP.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/ROADMAP.md): Planned features and direction.
 
+## How to play a station (agentic use)
+
+Give the user audio with one navigation — the URL is the API:
+
+- `https://radioscout.pages.dev/?play=kisstory` — play by curated alias or name.
+- `https://radioscout.pages.dev/?play=bbc-radio-1` — aliases use lowercase hyphens.
+- `https://radioscout.pages.dev/?station=<uuid>&play=1` — deterministic play when you know the uuid.
+- `https://radioscout.pages.dev/?q=kisstory` — search without autoplay; pick a row.
+- `https://radioscout.pages.dev/?station=<uuid>` — open the detail sheet without autoplay.
+
+Resolution: exact uuid first, then the curated alias table, then free-text directory
+search (first playable `https://` hit). The `play` param is stripped after resolving,
+so refresh never replays. Only `https://` streams play on web. Full contract:
+[AGENTIC_PLAY.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/AGENTIC_PLAY.md).
+
+Stable hooks for browser agents: `data-testid="radio-search"` (search input),
+`data-testid="station-row"` + `data-testid="station-play"` (per-station row and play
+button), `data-testid="player-dock"` + `data-testid="player-toggle"` (dock).
+
 ## Tools
 
-- [RadioScout home](https://radioscout.pages.dev/): Search, genre chips, Most loved / Saved / Recently played, persistent player dock.
+- [RadioScout home](https://radioscout.pages.dev/): Search, genre chips, Most loved / Best of British / Saved / Recently played, persistent player dock.
+- Quick Find (`Ctrl/⌘+K` on the site): fuzzy search across home sections, pages, external links and theme actions — the fastest route for browser agents.
 - [Features](https://radioscout.pages.dev/features): Core capabilities across the web app and Android APK.
 
 ## Optional
