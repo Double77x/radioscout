@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "@tanstack/react-router";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { Library, LoaderCircle, Pause, Play, Radio, Shuffle, Square, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StationArt } from "@/components/radio/StationArt";
@@ -127,6 +128,21 @@ export function PlayerDock() {
 
   const busy = status === "loading";
   const playing = status === "playing";
+  // Play/pause hotkey (YouTube-style "k"). Bare Space/Enter are deliberately
+  // NOT bound: Space scrolls the page and activates any focused button
+  // (dock toggle would double-fire into a no-op), Enter submits search and
+  // selects palette items. A bare letter defaults to ignoreInputs, so typing
+  // "k" in search/palette never toggles; it also never natively activates a
+  // focused button, so no double-fire there either.
+  useHotkey(
+    "K",
+    (event) => {
+      event.preventDefault();
+      if (!playing && !busy && station) play(station);
+      else toggle();
+    },
+    { enabled: station !== null },
+  );
   const level = muted ? 0 : volume;
   const VolumeIcon = level === 0 ? VolumeX : level < 0.5 ? Volume1 : Volume2;
   const overlayOpen = volumeOpen && station !== null;
@@ -245,6 +261,8 @@ export function PlayerDock() {
                 type='button'
                 data-testid='player-toggle'
                 aria-label={playing ? `Pause ${station.name}` : `Play ${station.name}`}
+                aria-keyshortcuts='k'
+                title={playing ? "Pause (K)" : "Play (K)"}
                 onClick={() => {
                   if (!playing && !busy) play(station);
                   else toggle();
