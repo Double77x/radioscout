@@ -6,9 +6,19 @@ Live: **https://radioscout.pages.dev** — prerendered on Cloudflare Pages, hydr
 
 A free worldwide radio player that ships as static HTML from Cloudflare Pages — and as an Android APK from the same artifact. Type-safe routing, local-first IndexedDB state (favourites, history, prefs), persistent player dock with volume, backup export/import — all wired with Base UI and Tailwind.
 
+## Features
+
+Full tour: **[radioscout.pages.dev/features](https://radioscout.pages.dev/features)**.
+
+- **Discover** — top 50 stations by votes, full-text search with up to 50 results and shareable URLs, one-tap genre chips, recent searches, top-40 language quick picks, and a minimum-bitrate cutoff. Only playable `https://` streams are listed.
+- **Library** — saved favourites with drag-to-reorder, recent plays, listening stats banked even if the app is killed, and station sheets with art, tags, flags, votes, and shareable links. Everything lives in on-device IndexedDB: no accounts, no sync, works offline.
+- **Player** — persistent dock with gapless crossfade switching, volume plus per-station leveling, sleep timer with dock countdown, surprise shuffle, quick resume that reloads your last station, auto-reconnect with backoff, and lockscreen controls (MediaSession on web, notifications on Android).
+- **Personal** — light, dark, or device-following theme with no flash, Mod+K Quick Find palette, a one-JSON radio backup that moves favourites, history, stats, volume, votes, and filters between browser and APK, and home-screen install as a PWA.
+- **Android APK** — the same static build in a Capacitor shell: background audio service, zero-service OTA updates from GitHub Releases, theme-following status bar, edge-swipe and hardware back handling, and share-sheet backup export.
+
 ## What you get
 
-Routing is file-based and type-safe with validation and intent preload. The build uses TanStack Start SSG; `crawlLinks` writes every route to `dist/client` for Pages (and the Capacitor shell — 7 pages). Client state goes through TanStack Query over Dexie (IndexedDB, isolated RadioDB for favourites/history) with a Zod-validated backup envelope. Favourites, history, votes and backup export/import work fully offline; hotkeys cover Mod+K. Primitives come from Base UI (Dialog, Select, Popover, Accordion, Tooltip, Sonner) in shadcn style without Radix. Styling is Tailwind v4 with `@theme` tokens. Icons are Lucide plus the inline glass-note brand mark, fonts are self-hosted Poppins with a metric fallback, and security and quality come from CSP, axe-core checks, and the Rust tools oxlint, oxfmt and the react-doctor plugin plus Fallow.
+Routing is file-based and type-safe with validation and intent preload. The build uses TanStack Start SSG; `crawlLinks` writes every route to `dist/client` for Pages (and the Capacitor shell — 8 pages). Client state goes through TanStack Query over Dexie (IndexedDB, isolated RadioDB for favourites/history) with a Zod-validated backup envelope. Favourites, history, votes and backup export/import work fully offline; hotkeys cover Mod+K. Primitives come from Base UI (Dialog, Select, Popover, Accordion, Tooltip, Sonner) in shadcn style without Radix. Styling is Tailwind v4 with `@theme` tokens. Icons are Lucide plus the inline glass-note brand mark, fonts are self-hosted Poppins with a metric fallback, and security and quality come from CSP, axe-core checks, and the Rust tools oxlint, oxfmt and the react-doctor plugin plus Fallow.
 
 ## Requirements
 
@@ -63,7 +73,7 @@ Quality gates before you open a PR:
 pnpm lint                 # oxlint
 pnpm format               # oxfmt
 npx tsc -b --noEmit       # typecheck
-pnpm build                # must prerender 7 pages
+pnpm build                # must prerender 8 pages
 npx fallow audit --format json --quiet 2>/dev/null
 # 0 = clean, 1 = findings, 2 = error envelope
 pnpm test:unit            # vitest
@@ -85,10 +95,10 @@ src/
     layout/    LegalLayout, Prose
     shared/    StateShell (error/404 shells)
     ui/        Base UI primitives (accordion, badge, button, input, popover, select, sonner, tooltip)
-    Navbar.tsx, ThemeToggle.tsx, CommandPalette.tsx, RootDocument.tsx, Logo.tsx, …
+    CommandPalette.tsx, RootDocument.tsx, Logo.tsx, …
   data/        navigation (single source for nav + palette), legal
-  hooks/       use-radio, use-player (Query + Dexie), use-station-detail, use-persistent-state,
-                use-navbar-scroll, use-is-client, use-theme-toggle
+  hooks/       use-radio, use-player (Query + Dexie), use-station-detail, use-persistent-state
+                and use-is-client
   lib/         radio/ (api, store, prefs, backup, votes, genres, ota), files,
                 format, capacitor, focus-radio-search, animated-back, site, utils
   pages/       Home, legal pages, Changelog

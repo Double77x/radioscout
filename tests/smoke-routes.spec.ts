@@ -20,6 +20,7 @@ test.describe("Route smoke tests", () => {
     { path: "/legal/security", title: "Security" },
     { path: "/legal/changelog", title: "Changelog" },
     { path: "/adding-stations", title: "Adding stations" },
+    { path: "/features", title: "Features" },
   ]) {
     test(`legal page ${route.path} renders ${route.title}`, async ({ page }) => {
       await page.goto(route.path);

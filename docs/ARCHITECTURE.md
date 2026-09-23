@@ -8,7 +8,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
 
 1. **Home (`/`):**
    - `HomePage` with URL search state (`q`, `tag`): `RadioHeader` (search + genre chips + directory total), accordion sections (Saved first, Most loved, Recently played), footer directory credit. Search autofocuses on fine-pointer devices; the dock Browse button focuses it from anywhere via event.
-   - Prerendered to static HTML at build time (7 pages) with embedded SEO meta, JSON-LD schemas, and OpenGraph headers.
+   - Prerendered to static HTML at build time (8 pages) with embedded SEO meta, JSON-LD schemas, and OpenGraph headers.
 2. **Station lists:**
    - `StationCard` rows (play, art, details sheet, favourite, drag-reorder in Saved).
    - Card-shaped skeletons (`StationCardSkeleton`/`StationListSkeleton`) mirror row geometry so lists swap with no shift; sections carry `aria-busy`.
@@ -29,7 +29,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
   - Mounts global providers (`ThemeProvider`, `TooltipProvider`, `Sonner`).
 - **File-Based Routes (`src/routes/`):**
   - Home (`/`) plus legal pages code-split via `.lazy.tsx` chunks.
-  - SSG prerender crawls chip and card links and produces static `.html` files for all 7 pages during `pnpm build`.
+  - SSG prerender crawls chip and card links and produces static `.html` files for all 8 pages during `pnpm build`.
 - **Catch-All 404 (`src/routes/$.tsx`):**
   - Handles unmatched client routes cleanly.
 
@@ -48,7 +48,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
   - `AppShell` (`src/components/scout/AppShell.tsx:1`): Mobile-first centred-column frame with `PlayerDock` and `StationDetailSheet`.
   - `LegalLayout` (`src/components/layout/LegalLayout.tsx:1`): Clean reading layout with breadcrumbs, now driven by `LegalLayout` + `Prose`/`ProseH2` (`src/components/layout/Prose.tsx:1`).
   - `StateShell`/`CenteredState` (`src/components/shared/StateShell.tsx:1`): Unified full-page error/404 shells (used by `GlobalErrorComponent`, `NotFoundComponent`).
-- **Navigation Single Source:** `src/data/navigation.ts:1` (`NAV_LINKS`, `FOOTER_*`, `COMMAND_STATIC_ITEMS` + `LEGAL_META` from `src/data/legal.ts:1`) drives `Navbar`, `Footer`, and `CommandPalette` (fuzzy search via Fuse.js) — eliminates drift between palette, footer, and route SEO.
+- **Navigation Single Source:** `src/data/navigation.ts:1` (`FOOTER_*`, `COMMAND_STATIC_ITEMS` + `LEGAL_META` from `src/data/legal.ts:1`) drives `Footer` and `CommandPalette` (fuzzy search via Fuse.js) — eliminates drift between palette, footer, and route SEO.
 - **Site Config:** `src/lib/site.ts:1` centralizes `url`, `email`, `links` (github/twitter) for `Seo`/`Footer`.
 - **Typography:** Self-hosted Poppins font family with pre-computed CSS metric fallbacks to prevent layout shift.
 - **Scout Tokens:** `src/styles/index.css:1` maps `--scout-*` brand and pastel-tint variables (plus `text-scout-title`, `rounded-scout-card`/`rounded-scout-hero`) into Tailwind v4 theme tokens — no arbitrary values in components.

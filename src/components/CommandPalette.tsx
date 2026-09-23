@@ -12,8 +12,9 @@ import { COMMAND_ACTION_THEME, COMMAND_STATIC_ITEMS } from "@/data/navigation";
 interface CommandItem {
   id: string;
   title: string;
-  category: "Sections" | "Legal" | "Actions";
+  category: "Sections" | "Legal" | "Actions" | "Links";
   to?: string;
+  href?: string;
   action?: () => void;
   icon: LucideIcon;
   synonyms: string[];
@@ -85,6 +86,8 @@ export function CommandPalette() {
     (item: CommandItem) => {
       if (item.action) {
         item.action();
+      } else if (item.href) {
+        globalThis.open(item.href, "_blank", "noopener,noreferrer");
       } else if (item.to) {
         if (item.to.startsWith("/#")) {
           navigate({ to: "/" });

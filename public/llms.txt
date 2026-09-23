@@ -17,6 +17,7 @@ For agents working on the RadioScout codebase, read the guidance files below bef
 ## Tools
 
 - [RadioScout home](https://radioscout.pages.dev/): Search, genre chips, Most loved / Saved / Recently played, persistent player dock.
+- [Features](https://radioscout.pages.dev/features): Core capabilities across the web app and Android APK.
 
 ## Optional
 

@@ -55,7 +55,6 @@ inventory (all load-bearing, no declarative alternative found 2026-09-10):
 - `CommandPalette.tsx:144` — search-input focus timer (dialog focus trap settles after mount; `autoFocus` loses the race).
 - `CommandPalette.tsx:154` — `open-command-palette` global event subscription (cross-component signal without prop drilling).
 - `NativeShell.tsx` — Capacitor StatusBar/Splash imperative APIs + App back-button and OTA update subscriptions (native bridge, client-only by construction).
-- `use-navbar-scroll.ts:50` — IntersectionObserver wiring for scroll state + scroll-spy (imperative browser API).
 - `SavedStations.tsx` — unmount mid-drag aborts the gesture listeners (they own no state).
 - `RadioHeader.tsx` — search-input focus subscription (`focus-radio-search` event + fine-pointer autofocus on mount; no declarative alternative for cross-component focus).
 - `SwipeBack.tsx:81` — back-animator registration/cleanup (subscription by nature).

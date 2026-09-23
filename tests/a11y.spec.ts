@@ -23,6 +23,7 @@ const routes = [
   "/legal/security",
   "/legal/changelog",
   "/adding-stations",
+  "/features",
 ];
 
 for (const path of routes) {

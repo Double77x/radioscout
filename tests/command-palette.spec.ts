@@ -41,6 +41,31 @@ test.describe("Quick Find Command Palette (TanStack Hotkeys)", () => {
     await expect(page).toHaveURL("/");
   });
 
+  test("finds the Adding stations footer link and navigates with keyboard", async ({ page }) => {
+    await page.keyboard.press("Control+k");
+    const input = page.getByPlaceholder("Type a command or search...");
+    await expect(input).toBeVisible();
+
+    await input.fill("adding stations");
+    const item = page.getByRole("button", { name: /Adding stations/i }).first();
+    await expect(item).toBeVisible();
+
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL("/adding-stations");
+  });
+
+  test("finds the external footer links (Android app, GitHub)", async ({ page }) => {
+    await page.keyboard.press("Control+k");
+    const input = page.getByPlaceholder("Type a command or search...");
+    await expect(input).toBeVisible();
+
+    await input.fill("apk");
+    await expect(page.getByRole("button", { name: /Android app/i }).first()).toBeVisible();
+
+    await input.fill("github");
+    await expect(page.getByRole("button", { name: /GitHub repository/i }).first()).toBeVisible();
+  });
+
   test("cycles through items with ArrowDown and ArrowUp keys", async ({ page }) => {
     await page.keyboard.press("Control+k");
     const input = page.getByPlaceholder("Type a command or search...");
