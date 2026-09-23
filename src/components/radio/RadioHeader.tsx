@@ -1,4 +1,4 @@
-import { useEffect, useRef, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft, Search, X } from "lucide-react";
 import { SettingsMenu } from "@/components/scout/SettingsMenu";
@@ -49,10 +49,18 @@ export function RadioHeader({
   const shownQuery = isClient ? query : "";
   const shownGenre = isClient ? genre : "all";
   const [recentSearches] = usePersistentStrings(RECENT_SEARCHES_KEY, RECENT_SEARCHES_FALLBACK);
+  // The box is typed into faster than router navigations commit: driving
+  // `value` straight from the URL lets a still-committing keystroke rewrite
+  // the field mid-word and collapse the cursor. So the draft owns the box
+  // while focused, and the URL is pushed underneath on every keystroke
+  // (results stay live); the effect below adopts URL edits that came from
+  // anywhere else (chips, clear, back/forward, palette jumps).
+  const [draft, setDraft] = useState(shownQuery);
+  const pushedRef = useRef(shownQuery);
   // Recents only make sense on the client with an empty box: while typing,
   // results own the space below. Gated on `isClient` like the query above
   // so the prerender never mismatches hydration.
-  const showRecents = isClient && searchable && shownQuery === "" && recentSearches.length > 0;
+  const showRecents = isClient && searchable && draft === "" && recentSearches.length > 0;
   const searchRef = useRef<HTMLInputElement | null>(null);
   // Drag-to-scroll state for the chip rail (mouse only — touch keeps
   // native momentum scrolling). Refs only, no effects: pointer handlers
@@ -72,6 +80,17 @@ export function RadioHeader({
     return () => globalThis.removeEventListener(FOCUS_RADIO_SEARCH_EVENT, onFocusSearch);
   }, [autoFocus]);
 
+  // Adopt URL edits from elsewhere (chips, clear button, back/forward,
+  // palette section jumps) — but never while the user is mid-keystroke, or
+  // a lagging commit yanks the cursor. A subscription-by-nature exception
+  // alongside the focus one above: the URL is written from many owners.
+  useEffect(() => {
+    if (document.activeElement !== searchRef.current && query !== pushedRef.current) {
+      pushedRef.current = query;
+      setDraft(query);
+    }
+  }, [query]);
+
   const setSearch = (next: { q?: string; tag?: string }) =>
     navigate({
       to: "/",
@@ -84,6 +103,8 @@ export function RadioHeader({
     });
 
   const clearSearch = () => {
+    pushedRef.current = "";
+    setDraft("");
     setSearch({ tag: shownGenre });
     searchRef.current?.focus();
   };
@@ -173,6 +194,7 @@ export function RadioHeader({
               />
               <Input
                 id='radio-search'
+                data-testid='radio-search'
                 ref={searchRef}
                 type='search'
                 autoComplete='off'
@@ -181,15 +203,27 @@ export function RadioHeader({
                     ? "Search stations…"
                     : `Search ${formatStationCount(totalStations)}+ stations…`
                 }
-                value={shownQuery}
-                onChange={(event) => setSearch({ q: event.target.value, tag: shownGenre })}
-                onBlur={() => recordRecentSearch(shownQuery)}
+                value={draft}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  pushedRef.current = next;
+                  setDraft(next);
+                  setSearch({ q: next, tag: shownGenre });
+                }}
+                onBlur={() => {
+                  recordRecentSearch(draft);
+                  // Converge a box left stale by an in-flight commit.
+                  if (query !== pushedRef.current) {
+                    pushedRef.current = query;
+                    setDraft(query);
+                  }
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter") recordRecentSearch(shownQuery);
+                  if (event.key === "Enter") recordRecentSearch(draft);
                 }}
                 className='h-12 rounded-full border-border bg-card pr-12 pl-11 text-base shadow-sm placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:hidden'
               />
-              {shownQuery === "" ? null : (
+              {draft === "" ? null : (
                 <button
                   type='button'
                   onClick={clearSearch}
@@ -209,6 +243,8 @@ export function RadioHeader({
                   type='button'
                   onClick={() => {
                     recordRecentSearch(term);
+                    pushedRef.current = term;
+                    setDraft(term);
                     setSearch({ q: term, tag: shownGenre });
                   }}
                   className='shrink-0 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
@@ -250,7 +286,7 @@ export function RadioHeader({
                     draggable={false}
                     search={(prev) => ({
                       tag: filter.id === "all" ? undefined : filter.id,
-                      q: shownQuery || undefined,
+                      q: draft || undefined,
                       station: prev.station,
                     })}
                     replace

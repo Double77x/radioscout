@@ -61,3 +61,4 @@ inventory (all load-bearing, no declarative alternative found 2026-09-10):
 - `SwipeBack.tsx:81` — back-animator registration/cleanup (subscription by nature).
 - `NativeShell.tsx` OTA check — one-shot native boot check with an AbortController-owned fetch (not reactive data; Query would add a subscription lifecycle to a fire-and-forget bridge call).
 - `Home.tsx` — `open-home-section` global event subscription (command palette lives outside Home; expands the accordion section before scrolling it into view).
+- `RadioHeader.tsx` — search-box draft adoption (URL writes come from typing, chips, clear, back/forward and palette jumps; adopting a still-committing navigation while focused is what yanked the cursor mid-word).
