@@ -7,7 +7,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
 ### Key Modules
 
 1. **Home (`/`):**
-   - `HomePage` with URL search state (`q`, `tag`): `RadioHeader` (search + genre chips + directory total), accordion sections (Saved first, Most loved, Recently played), footer directory credit. Search autofocuses on fine-pointer devices; the dock Browse button focuses it from anywhere via event.
+   - `HomePage` with URL search state (`q`, `tag`): `RadioHeader` (search + genre chips + directory total), accordion sections (Saved first, Most loved, Best of British, Recently played, Listening), footer directory credit. Search autofocuses on fine-pointer devices; the dock Browse button focuses it from anywhere via event.
    - Prerendered to static HTML at build time (8 pages) with embedded SEO meta, JSON-LD schemas, and OpenGraph headers.
 2. **Station lists:**
    - `StationCard` rows (play, art, details sheet, favourite, drag-reorder in Saved).
@@ -20,6 +20,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
    - **Shortcuts:** Powered by `@tanstack/react-hotkeys` (`⌘K` / `Ctrl+K`, `Esc`).
    - **Dialog Shell:** Base UI Dialog (`@base-ui/react/dialog`) with smooth animations and accessibility.
    - **Search:** Client-side fuzzy search via Fuse.js across sections, legal pages, and theme actions.
+   - **Maintenance contract (no silent gaps):** every home section and every footer/external link must be reachable from Quick Find. Adding a home section means three matching touchpoints — the `AccordionItem value` + `id="home-section-<id>"` in `Home.tsx`, the id in `HOME_SECTION_IDS`, and a `section-<id>` entry (`to: "/#home-section-<id>"`) in `COMMAND_STATIC_ITEMS`; adding a footer or external link means a matching palette entry in the same registry. `tests/unit/navigation.test.ts` enforces footer↔palette sync and the section list — update the registry, never the test, to satisfy it.
 
 ## 2. Routing & SSG Lifecycle (TanStack Start)
 

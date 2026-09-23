@@ -1,9 +1,11 @@
 import {
   ChartColumn,
   CodeXml,
+  Crown,
   Heart,
   Home,
   ListPlus,
+  Radio,
   Smartphone,
   Sparkles,
   Star,
@@ -49,7 +51,7 @@ export const FOOTER_LEGAL_LINKS: NavLink[] = [
   { to: "/legal/security", label: LEGAL_META.security.title },
 ];
 
-/** Command palette static registry — every footer link (internal + external) lives here so Quick Find stays in sync with the footer. CommandPalette.tsx merges with dynamic actions. */
+/** Command palette static registry — every footer link (internal + external) and home section lives here so Quick Find stays in sync with the footer and homepage. CommandPalette.tsx merges with dynamic actions. */
 export const COMMAND_STATIC_ITEMS: CommandItemStatic[] = [
   {
     id: "nav-home",
@@ -92,6 +94,28 @@ export const COMMAND_STATIC_ITEMS: CommandItemStatic[] = [
     synonyms: ["most loved", "loved", "top", "popular", "heart", "votes", "best"],
   },
   {
+    id: "section-british",
+    title: "Best of British",
+    category: "Sections",
+    to: "/#home-section-british",
+    icon: Crown,
+    synonyms: [
+      "best of british",
+      "british",
+      "britain",
+      "uk",
+      "united kingdom",
+      "england",
+      "bbc",
+      "kiss",
+      "kisstory",
+      "capital",
+      "heart",
+      "lbc",
+      "anthems",
+    ],
+  },
+  {
     id: "section-recent",
     title: "Recently played",
     category: "Sections",
@@ -122,6 +146,14 @@ export const COMMAND_STATIC_ITEMS: CommandItemStatic[] = [
     href: siteConfig.links.github,
     icon: CodeXml,
     synonyms: ["github", "repo", "repository", "source", "code", "issues", "contribute"],
+  },
+  {
+    id: "link-directory",
+    title: "Station directory",
+    category: "Links",
+    href: "https://www.radio-browser.info",
+    icon: Radio,
+    synonyms: ["station directory", "directory", "radio-browser", "radio browser", "database", "source"],
   },
   {
     id: "legal-changelog",
