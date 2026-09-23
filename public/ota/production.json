@@ -2,6 +2,13 @@
   "channel": "production",
   "versions": [
     {
+      "version": "0.3.6+ota.1",
+      "min_version_code": 306,
+      "max_version_code": null,
+      "url": "https://github.com/Double77x/radioscout/releases/download/ota-production-0.3.6+ota.1/0.3.6%2Bota.1.zip",
+      "checksum": "e1fdd7ddda0a263a355e1b16200d5e8e4dffcabc606c93969de7a580f02fc3bd"
+    },
+    {
       "version": "0.3.5+ota.2",
       "min_version_code": 305,
       "max_version_code": null,
@@ -14,13 +21,6 @@
       "max_version_code": null,
       "url": "https://github.com/Double77x/radioscout/releases/download/ota-production-0.3.5+ota.1/0.3.5%2Bota.1.zip",
       "checksum": "5cc5db1bafc76a7f5a13f3defd8ad40b773463f8a22e24754bc10d360c557349"
-    },
-    {
-      "version": "0.3.4+ota.1",
-      "min_version_code": 304,
-      "max_version_code": null,
-      "url": "https://github.com/Double77x/radioscout/releases/download/ota-production-0.3.4+ota.1/0.3.4%2Bota.1.zip",
-      "checksum": "67978834a0970a2fba33535b32fb17427840dcc4f5ed6b7d4999fb004b239574"
     }
   ]
 }
