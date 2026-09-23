@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatCount } from "@/lib/format";
-import { formatListeningTime, formatStationCount } from "@/lib/radio/format";
+import { formatDayOrdinal, formatListeningTime, formatStationCount } from "@/lib/radio/format";
 
 describe("formatCount", () => {
   it("groups thousands with commas", () => {
@@ -35,5 +35,22 @@ describe("formatListeningTime", () => {
   it("renders bad input as zero", () => {
     expect(formatListeningTime(Number.NaN)).toBe("0s");
     expect(formatListeningTime(-30)).toBe("0s");
+  });
+});
+
+describe("formatDayOrdinal", () => {
+  it("renders ordinal day-of-month labels", () => {
+    expect(formatDayOrdinal(1)).toBe("1st");
+    expect(formatDayOrdinal(2)).toBe("2nd");
+    expect(formatDayOrdinal(3)).toBe("3rd");
+    expect(formatDayOrdinal(4)).toBe("4th");
+    expect(formatDayOrdinal(10)).toBe("10th");
+    expect(formatDayOrdinal(11)).toBe("11th");
+    expect(formatDayOrdinal(12)).toBe("12th");
+    expect(formatDayOrdinal(13)).toBe("13th");
+    expect(formatDayOrdinal(21)).toBe("21st");
+    expect(formatDayOrdinal(22)).toBe("22nd");
+    expect(formatDayOrdinal(23)).toBe("23rd");
+    expect(formatDayOrdinal(28)).toBe("28th");
   });
 });

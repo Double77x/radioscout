@@ -23,6 +23,17 @@ export function formatListeningTime(totalSeconds: number): string {
 }
 
 /**
+ * Ordinal day-of-month: 1 → "1st", 2 → "2nd", 3 → "3rd", 10 → "10th",
+ * 22 → "22nd". Falls back to the plain number outside 1–31.
+ */
+export function formatDayOrdinal(day: number): string {
+  if (!Number.isInteger(day) || day < 1 || day > 31) return String(day);
+  const teen = day % 100 >= 11 && day % 100 <= 13;
+  const suffix = teen ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th");
+  return `${day}${suffix}`;
+}
+
+/**
  * Tidy a comma-separated tag list for display:
  * "christian,christian music,jesus" → "Christian, Christian music, Jesus".
  */

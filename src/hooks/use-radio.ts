@@ -9,7 +9,7 @@ import type { StationSearch } from "@/lib/radio/api";
 import { readLanguages } from "@/lib/radio/languages";
 import { readMinBitrate } from "@/lib/radio/quality";
 import { pickSurpriseStation } from "@/lib/radio/surprise";
-import type { DayBucket, ListeningSummary } from "@/lib/radio/store";
+import type { DayBucket, DaypartBucket, ListeningSummary } from "@/lib/radio/store";
 import type { Station } from "@/lib/radio/types";
 
 const RADIO_KEY = ["radio"] as const;
@@ -129,11 +129,23 @@ const LISTENING_EMPTY_WEEK: DayBucket[] = ["Mon", "Tue", "Wed", "Thu", "Fri", "S
   plays: 0,
   days: 0,
 }));
+const LISTENING_EMPTY_PARTS: DaypartBucket[] = [
+  { id: "night", label: "Night", range: "12–6am", seconds: 0, plays: 0 },
+  { id: "morning", label: "Morning", range: "6am–12pm", seconds: 0, plays: 0 },
+  { id: "afternoon", label: "Afternoon", range: "12–6pm", seconds: 0, plays: 0 },
+  { id: "evening", label: "Evening", range: "6pm–12am", seconds: 0, plays: 0 },
+];
 const LISTENING_EMPTY: ListeningSummary = {
   totalSeconds: 0,
   plays: 0,
   stations: [],
   byDay: LISTENING_EMPTY_WEEK,
+  byRecent: [],
+  byWeek: [],
+  byPart: LISTENING_EMPTY_PARTS,
+  streak: { current: 0, longest: 0 },
+  bestDay: null,
+  longestSession: 0,
 };
 
 /** Aggregated listening time, most-listened station first. Local-first, instant. */
