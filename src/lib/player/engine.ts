@@ -36,10 +36,11 @@ import { writeLastStation } from "@/lib/radio/last-played";
 import { emit, snapshot } from "@/lib/player/store";
 import { readNormalizeEnabled, writeNormalizeEnabled } from "@/lib/radio/normalize";
 import {
+  canonicalStreamUrl,
   isHlsUrl,
+  isHttpsUpgradeHost,
   isInsecureHttpStream,
   pickPlayableUrl,
-  sanitizeStreamUrl,
   upgradeInsecureUrl,
   type Station,
 } from "@/lib/radio/types";
@@ -640,10 +641,21 @@ async function resolveUrl(station: Station): Promise<string> {
   try {
     const { resolveStreamUrl } = await import("@/lib/radio/api");
     const remote = await resolveStreamUrl(station.stationuuid);
-    return sanitizeStreamUrl(remote ?? local);
+    // Canonicalize the fresh URL too — the directory can hand back http for
+    // a verified upgrade host (BBC/Akamai), which must load as https.
+    return canonicalStreamUrl(remote ?? local);
   } catch {
     return local;
   }
+}
+
+/**
+ * `true` when the failure is a policy block, not an offline/format fault: a
+ * non-upgradeable `http://` URL loaded from an `https://` page. Verified
+ * upgrade hosts load over https, so their failures keep the generic verdict.
+ */
+function isPolicyBlockedHttp(url: string): boolean {
+  return isInsecureHttpStream(url) && !isHttpsUpgradeHost(url) && globalThis.window?.location?.protocol === "https:";
 }
 
 /**
@@ -909,7 +921,7 @@ function failIncomingSwitch(station: Station, url: string): void {
       continueReconnect(station, url);
       return;
     }
-    lastLoadInsecure = isInsecureHttpStream(url) && globalThis.window?.location?.protocol === "https:";
+    lastLoadInsecure = isPolicyBlockedHttp(url);
     emit({
       status: "error",
       error: lastLoadInsecure
@@ -950,7 +962,7 @@ function continueReconnect(station: Station, url: string): void {
     // Out of attempts — verdict + notify (the only loud toast in the flow).
     retryingReconnect = false;
     reconnectAttempt = 0;
-    lastLoadInsecure = isInsecureHttpStream(url) && globalThis.window?.location?.protocol === "https:";
+    lastLoadInsecure = isPolicyBlockedHttp(url);
     const message = lastLoadInsecure
       ? INSECURE_HTTP_MESSAGE
       : "The connection dropped and we couldn't reconnect. Check your connection and try again.";
@@ -1075,7 +1087,7 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
     // `http://` flag for later failure verdicts, computed from the ORIGINAL
     // url (the staged element itself is upgraded at load). The native path
     // above keeps the original URL — Media3 plays HTTP fine.
-    lastLoadInsecure = isInsecureHttpStream(url) && globalThis.window?.location?.protocol === "https:";
+    lastLoadInsecure = isPolicyBlockedHttp(url);
     // Stage the handoff: the live element is untouched from here — it keeps
     // playing until the incoming element blends in (or the switch fails and
     // the snapshot reverts to it).

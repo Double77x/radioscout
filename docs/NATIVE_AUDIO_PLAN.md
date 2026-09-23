@@ -86,6 +86,11 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   per-host by platform design (no wildcards). Any other station that 302s to
   an http edge fails the same way (`302` → Source error); the enriched error
   log names the host, and each one is a one-line `domain-config` addition.
+  The reverse direction needs no native work: `http://` directory URLs on
+  verified upgrade hosts (`HTTPS_UPGRADE_HOSTS` in `src/lib/radio/types.ts`,
+  e.g. BBC/Akamai) are canonicalized to `https://` in `resolveUrl()` before
+  `playViaNative()`, so the service requests TLS directly — no cleartext
+  permission, unlike Dance Wave's https→http downgrade.
 - [ ] N4: headset/Auto handling, retry + audio-focus (calls) behavior, device QA
   matrix (offline start, rotation, 120Hz, back-button with mini-player).
 - [x] N5: loudness leveling in the Media3 pipeline (`LevelingAudioProcessor`,

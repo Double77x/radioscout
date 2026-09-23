@@ -139,7 +139,46 @@ export function isInsecureHttpStream(streamUrl: string): boolean {
 
 /** Best-known playable URL without a network round-trip (sanitized). */
 export function pickPlayableUrl(station: Station): string {
-  return sanitizeStreamUrl(station.url_resolved || station.url);
+  return canonicalStreamUrl(station.url_resolved || station.url);
+}
+
+/**
+ * Hosts verified to serve the same stream over TLS when the directory still
+ * lists `http://` (checked 2026-09-23: BBC HLS on Akamai 301s http→https and
+ * plays, yet both `url` and `url_resolved` stay http — the directory can't
+ * prove the upgrade, so the client canonicalizes it). Exact-host allowlist
+ * on purpose: blind scheme-swaps on unverified hosts surface as misleading
+ * TLS errors. Verify a candidate by loading its https variant directly
+ * before adding it here.
+ */
+const HTTPS_UPGRADE_HOSTS = new Set(["as-hls-ww-live.akamaized.net"]);
+
+/** Lowercase hostname of an absolute URL, or "" when unparseable. Never throws. */
+export function hostOfUrl(raw: string): string {
+  try {
+    return new URL(raw.trim()).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+/** `true` when the URL's host is a verified https-upgrade host. */
+export function isHttpsUpgradeHost(raw: string): boolean {
+  return HTTPS_UPGRADE_HOSTS.has(hostOfUrl(raw));
+}
+
+/**
+ * Canonical stream URL: sanitize, then rewrite `http://` → `https://` for
+ * verified upgrade hosts only. Idempotent. Unknown hosts pass through
+ * untouched (the web loader still blind-upgrades on secure pages; the
+ * native service keeps the original URL for those).
+ */
+export function canonicalStreamUrl(raw: string): string {
+  const clean = sanitizeStreamUrl(raw);
+  if (/^http:\/\//i.test(clean) && isHttpsUpgradeHost(clean)) {
+    return clean.replace(/^http:\/\//i, "https://");
+  }
+  return clean;
 }
 
 /**
@@ -169,9 +208,11 @@ export function isPlayableStreamUrl(streamUrl: string): boolean {
 }
 
 /**
- * Drop rows that can never play (HTTP-only or missing URL). Discovery lists
- * only — favourites/history keep the user's saved rows (tapping one explains
- * why it won't play instead of silently vanishing).
+ * Drop rows that can never play (unverified HTTP-only or missing URL).
+ * `http://` rows on verified upgrade hosts survive as canonical `https://`
+ * (see `canonicalStreamUrl`). Discovery lists only — favourites/history
+ * keep the user's saved rows (tapping one explains why it won't play
+ * instead of silently vanishing).
  */
 export function filterPlayableStations(stations: Station[]): Station[] {
   return stations.filter((station) => isPlayableStreamUrl(pickPlayableUrl(station)));

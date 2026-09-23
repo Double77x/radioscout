@@ -117,8 +117,9 @@ async function searchPaged(page: ChartPage): Promise<Station[]> {
     });
     const raw = parseStations(await fetchJson(`/json/stations/search${query}`));
     if (raw.length === 0) break;
-    // HTTP-only rows can never play on an https page or in the APK WebView —
-    // drop them so every visible station is playable.
+    // Unknown-http rows can't play on an https page or in the APK WebView —
+    // drop them so every visible station is playable. Verified upgrade hosts
+    // survive as canonical https (see `canonicalStreamUrl`).
     const rows = filterByMinBitrate(filterPlayableStations(raw), page.minBitrate);
     for (const station of rows) {
       if (out.length >= page.want) break;
@@ -165,8 +166,9 @@ export async function searchStations(search: StationSearch): Promise<Station[]> 
     order: search.order ?? "clickcount",
     reverse: "true",
   });
-  // HTTP-only rows can never play on an https page or in the APK WebView —
-  // drop them so every visible station is playable.
+  // Unknown-http rows can't play on an https page or in the APK WebView —
+  // drop them so every visible station is playable. Verified upgrade hosts
+  // survive as canonical https (see `canonicalStreamUrl`).
   const playable = filterPlayableStations(parseStations(await fetchJson(`/json/stations/search${query}`)));
   return filterByMinBitrate(playable, minBitrate);
 }

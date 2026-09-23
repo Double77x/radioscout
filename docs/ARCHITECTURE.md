@@ -15,6 +15,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
 3. **Radio engine (`src/lib/radio/` + hooks):**
    - `api.ts` (radio-browser directory: top/search/stats, mirror failover), `store.ts` (isolated `RadioDB`: favourites with persisted `sort`, history deduped latest-wins), `prefs.ts` (volume/muted), `votes.ts`, `genres.ts`, `backup.ts` (versioned JSON envelope: export via share/download, import via Settings → Data).
    - `use-radio.ts` (directory queries with `keepPreviousData`; favourites/history with `initialData: []` so they never flash), player engine (`lib/player/engine.ts` owns the playback singleton — live + staged `<audio>` elements, tokens, reconnect loop, transport; unit-tested leaves in `lib/player/{fades,sleep-timer,native-bridge,leveling}.ts`; `hooks/use-player.ts` is the thin `useSyncExternalStore` facade, MediaSession included).
+    - Stream-URL policy (`lib/radio/types.ts`): sanitize upstream junk → canonicalize verified https-upgrade hosts (`HTTPS_UPGRADE_HOSTS`, e.g. BBC/Akamai) → drop unverified HTTP/empty rows from discovery via `filterPlayableStations()` (no per-row probing — pure string work). Playback resolves local + fresh `/json/url/` remote through the same canonicalizer, so web `<audio>` and the native Media3 service receive the identical URL.
 4. **Quick Find Command Palette (`CommandPalette`):**
    - **Shortcuts:** Powered by `@tanstack/react-hotkeys` (`⌘K` / `Ctrl+K`, `Esc`).
    - **Dialog Shell:** Base UI Dialog (`@base-ui/react/dialog`) with smooth animations and accessibility.

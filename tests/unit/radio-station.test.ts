@@ -1,7 +1,10 @@
 import { describe, expect, it, afterEach } from "vitest";
 import {
+  canonicalStreamUrl,
   filterPlayableStations,
+  hostOfUrl,
   isHlsUrl,
+  isHttpsUpgradeHost,
   isInsecureHttpStream,
   isPlayableStreamUrl,
   parseStation,
@@ -80,6 +83,40 @@ describe("pickPlayableUrl", () => {
       "http://stream-ar.planetradio.co.uk/absoluteradiohigh.aac?direct=true&aw_0_1st.playerid=BMUK_Airable",
     );
   });
+
+  it("upgrades verified hosts even when the directory stays http", () => {
+    const station = parseStation({ ...row, stationuuid: "bbc-r2", url: BBC_HTTP, url_resolved: BBC_HTTP });
+    const picked = station ? pickPlayableUrl(station) : null;
+    expect(picked).toBe(BBC_HTTP.replace("http://", "https://"));
+    expect(picked ? isHlsUrl(picked) : false).toBe(true);
+  });
+});
+
+const BBC_HTTP =
+  "http://as-hls-ww-live.akamaized.net/pool_74208725/live/ww/bbc_radio_two/bbc_radio_two.isml/bbc_radio_two-audio%3d128000.norewind.m3u8";
+
+describe("https upgrade hosts", () => {
+  it("parses upgrade hostnames, lowercased", () => {
+    expect(hostOfUrl(BBC_HTTP)).toBe("as-hls-ww-live.akamaized.net");
+    expect(hostOfUrl("HTTP://AS-HLS-WW-LIVE.AKAMAIZED.NET/x")).toBe("as-hls-ww-live.akamaized.net");
+    expect(hostOfUrl("not a url")).toBe("");
+    expect(hostOfUrl("")).toBe("");
+  });
+
+  it("flags verified upgrade hosts only", () => {
+    expect(isHttpsUpgradeHost(BBC_HTTP)).toBe(true);
+    expect(isHttpsUpgradeHost("http://stream-kiss.planetradio.co.uk/x.mp3")).toBe(false);
+    expect(isHttpsUpgradeHost("")).toBe(false);
+  });
+
+  it("canonicalizes verified http to https, leaves the rest alone", () => {
+    expect(canonicalStreamUrl(BBC_HTTP)).toBe(BBC_HTTP.replace("http://", "https://"));
+    expect(canonicalStreamUrl("https://example.com/x")).toBe("https://example.com/x");
+    expect(canonicalStreamUrl("http://stream-kiss.planetradio.co.uk/x.mp3")).toBe(
+      "http://stream-kiss.planetradio.co.uk/x.mp3",
+    );
+    expect(canonicalStreamUrl("")).toBe("");
+  });
 });
 
 describe("sanitizeStreamUrl", () => {
@@ -145,6 +182,13 @@ describe("filterPlayableStations", () => {
     const tlsB = https("tls-b", "https://stream-ar.hellorayo.co.uk/absolute80shigh.aac?direct=true");
     const filtered = filterPlayableStations([httpOld, tlsA, httpJunk, noUrl, tlsB].filter((s) => s !== null));
     expect(filtered.map((s) => s.stationuuid)).toEqual(["tls-a", "tls-b"]);
+  });
+
+  it("keeps http rows on verified upgrade hosts", () => {
+    const bbc = https("bbc-r2", BBC_HTTP);
+    const planet = https("planet", "http://stream-kiss.planetradio.co.uk/kisstory.mp3?direct=true");
+    const filtered = filterPlayableStations([planet, bbc].filter((s) => s !== null));
+    expect(filtered.map((s) => s.stationuuid)).toEqual(["bbc-r2"]);
   });
 });
 
