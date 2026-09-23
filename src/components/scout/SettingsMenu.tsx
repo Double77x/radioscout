@@ -3,7 +3,6 @@ import { version as appVersion } from "../../../package.json";
 import { Download, Monitor, Moon, Settings as SettingsIcon, Sun, Upload } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
 import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
@@ -16,6 +15,7 @@ import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 
 /** Query client stays out of the initial bundle — loaded on demand. */
 const loadQueryClient = () => import("@/lib/query-client");
@@ -29,8 +29,6 @@ const THEME_OPTIONS = [
   { id: "light", label: "Light", Icon: Sun },
   { id: "dark", label: "Dark", Icon: Moon },
 ] as const;
-
-type ThemeChoice = (typeof THEME_OPTIONS)[number]["id"];
 
 /** Stable fallbacks for the persisted hooks (referential stability matters). */
 const WORLDWIDE_FALLBACK: string[] = [];
@@ -148,28 +146,21 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
           <h2 id='settings-style-heading' className='px-2 py-3 text-sm font-semibold'>
             Style
           </h2>
-          <fieldset className='mx-0 min-w-0 border-0 p-0'>
-            <legend className='sr-only'>Appearance</legend>
-            <div className='mt-2 grid grid-cols-3 gap-1 rounded-full border border-border bg-card p-1'>
-              {THEME_OPTIONS.map(({ id, label, Icon }) => {
-                const selected = theme === id;
-                return (
-                  <button
-                    key={id}
-                    type='button'
-                    aria-pressed={selected}
-                    onClick={() => setTheme(id as ThemeChoice)}
-                    className={cn(
-                      "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-full text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                      selected ? "bg-scout-ink text-scout-paper" : "text-muted-foreground hover:text-foreground",
-                    )}>
-                    <Icon className='size-4' />
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          </fieldset>
+          <SegmentedControl
+            label='Appearance'
+            options={THEME_OPTIONS.map(({ id, label, Icon }) => ({
+              id,
+              label: (
+                <>
+                  <Icon className='size-4' aria-hidden='true' />
+                  {label}
+                </>
+              ),
+            }))}
+            value={theme === "light" || theme === "dark" ? theme : "system"}
+            onChange={(id) => setTheme(id)}
+            optionClassName='min-h-11 flex-col gap-0.5'
+          />
           <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
             {theme === "system"
               ? `Following your device (currently ${resolvedTheme ?? "light"})`

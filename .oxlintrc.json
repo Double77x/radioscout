@@ -413,7 +413,10 @@
           "blur-0",
           "grayscale-0",
           "scout-no-scrollbar",
-          "volume-slider"
+          "scout-segmented",
+          "volume-slider",
+          "bar-swap",
+          "popover-animated"
         ]
       }
     ],

@@ -16,7 +16,6 @@ ignorePatterns = [
   "src/components/ui/select.tsx",
   "src/components/ui/separator.tsx",
   "src/components/ui/slider.tsx",
-  "src/components/ui/switch.tsx",
   "src/components/ui/tabs.tsx",
   "src/components/ui/textarea.tsx",
 ]

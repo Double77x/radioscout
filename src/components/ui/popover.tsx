@@ -23,7 +23,7 @@ const PopoverContent = ({
     <PopoverPrimitive.Positioner sideOffset={8} align={align} side={side} anchor={anchor} className='z-400'>
       <PopoverPrimitive.Popup
         className={cn(
-          "w-80 overflow-hidden rounded-3xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/10 outline-none",
+          "popover-animated w-80 overflow-hidden rounded-3xl border border-border bg-popover text-popover-foreground shadow-xl shadow-black/10 outline-none",
           className,
         )}
         {...props}>

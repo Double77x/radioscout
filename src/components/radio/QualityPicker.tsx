@@ -1,7 +1,7 @@
 import { AudioLines } from "lucide-react";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { usePersistentString } from "@/hooks/use-persistent-state";
 import { normalizeMinBitrate, QUALITY_KEY, QUALITY_OPTIONS, qualityLabel } from "@/lib/radio/quality";
-import { cn } from "@/lib/utils";
 
 /** Query client stays out of the initial bundle — loaded on demand. */
 const loadQueryClient = () => import("@/lib/query-client");
@@ -26,29 +26,22 @@ export function QualityPicker() {
 
   return (
     <div>
-      <fieldset className='m-0 min-w-0 border-0 p-0'>
-        <legend className='sr-only'>Minimum stream quality</legend>
-        <div className='grid grid-cols-4 gap-1 rounded-full border border-border bg-card p-1'>
-          {QUALITY_OPTIONS.map((option) => {
-            const selected = active === option.minBitrate;
-            return (
-              <button
-                key={option.minBitrate}
-                type='button'
-                aria-pressed={selected}
-                aria-label={qualityLabel(option.minBitrate)}
-                onClick={() => select(option.minBitrate)}
-                className={cn(
-                  "flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-full text-xs font-medium transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                  selected ? "bg-scout-ink text-scout-paper" : "text-muted-foreground hover:text-foreground",
-                )}>
-                <AudioLines className='size-4' />
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <SegmentedControl
+        label='Minimum stream quality'
+        options={QUALITY_OPTIONS.map((option) => ({
+          id: String(option.minBitrate),
+          ariaLabel: qualityLabel(option.minBitrate),
+          label: (
+            <>
+              <AudioLines className='size-4' aria-hidden='true' />
+              {option.label}
+            </>
+          ),
+        }))}
+        value={String(active)}
+        onChange={(id) => select(Number(id))}
+        optionClassName='min-h-11 flex-col gap-0.5'
+      />
       <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
         {active > 0
           ? `Only ${qualityLabel(active)} streams — stations without bitrate info are hidden.`
