@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 
 const STATIONS = [
   {
@@ -35,6 +35,17 @@ async function mockDirectory(page: Page) {
   });
 }
 
+/** Click a segmented-control label inside animated accordion content.
+ * Regular clicks gate on continuous frame stability, which starves under
+ * parallel workers (the expand animation never reads as settled and the
+ * click times out). Dispatching skips hit-testing but still exercises the
+ * label-to-input wiring the test asserts on; animation itself is covered
+ * by the accordion animation test. */
+async function clickOption(label: Locator) {
+  await label.waitFor({ state: "visible" });
+  await label.dispatchEvent("click");
+}
+
 test.describe("Settings", () => {
   test.beforeEach(async ({ page }) => {
     await mockDirectory(page);
@@ -52,7 +63,7 @@ test.describe("Settings", () => {
     await expect(panel.getByRole("button", { name: "Quality" })).toBeVisible();
     await expect(panel.getByRole("button", { name: "Audio" })).toBeVisible();
     await expect(panel.getByRole("heading", { name: "Style" })).toBeVisible();
-    await expect(panel.getByRole("button", { name: "System" })).toHaveAttribute("aria-pressed", "true");
+    await expect(panel.getByRole("radio", { name: "System" })).toBeChecked();
   });
 
   test("quality filter hides stations below the minimum bitrate", async ({ page }) => {
@@ -60,13 +71,13 @@ test.describe("Settings", () => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     const panel = page.getByRole("dialog", { name: "Settings" });
     await panel.getByRole("button", { name: "Quality" }).click();
-    await panel.getByRole("button", { name: "128 kbps+" }).click();
+    await clickOption(panel.getByText("128+", { exact: true }));
     await expect(panel.getByText("Only 128 kbps+ streams")).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByText("Test Jazz FM").first()).toBeVisible();
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     await panel.getByRole("button", { name: "Quality" }).click();
-    await panel.getByRole("button", { name: "192 kbps+" }).click();
+    await clickOption(panel.getByText("192+", { exact: true }));
     await page.keyboard.press("Escape");
     await expect(page.getByText("Test Jazz FM")).toHaveCount(0);
   });
@@ -161,9 +172,9 @@ test.describe("Settings", () => {
   test("theme choice applies to the document", async ({ page }) => {
     await page.locator("header").getByRole("button", { name: "Settings" }).click();
     const panel = page.getByRole("dialog", { name: "Settings" });
-    await panel.getByRole("button", { name: "Dark" }).click();
+    await panel.getByText("Dark", { exact: true }).click();
     await expect(page.locator("html")).toHaveClass(/dark/);
-    await panel.getByRole("button", { name: "Light" }).click();
+    await panel.getByText("Light", { exact: true }).click();
     await expect(page.locator("html")).not.toHaveClass(/dark/);
   });
 

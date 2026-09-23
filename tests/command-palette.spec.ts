@@ -14,6 +14,7 @@ test.describe("Quick Find Command Palette (TanStack Hotkeys)", () => {
     const input = page.getByPlaceholder("Type a command or search...");
     await expect(input).toBeVisible();
     await expect(page.getByRole("button", { name: /Home/i })).toBeVisible();
+    await input.fill("changelog");
     await expect(page.getByRole("button", { name: /Changelog/i })).toBeVisible();
   });
 

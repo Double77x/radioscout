@@ -163,12 +163,22 @@ test.describe("RadioScout home", () => {
     await expect(plays.nth(0)).toHaveAttribute("aria-label", "Play Test Jazz FM");
     await expect(page.getByText("Saved to favourites")).toHaveCount(0);
 
-    // Press on the row art (not a button, not the grip) and drag down.
+    // Press on the row art (not a button, not the grip) and drag down. Arm
+    // first with a short move and wait for the lift, like the grip test.
+    // The row must be scrolled into view first: raw mouse coordinates never
+    // auto-scroll (unlike locator clicks), and earlier save-button clicks
+    // leave the page scrolled with Saved rows above the fold — pressing
+    // off-viewport coordinates hits nothing and the gesture silently dies.
     const row = page.locator('li[data-uuid="11111111-1111-1111-1111-111111111111"]');
+    await row.scrollIntoViewIfNeeded();
     const box = await row.boundingBox();
     if (!box) throw new Error("saved Jazz row has no bounding box");
     await page.mouse.move(box.x + 80, box.y + box.height / 2);
     await page.mouse.down();
+    await page.mouse.move(box.x + 80, box.y + box.height / 2 + 24, { steps: 3 });
+    await expect
+      .poll(() => row.evaluate((el) => getComputedStyle(el).translate), { timeout: 5000 })
+      .not.toBe("none");
     await page.mouse.move(box.x + 80, box.y + box.height + 96, { steps: 12 });
     await page.mouse.up();
 
@@ -183,13 +193,19 @@ test.describe("RadioScout home", () => {
     await expect(plays.nth(0)).toHaveAttribute("aria-label", "Play Test Jazz FM");
     await expect(page.getByText("Saved to favourites")).toHaveCount(0);
 
-    // Drag Jazz down past Rock; Rock rides shifted up while held.
+    // Drag Jazz down past Rock; Rock rides shifted up while held. Same
+    // scroll-into-view + arm-wait discipline as the row-body test above.
     const rock = page.locator('li[data-uuid="22222222-2222-2222-2222-222222222222"]');
     const jazz = page.locator('li[data-uuid="11111111-1111-1111-1111-111111111111"]');
+    await jazz.scrollIntoViewIfNeeded();
     const box = await jazz.boundingBox();
     if (!box) throw new Error("saved Jazz row has no bounding box");
     await page.mouse.move(box.x + 80, box.y + box.height / 2);
     await page.mouse.down();
+    await page.mouse.move(box.x + 80, box.y + box.height / 2 + 24, { steps: 3 });
+    await expect
+      .poll(() => jazz.evaluate((el) => getComputedStyle(el).translate), { timeout: 5000 })
+      .not.toBe("none");
     await page.mouse.move(box.x + 80, box.y + box.height + 96, { steps: 12 });
     const shiftedTop = await rock.evaluate((el) => el.getBoundingClientRect().top);
     // Sample Rock across the drop: it must snap straight into its new slot,
