@@ -90,11 +90,18 @@ export function CommandPalette() {
         globalThis.open(item.href, "_blank", "noopener,noreferrer");
       } else if (item.to) {
         if (item.to.startsWith("/#")) {
-          navigate({ to: "/" });
-          setTimeout(() => {
-            const el = document.querySelector(item.to?.replace("/", "") || "");
-            el?.scrollIntoView({ behavior: "smooth" });
-          }, 100);
+          const hash = item.to.slice(1);
+          const section = hash.startsWith("#home-section-") ? hash.slice("#home-section-".length) : null;
+          // Section jumps clear search (filtering hides the sections) and let
+          // Home expand the accordion before scrolling into view.
+          navigate({ to: "/", search: (prev) => ({ ...prev, q: undefined, tag: undefined }) });
+          if (section) {
+            globalThis.dispatchEvent(new CustomEvent("open-home-section", { detail: { section } }));
+          } else {
+            setTimeout(() => {
+              document.querySelector(hash)?.scrollIntoView({ behavior: "smooth" });
+            }, 100);
+          }
         } else {
           navigate({ to: item.to });
         }

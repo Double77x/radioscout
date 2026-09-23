@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, getRouteApi } from "@tanstack/react-router";
 import { ChartColumn, Heart, SearchX, Star, TextAlignStart, Trash2 } from "lucide-react";
 import { SEO } from "@/components/Seo";
 import { AppShell } from "@/components/scout/AppShell";
 import { ListeningStats } from "@/components/radio/ListeningStats";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { BestOfBritish } from "@/components/radio/BestOfBritish";
 import { RadioHeader } from "@/components/radio/RadioHeader";
 import { SavedStations } from "@/components/radio/SavedStations";
 import { StationCard } from "@/components/radio/StationCard";
@@ -18,7 +19,7 @@ import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { formatListeningTime, formatTags } from "@/lib/radio/format";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
-import { normalizeMinBitrate, QUALITY_KEY } from "@/lib/radio/quality";
+import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import {
   useClearHistory,
   useFavourites,
@@ -34,8 +35,8 @@ import type { Station } from "@/lib/radio/types";
 const routeApi = getRouteApi("/");
 
 const HOME_SECTIONS_KEY = "radioscout:home-sections";
-const HOME_SECTIONS_DEFAULT = ["saved", "top"];
-const HOME_SECTION_IDS = new Set(["saved", "top", "recent", "stats"]);
+const HOME_SECTIONS_DEFAULT = ["saved", "top", "british"];
+const HOME_SECTION_IDS = new Set(["saved", "top", "british", "recent", "stats"]);
 /** Hoisted: the persisted hook needs a referentially stable fallback. */
 const LANGUAGES_FALLBACK: string[] = [];
 const QUALITY_FALLBACK = "0";
@@ -50,6 +51,8 @@ export default function HomePage() {
   const [quality] = usePersistentString(QUALITY_KEY, QUALITY_FALLBACK);
   const minBitrate = normalizeMinBitrate(quality);
   const languageLabel = languages.length > 0 ? formatTags(languages.join(",")) : "";
+  const qualitySetting = minBitrate > 0 ? qualityLabel(minBitrate) : "";
+  const filterSummary = [languageLabel, qualitySetting].filter((part) => part !== "").join(" · ");
   const top = useTopStations("votes", languages, minBitrate);
   // Matches RadioHeader's hydration gate: the prerender has no search state,
   // so a direct `/?q=` / `/?tag=` load renders home sections until the client
@@ -75,6 +78,24 @@ export default function HomePage() {
   const player = usePlayer();
 
   const favouriteIds = useMemo(() => new Set(favourites.data.map((row) => row.stationuuid)), [favourites.data]);
+
+  // Cross-component signal from the command palette (`open-home-section`):
+  // expand the section, then scroll it into view once the accordion paints.
+  // A window event (not props) because the palette lives outside Home.
+  useEffect(() => {
+    const onOpenSection = (event: Event) => {
+      const section = (event as CustomEvent<{ section?: unknown }>).detail?.section;
+      if (typeof section !== "string" || !HOME_SECTION_IDS.has(section)) return;
+      if (!openSections.includes(section)) setOpenSections([...openSections, section]);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          document.querySelector(`#home-section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    };
+    globalThis.addEventListener("open-home-section", onOpenSection);
+    return () => globalThis.removeEventListener("open-home-section", onOpenSection);
+  }, [openSections, setOpenSections]);
 
   const renderRow = (station: Station, key?: string) => (
     <StationCard
@@ -130,7 +151,7 @@ export default function HomePage() {
         ) : (
           <>
             <Accordion multiple value={visibleSections} onValueChange={setOpenSections} className='px-4'>
-              <AccordionItem value='saved' className='border-0'>
+              <AccordionItem value='saved' id='home-section-saved' className='border-0'>
                 <AccordionTrigger className='py-4 hover:no-underline'>
                   <span className='flex items-center gap-3'>
                     <span
@@ -147,7 +168,7 @@ export default function HomePage() {
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem value='top' className='border-0'>
+              <AccordionItem value='top' id='home-section-top' className='border-0'>
                 <AccordionTrigger className='py-4 hover:no-underline'>
                   <span className='flex items-center gap-3'>
                     <span
@@ -157,8 +178,8 @@ export default function HomePage() {
                     </span>
                     <span className='text-lg font-semibold tracking-tight'>Most loved</span>
                     {top.data ? <Badge variant='secondary'>{top.data.length}</Badge> : null}
-                    {languageLabel ? (
-                      <span className='truncate text-xs font-medium text-muted-foreground'>{languageLabel}</span>
+                    {filterSummary ? (
+                      <span className='truncate text-xs font-medium text-muted-foreground'>{filterSummary}</span>
                     ) : null}
                   </span>
                 </AccordionTrigger>
@@ -175,8 +196,10 @@ export default function HomePage() {
                 </AccordionContent>
               </AccordionItem>
 
+              <BestOfBritish renderRow={renderRow} />
+
               {history.data.length > 0 ? (
-                <AccordionItem value='recent' className='border-0'>
+                <AccordionItem value='recent' id='home-section-recent' className='border-0'>
                   <AccordionTrigger className='py-4 hover:no-underline'>
                     <span className='flex items-center gap-3'>
                       <span
@@ -220,7 +243,7 @@ export default function HomePage() {
               ) : null}
 
               {listening.data.totalSeconds > 0 ? (
-                <AccordionItem value='stats' className='border-0'>
+                <AccordionItem value='stats' id='home-section-stats' className='border-0'>
                   <AccordionTrigger className='py-4 hover:no-underline'>
                     <span className='flex items-center gap-3'>
                       <span
