@@ -12,16 +12,16 @@ export default function ChangelogPage() {
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
             <li>
-              Listening section grows a Trend tab — last-14-days and last-12-weeks strips, daypart rhythm, day streaks
-              and records (best day, longest session)
+              Listening section grows a Trend tab with last-14-days and last-12-weeks strips, daypart rhythm, day
+              streaks and records (best day, longest session)
             </li>
             <li>
               Top stations sort by total, sessions or average, with tinted bars, share percentages, an Other stations
               row, an optional cascade layout and detail popovers on every bar
             </li>
             <li>
-              Command palette (Ctrl+K) jumps straight to Saved, Most loved, Recently played and Listening — expanding
-              the section and scrolling to it
+              Command palette (Ctrl+K) jumps straight to Saved, Most loved, Best of British, Recently played and
+              Listening, expanding the section and scrolling to it
             </li>
             <li>Most loved header now shows the active quality floor next to the language filter</li>
             <li>
@@ -29,13 +29,21 @@ export default function ChangelogPage() {
               in and out, and bars animate between layouts
             </li>
             <li>
-              Stations on verified https-upgrade hosts (BBC Radio 2 and friends) are back in every list instead of being
+              Stations on verified https-upgrade hosts (BBC, Smooth and friends) are back in every list instead of being
               filtered out as HTTP-only
             </li>
             <li>Search box keeps your cursor while typing, no more jumping to the end mid-edit</li>
-            <li>Settings gains Location, filtering top stations and search by station country, just like languages</li>
-            <li>Search box keeps your cursor while typing — no more jumping to the end mid-edit</li>
-            <li>Settings gains Location — filter top stations and search by station country, just like languages</li>
+            <li>Settings gains Location, filtering top stations and search by station country just like languages</li>
+            <li>
+              New Best of British shelf under Most loved with the top UK stations (BBC, Kiss, Capital, Heart and more)
+              in alphabetical order
+            </li>
+            <li>
+              Station links can autoplay. A shared link opens the station and starts playback, handy for agentic AI play
+              requests too
+            </li>
+            <li>Recent searches ride a tidy scrollable rail with a pinned Clear button</li>
+            <li>Saved reorder drops land cleanly with no jump on release</li>
           </ul>
         </div>
         <div className='border-l-2 border-primary pb-2 pl-6'>

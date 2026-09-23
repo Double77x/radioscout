@@ -10,8 +10,8 @@ A free worldwide radio player that ships as static HTML from Cloudflare Pages �
 
 Full tour: **[radioscout.pages.dev/features](https://radioscout.pages.dev/features)**.
 
-- **Discover** — top 50 stations by votes, full-text search with up to 50 results and shareable URLs, one-tap genre chips, recent searches, top-40 language quick picks, and a minimum-bitrate cutoff. Only playable `https://` streams are listed.
-- **Library** — saved favourites with drag-to-reorder, recent plays, listening stats banked even if the app is killed, and station sheets with art, tags, flags, votes, and shareable links. Everything lives in on-device IndexedDB: no accounts, no sync, works offline.
+- **Discover** — top 50 stations by votes, a Best of British shelf, full-text search with up to 50 results and shareable URLs, one-tap genre chips, recent searches, top-40 language quick picks, a flag-bearing country location filter, and a minimum-bitrate cutoff. Only playable `https://` streams are listed.
+- **Library** — saved favourites with drag-to-reorder, recent plays, listening stats with trends, streaks and sortable top stations banked even if the app is killed, and station sheets with art, tags, flags, votes, and shareable links (`?station=<uuid>`, autoplay with `?play=` — see `docs/AGENTIC_PLAY.md`). Everything lives in on-device IndexedDB: no accounts, no sync, works offline.
 - **Player** — persistent dock with gapless crossfade switching, volume plus per-station leveling, sleep timer with dock countdown, surprise shuffle, quick resume that reloads your last station, auto-reconnect with backoff, and lockscreen controls (MediaSession on web, notifications on Android).
 - **Personal** — light, dark, or device-following theme with no flash, Mod+K Quick Find palette, a one-JSON radio backup that moves favourites, history, stats, volume, votes, and filters between browser and APK, and home-screen install as a PWA.
 - **Android APK** — the same static build in a Capacitor shell: background audio service, zero-service OTA updates from GitHub Releases, theme-following status bar, edge-swipe and hardware back handling, and share-sheet backup export.
@@ -66,6 +66,7 @@ This repo is set up to be read top-down by an agent. Start here:
 5. `src/lib/radio/store.ts` + `src/hooks/use-radio.ts` — example Query + Dexie flow
 6. `src/components/radio/StationSkeleton.tsx` — geometry-matched loading skeletons
 7. `src/components/scout/SwipeBack.tsx` + `src/lib/animated-back.ts` — gesture + OS-back coordination pattern
+8. `docs/AGENTIC_PLAY.md` — agentic `?play=` URL contract, alias table, DOM hooks, Tier 2/3 expansion path
 
 Quality gates before you open a PR:
 
@@ -96,7 +97,7 @@ src/
     shared/    StateShell (error/404 shells)
     ui/        Base UI primitives (accordion, badge, button, input, popover, select, sonner, tooltip)
     CommandPalette.tsx, RootDocument.tsx, Logo.tsx, …
-  data/        navigation (single source for nav + palette), legal
+  data/        navigation (single source for nav + palette), legal, station-aliases (agentic `?play=` aliases)
   hooks/       use-radio, use-player (Query + Dexie), use-station-detail, use-persistent-state
                 and use-is-client
   lib/         radio/ (api, store, prefs, backup, votes, genres, ota), files,
@@ -163,9 +164,27 @@ If a station is missing, add it to the directory and it surfaces automatically:
    `https://` favicon (the station site's `og:image` works), codec, country/language, and
    lowercase comma-separated tags (e.g. `rock,adult contemporary,indie,pop`).
 
+### Station works over https but isn't listed?
+
+Some stations register an `http://` stream address but serve the exact same
+audio over `https://`. RadioScout keeps a verified allowlist of those hosts
+(`HTTPS_UPGRADE_HOSTS` in `src/lib/radio/types.ts`) — anything unverified
+stays hidden so nobody lands on a dead row.
+
+If you know a station that upgrades cleanly:
+
+1. Confirm the `https://` version of its stream URL actually plays audio
+   (open it in a new tab — it should start streaming, not error).
+2. [Open an issue](https://github.com/Double77x/radioscout/issues/new) with the
+   station name, its radio-browser.info page (or station UUID), and both the
+   `http://` and working `https://` stream URLs.
+3. We'll re-verify it and add the host to the allowlist — the station then
+   shows up in search and shelves automatically from the next release.
+
 ## Docs
 
 - `docs/ARCHITECTURE.md` — routing, SSG, data flow, design system
+- `docs/AGENTIC_PLAY.md` — agentic `?play=` contract + alias maintenance
 - `docs/TECH_STACK.md` — versions and rationale
 - `docs/CODING_STANDARDS.md` — hooks, state, perf, a11y, Fallow
 - `docs/STYLE_GUIDE.md` — tokens and layout
@@ -176,7 +195,7 @@ We welcome issues and pull requests. Keep changes small, typed and lint-clean.
 
 ### Issues
 
-Use the Bug report template for bugs and include steps to reproduce, what you expected, what happened, the browser, and a short `pnpm build` log if prerender failed. For features, use the Feature request template and describe the use case first; for larger work open an issue before you start so we do not pull in different directions. For questions, check `docs/ARCHITECTURE.md` and `docs/CODING_STANDARDS.md`, then try GitHub Discussions or `CTRL+K` → Contact.
+Use the Bug report template for bugs and include steps to reproduce, what you expected, what happened, the browser, and a short `pnpm build` log if prerender failed. For features, use the Feature request template and describe the use case first; for larger work open an issue before you start so we do not pull in different directions. For questions, check `docs/ARCHITECTURE.md` and `docs/CODING_STANDARDS.md`, then try GitHub Discussions or `CTRL+K` → GitHub repository.
 
 ### Pull requests
 
