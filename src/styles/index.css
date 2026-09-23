@@ -427,6 +427,95 @@
     display: none;
   }
 
+  /* Scout — sliding-pill segmented control (listening breakdowns, sorts).
+     Native radios own the checked state; `--active-index` (set from React)
+     glides the ::before pill with no DOM measuring. */
+  .scout-segmented {
+    --active-index: 0;
+    --segment-count: 2;
+    --segment-height: 2.25rem;
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(var(--segment-count), 1fr);
+    margin: 0;
+    min-width: 0;
+    border: 1px solid var(--color-border);
+    border-radius: 999px;
+    background: var(--color-card);
+    padding: 0.25rem;
+  }
+  .scout-segmented input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .scout-segmented label {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--segment-height);
+    padding-inline: 0.75rem;
+    border-radius: 999px;
+    color: var(--color-muted-foreground);
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.22s ease;
+  }
+  .scout-segmented label:hover {
+    color: var(--color-foreground);
+  }
+  .scout-segmented::before {
+    content: "";
+    position: absolute;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    left: 0.25rem;
+    width: calc((100% - 0.5rem) / var(--segment-count));
+    border-radius: 999px;
+    background: var(--color-scout-ink);
+    transform: translateX(calc(100% * var(--active-index)));
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .scout-segmented input:checked + label {
+    color: var(--color-scout-paper);
+  }
+  .scout-segmented input:focus-visible + label {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scout-segmented::before,
+    .scout-segmented label {
+      transition: none;
+    }
+  }
+
+  /* Scout — listening bars glide through the track when the Total layout
+     swaps between standard and cascade (SVG geometry transitions apply in
+     Chromium-based browsers; elsewhere the swap lands instantly). */
+  .bar-swap {
+    transition:
+      x 0.35s ease,
+      width 0.35s ease;
+  }
+
+  /* Scout — popover entrance/exit (settings flyout). Base UI keeps the popup
+     mounted through the ending frame, so open and close both glide. */
+  .popover-animated {
+    transition:
+      opacity 0.16s ease,
+      scale 0.16s ease;
+  }
+  .popover-animated[data-starting-style],
+  .popover-animated[data-ending-style] {
+    opacity: 0;
+    scale: 0.97;
+  }
+
   /* Scout — entrance animations stay off until they run */
   @media (prefers-reduced-motion: reduce) {
     .animate-scout-enter {
@@ -434,6 +523,12 @@
     }
     .animate-dropdown-in {
       animation: none;
+    }
+    .bar-swap {
+      transition: none;
+    }
+    .popover-animated {
+      transition: none;
     }
   }
 
