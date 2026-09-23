@@ -55,6 +55,12 @@ export interface StationSearch {
    * param only matches a single literal) and merge deduped.
    */
   languages?: string[];
+  /**
+   * Station-country filter (exact directory names, e.g.
+   * `["Germany"]`). One country filters server-side; several fan out (the
+   * `country` param only matches a single literal) and merge deduped.
+   */
+  countries?: string[];
   /** Minimum stream bitrate in kbps (`0`/absent = any quality). Client-side. */
   minBitrate?: number;
 }
@@ -136,6 +142,7 @@ async function searchPaged(page: ChartPage): Promise<Station[]> {
 /** Mirrors the browse/search lists (stations, categories, tags fragments). */
 export async function searchStations(search: StationSearch): Promise<Station[]> {
   const languages = (search.languages ?? []).filter((language) => language !== "");
+  const countries = (search.countries ?? []).filter((country) => country !== "");
   if (languages.length > 1) {
     const batched = await Promise.all(
       languages.map((language) => searchStations({ ...search, languages: [language] })),
@@ -143,13 +150,19 @@ export async function searchStations(search: StationSearch): Promise<Station[]> 
     // Inner calls are already playable-filtered; just dedupe the merge.
     return dedupeStations(batched.flat());
   }
+  if (countries.length > 1) {
+    const batched = await Promise.all(countries.map((country) => searchStations({ ...search, countries: [country] })));
+    // Inner calls are already playable-filtered; just dedupe the merge.
+    return dedupeStations(batched.flat());
+  }
   const minBitrate = search.minBitrate ?? 0;
+  const country = countries[0] ?? search.country;
   // Chart/genre lists page until full; free-text anchors keep one request —
   // the ILIKE matcher manages its own candidate pool from those rows.
   if ((search.name ?? "").trim() === "") {
     return searchPaged({
       tag: search.tag,
-      country: search.country,
+      country,
       language: languages[0],
       order: search.order ?? "clickcount",
       minBitrate,
@@ -159,7 +172,7 @@ export async function searchStations(search: StationSearch): Promise<Station[]> 
   const query = searchParams({
     name: search.name,
     tag: search.tag,
-    country: search.country,
+    country,
     language: languages[0],
     limit: search.limit ?? 50,
     hidebroken: "true",
@@ -199,6 +212,7 @@ export async function searchStationsIlike(
   limit = 50,
   languages: string[] = [],
   minBitrate = 0,
+  countries: string[] = [],
 ): Promise<Station[]> {
   const terms = normalize(query)
     .split(/[\s,/_-]+/)
@@ -206,9 +220,9 @@ export async function searchStationsIlike(
   if (terms.length === 0) return [];
   const anchors = terms.toSorted((a, b) => b.length - a.length);
   // Longest terms first, fetched together — the server ranks each by clicks.
-  // Language fan-out (if any) happens inside `searchStations`.
+  // Language/country fan-out (if any) happens inside `searchStations`.
   const batched = await Promise.all(
-    anchors.slice(0, 2).map((anchor) => searchStations({ name: anchor, limit: 100, languages, minBitrate })),
+    anchors.slice(0, 2).map((anchor) => searchStations({ name: anchor, limit: 100, languages, countries, minBitrate })),
   );
   const seen = new Set<string>();
   const candidates: Station[] = [];
@@ -239,39 +253,55 @@ export async function searchStationsIlike(
 }
 
 /** Most-voted stations — the default landing list (unplayable rows filtered). */
-export async function topVotedStations(limit = 50, languages: string[] = [], minBitrate = 0): Promise<Station[]> {
-  if (languages.length === 0 && minBitrate <= 0) {
+export async function topVotedStations(
+  limit = 50,
+  languages: string[] = [],
+  minBitrate = 0,
+  countries: string[] = [],
+): Promise<Station[]> {
+  if (languages.length === 0 && countries.length === 0 && minBitrate <= 0) {
     const count = chartFetchCount(limit);
     return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${count}`))).slice(0, limit);
   }
   // `topvote` ignores `?language=`, and filtered charts page until full —
   // rank through the search endpoint instead.
-  return rankedTopStations("votes", limit, languages, minBitrate);
+  return rankedTopStations("votes", limit, languages, countries, minBitrate);
 }
 
 /** Most-clicked stations (unplayable rows filtered). */
-export async function topClickedStations(limit = 50, languages: string[] = [], minBitrate = 0): Promise<Station[]> {
-  if (languages.length === 0 && minBitrate <= 0) {
+export async function topClickedStations(
+  limit = 50,
+  languages: string[] = [],
+  minBitrate = 0,
+  countries: string[] = [],
+): Promise<Station[]> {
+  if (languages.length === 0 && countries.length === 0 && minBitrate <= 0) {
     const count = chartFetchCount(limit);
     return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${count}`))).slice(0, limit);
   }
-  return rankedTopStations("clickcount", limit, languages, minBitrate);
+  return rankedTopStations("clickcount", limit, languages, countries, minBitrate);
 }
 
 /**
- * Filtered chart: top `limit` per language, merged by rank. Each leg pages
- * until full (server-ranked, playable- and quality-filtered); the merge
- * re-sorts. No languages means one worldwide leg.
+ * Filtered chart: top `limit` per language/country, merged by rank. Each leg
+ * pages until full (server-ranked, playable- and quality-filtered); the
+ * merge re-sorts. No languages means one worldwide leg.
  */
 async function rankedTopStations(
   order: "clickcount" | "votes",
   limit: number,
   languages: string[],
+  countries: string[],
   minBitrate = 0,
 ): Promise<Station[]> {
-  const legs = languages.length === 0 ? [undefined] : languages;
+  const languageLegs = languages.length === 0 ? [[]] : languages.map((language) => [language]);
+  const countryLegs = countries.length === 0 ? [[]] : countries.map((country) => [country]);
   const batched = await Promise.all(
-    legs.map((language) => searchStations({ order, languages: language ? [language] : [], limit, minBitrate })),
+    languageLegs.flatMap((legLanguages) =>
+      countryLegs.map((legCountries) =>
+        searchStations({ order, languages: legLanguages, countries: legCountries, limit, minBitrate }),
+      ),
+    ),
   );
   return dedupeStations(batched.flat())
     .toSorted((a, b) => b[order] - a[order])

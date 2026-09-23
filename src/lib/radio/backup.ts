@@ -4,14 +4,15 @@ import { isNative } from "@/lib/capacitor";
 import { downloadBlob, shareFile } from "@/lib/files";
 import { readPlayerPrefs, type PlayerPrefs } from "@/lib/radio/prefs";
 import { LANGUAGES_KEY, normalizeLanguages, readLanguages, writeLanguages } from "@/lib/radio/languages";
+import { COUNTRIES_KEY, normalizeCountries, readCountries, writeCountries } from "@/lib/radio/countries";
 import { normalizeMinBitrate, QUALITY_KEY, readMinBitrate, writeMinBitrate } from "@/lib/radio/quality";
 import { readNormalizeEnabled, writeNormalizeEnabled, NORMALIZE_KEY } from "@/lib/radio/normalize";
 import { radioDb, type FavouriteRow, type HistoryRow, type ListeningRow, type RadioDB } from "@/lib/radio/store";
 import { stationSchema } from "@/lib/radio/types";
 import { readVotedIds, writeVotedIds } from "@/lib/radio/votes";
 
-/** v5 adds loudness leveling (`normalize`, defaults to off). */
-export const RADIO_BACKUP_VERSION = 5 as const;
+/** v6 adds the station-country filter (`countries`, worldwide by default). */
+export const RADIO_BACKUP_VERSION = 6 as const;
 
 /**
  * Versioned envelope for everything RadioScout keeps locally. New feature
@@ -55,6 +56,8 @@ const radioBackupSchema = z.object({
   voted: z.string().array(),
   // Absent in v1 backups — worldwide by default, never a restore failure.
   languages: z.string().array().optional().default([]),
+  // Absent before v6 — worldwide by default, never a restore failure.
+  countries: z.string().array().optional().default([]),
   // Absent before v3 — any quality by default, never a restore failure.
   quality: z.number().optional().default(0),
   // Absent before v4 — no listening time banked, never a restore failure.
@@ -72,6 +75,7 @@ export type RadioBackupPayload = {
   prefs: PlayerPrefs;
   voted: string[];
   languages: string[];
+  countries: string[];
   quality: number;
   listening: ListeningRow[];
   normalize: boolean;
@@ -97,6 +101,7 @@ export async function collectRadioBackup(database: RadioDB = radioDb): Promise<R
     prefs: readPlayerPrefs(),
     voted: readVotedIds(),
     languages: readLanguages(),
+    countries: readCountries(),
     quality: readMinBitrate(),
     listening,
     normalize: readNormalizeEnabled(),
@@ -129,7 +134,7 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   if (parsed.data.version > RADIO_BACKUP_VERSION) {
     throw new Error("That backup needs a newer RadioScout — update first, then restore.");
   }
-  const { favourites, history, prefs, voted, languages, quality, listening, normalize } = parsed.data;
+  const { favourites, history, prefs, voted, languages, countries, quality, listening, normalize } = parsed.data;
   await database.transaction("rw", [database.favourites, database.history, database.listening], async () => {
     await database.favourites.clear();
     await database.history.clear();
@@ -142,10 +147,12 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   });
   writeVotedIds(voted);
   writeLanguages(normalizeLanguages(languages));
+  writeCountries(normalizeCountries(countries));
   writeMinBitrate(normalizeMinBitrate(quality));
   writeNormalizeEnabled(normalize);
   setNormalization(normalize);
   notifyRestoredFilter(LANGUAGES_KEY);
+  notifyRestoredFilter(COUNTRIES_KEY);
   notifyRestoredFilter(QUALITY_KEY);
   notifyRestoredFilter(NORMALIZE_KEY);
   return prefs;

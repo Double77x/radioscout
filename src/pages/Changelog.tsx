@@ -32,6 +32,8 @@ export default function ChangelogPage() {
               Stations on verified https-upgrade hosts (BBC Radio 2 and friends) are back in every list instead of being
               filtered out as HTTP-only
             </li>
+            <li>Search box keeps your cursor while typing — no more jumping to the end mid-edit</li>
+            <li>Settings gains Location — filter top stations and search by station country, just like languages</li>
           </ul>
         </div>
         <div className='border-l-2 border-primary pb-2 pl-6'>

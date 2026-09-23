@@ -4,6 +4,7 @@ import { ChartColumn, Heart, SearchX, Star, TextAlignStart, Trash2 } from "lucid
 import { SEO } from "@/components/Seo";
 import { AppShell } from "@/components/scout/AppShell";
 import { ListeningStats } from "@/components/radio/ListeningStats";
+import { CountryFlag, hasCountryFlag } from "@/components/radio/CountryFlag";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { BestOfBritish } from "@/components/radio/BestOfBritish";
 import { RadioHeader } from "@/components/radio/RadioHeader";
@@ -19,6 +20,8 @@ import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { formatListeningTime, formatTags } from "@/lib/radio/format";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
+import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
+import { POPULAR_COUNTRIES } from "@/lib/radio/country-popular";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import {
   useClearHistory,
@@ -34,12 +37,33 @@ import type { Station } from "@/lib/radio/types";
 
 const routeApi = getRouteApi("/");
 
+/** Selected countries as flag icons (display name text when no flag ships). */
+function CountryFilterFlags({ countries }: { countries: string[] }) {
+  return (
+    <span className='flex shrink-0 items-center gap-1'>
+      {countries.map((name) => {
+        const iso = POPULAR_ISO_BY_NAME.get(name) ?? "";
+        return iso !== "" && hasCountryFlag(iso) ? (
+          <CountryFlag key={name} code={iso} name={displayCountryName(name)} />
+        ) : (
+          <span key={name} className='whitespace-nowrap'>
+            {displayCountryName(name)}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
 const HOME_SECTIONS_KEY = "radioscout:home-sections";
 const HOME_SECTIONS_DEFAULT = ["saved", "top", "british"];
 const HOME_SECTION_IDS = new Set(["saved", "top", "british", "recent", "stats"]);
 /** Hoisted: the persisted hook needs a referentially stable fallback. */
 const LANGUAGES_FALLBACK: string[] = [];
+const COUNTRIES_FALLBACK: string[] = [];
 const QUALITY_FALLBACK = "0";
+/** Exact directory name → bundled-flag ISO (selections outside the popular list show their name). */
+const POPULAR_ISO_BY_NAME = new Map(POPULAR_COUNTRIES.map((country) => [country.name, country.iso] as const));
 
 export default function HomePage() {
   const { q = "", tag = "all" } = routeApi.useSearch();
@@ -48,12 +72,13 @@ export default function HomePage() {
   const [openSections, setOpenSections] = usePersistentStrings(HOME_SECTIONS_KEY, HOME_SECTIONS_DEFAULT);
   const visibleSections = openSections.filter((id) => HOME_SECTION_IDS.has(id));
   const [languages] = usePersistentStrings(LANGUAGES_KEY, LANGUAGES_FALLBACK);
+  const [countries] = usePersistentStrings(COUNTRIES_KEY, COUNTRIES_FALLBACK);
   const [quality] = usePersistentString(QUALITY_KEY, QUALITY_FALLBACK);
   const minBitrate = normalizeMinBitrate(quality);
   const languageLabel = languages.length > 0 ? formatTags(languages.join(",")) : "";
+  const countryLabel = countries.map((name) => displayCountryName(name)).join(", ");
   const qualitySetting = minBitrate > 0 ? qualityLabel(minBitrate) : "";
-  const filterSummary = [languageLabel, qualitySetting].filter((part) => part !== "").join(" · ");
-  const top = useTopStations("votes", languages, minBitrate);
+  const top = useTopStations("votes", languages, minBitrate, countries);
   // Matches RadioHeader's hydration gate: the prerender has no search state,
   // so a direct `/?q=` / `/?tag=` load renders home sections until the client
   // takes over instead of mismatching the results branch (React #418).
@@ -64,6 +89,7 @@ export default function HomePage() {
       tag: tag === "all" ? undefined : tag,
       limit: 50,
       languages,
+      countries,
       minBitrate: minBitrate || undefined,
     },
     filtering,
@@ -125,7 +151,7 @@ export default function HomePage() {
               <h2 className='text-lg font-semibold tracking-tight'>Results</h2>
               <p className='text-xs font-medium text-muted-foreground'>
                 {search.data
-                  ? `${search.data.length} found${languageLabel ? ` · ${languageLabel}` : ""}`
+                  ? `${search.data.length} found${languageLabel ? ` · ${languageLabel}` : ""}${countryLabel ? ` · ${countryLabel}` : ""}`
                   : "Searching…"}
               </p>
             </div>
@@ -178,8 +204,12 @@ export default function HomePage() {
                     </span>
                     <span className='text-lg font-semibold tracking-tight'>Most loved</span>
                     {top.data ? <Badge variant='secondary'>{top.data.length}</Badge> : null}
-                    {filterSummary ? (
-                      <span className='truncate text-xs font-medium text-muted-foreground'>{filterSummary}</span>
+                    {languageLabel || countries.length > 0 || qualitySetting ? (
+                      <span className='flex min-w-0 items-center gap-1.5 truncate text-xs font-medium text-muted-foreground'>
+                        {languageLabel ? <span className='min-w-0 truncate'>{languageLabel}</span> : null}
+                        {countries.length > 0 ? <CountryFilterFlags countries={countries} /> : null}
+                        {qualitySetting ? <span className='shrink-0'>{qualitySetting}</span> : null}
+                      </span>
                     ) : null}
                   </span>
                 </AccordionTrigger>

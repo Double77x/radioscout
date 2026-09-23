@@ -67,27 +67,35 @@ describe("radio backup", () => {
     expect(radioBackupFilename(new Date("2026-09-20T12:00:00Z"))).toBe("radioscout-backup-2026-09-20.json");
   });
 
-  it("round-trips favourites, prefs, votes, languages and quality", async () => {
+  it("round-trips favourites, prefs, votes, languages, countries and quality", async () => {
     const source = freshDatabase();
     await toggleFavourite(STATION, source);
     const { writeMinBitrate } = await import("@/lib/radio/quality");
     writeMinBitrate(128);
+    const { writeCountries } = await import("@/lib/radio/countries");
+    writeCountries(["Germany"]);
     const payload = await collectRadioBackup(source);
     expect(payload.app).toBe("radioscout");
     expect(payload.version).toBe(RADIO_BACKUP_VERSION);
     expect(payload.favourites).toHaveLength(1);
     expect(payload.languages).toEqual([]);
+    expect(payload.countries).toEqual(["Germany"]);
     expect(payload.quality).toBe(128);
     expect(payload.listening).toEqual([]);
 
     const target = freshDatabase();
-    const prefs = await restoreRadioBackup(structuredClone({ ...payload, languages: ["english", "German "] }), target);
+    const prefs = await restoreRadioBackup(
+      structuredClone({ ...payload, languages: ["english", "German "], countries: [" Germany ", "France"] }),
+      target,
+    );
     expect(prefs.volume).toBeGreaterThan(0);
     const rows = await target.favourites.toArray();
     expect(rows.map((row) => row.stationuuid)).toEqual(["backup-1"]);
     expect(rows[0]?.snapshot.name).toBe("Backup FM");
     const { readLanguages } = await import("@/lib/radio/languages");
     expect(readLanguages()).toEqual(["english", "german"]);
+    const { readCountries } = await import("@/lib/radio/countries");
+    expect(readCountries()).toEqual(["Germany", "France"]);
     const { readMinBitrate } = await import("@/lib/radio/quality");
     expect(readMinBitrate()).toBe(128);
   });
@@ -127,9 +135,11 @@ describe("radio backup", () => {
   it("restores v1 backups without languages as worldwide", async () => {
     const target = freshDatabase();
     const { writeLanguages, readLanguages } = await import("@/lib/radio/languages");
+    const { writeCountries, readCountries } = await import("@/lib/radio/countries");
     const { writeMinBitrate, readMinBitrate } = await import("@/lib/radio/quality");
     const { writeNormalizeEnabled, readNormalizeEnabled } = await import("@/lib/radio/normalize");
     writeLanguages(["french"]);
+    writeCountries(["France"]);
     writeMinBitrate(192);
     writeNormalizeEnabled(true);
     await restoreRadioBackup(
@@ -145,6 +155,7 @@ describe("radio backup", () => {
       target,
     );
     expect(readLanguages()).toEqual([]);
+    expect(readCountries()).toEqual([]);
     expect(readMinBitrate()).toBe(0);
     expect(readNormalizeEnabled()).toBe(false);
     const { summarizeListening } = await import("@/lib/radio/store");

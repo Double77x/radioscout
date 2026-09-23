@@ -158,6 +158,13 @@ const FLAG_URLS: Record<string, string> = {
   np: npUrl,
 };
 
+/** `true` when a bundled flag image exists for the ISO code (any case). */
+// eslint-disable-next-line react/only-export-components -- pure lookup beside its flag map; no component state involved.
+export function hasCountryFlag(code: string): boolean {
+  const iso = code.trim().toLowerCase();
+  return /^[a-z]{2}$/.test(iso) && FLAG_URLS[iso] !== undefined;
+}
+
 export function CountryFlag({ code, name, className }: CountryFlagProps) {
   const iso = code.trim().toLowerCase();
   const label = name || iso.toUpperCase() || "Unknown country";

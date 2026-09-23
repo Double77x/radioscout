@@ -5,12 +5,14 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
+import { LocationPicker } from "@/components/radio/LocationPicker";
 import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
 import { QualityPicker } from "@/components/radio/QualityPicker";
 import { SleepTimerPicker } from "@/components/radio/SleepTimerPicker";
 import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
 import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
+import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
 import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -45,6 +47,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   const [navAnchor, setNavAnchor] = useState<HTMLElement | null>(null);
   // Accordion trigger summaries — the collapsed flyout still shows active filters.
   const [languages] = usePersistentStrings(LANGUAGES_KEY, WORLDWIDE_FALLBACK);
+  const [countries] = usePersistentStrings(COUNTRIES_KEY, WORLDWIDE_FALLBACK);
   const [quality] = usePersistentString(QUALITY_KEY, ANY_QUALITY_FALLBACK);
   const [normalize] = usePersistentString(NORMALIZE_KEY, LEVEL_OFF_FALLBACK);
   const sleepCountdown = useSleepCountdown();
@@ -55,6 +58,12 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
       : languages.length === 1
         ? (languages[0] ?? "")
         : `${languages[0]} +${languages.length - 1}`;
+  const locationSummary =
+    countries.length === 0
+      ? "Worldwide"
+      : countries.length === 1
+        ? displayCountryName(countries[0] ?? "")
+        : `${displayCountryName(countries[0] ?? "")} +${countries.length - 1}`;
   const onOpenChange = (next: boolean) => {
     if (next && variant === "tab") setNavAnchor(triggerRef.current?.closest("nav") ?? null);
     setOpen(next);
@@ -107,6 +116,21 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
               </p>
               <div className='rounded-2xl border border-border bg-card p-3'>
                 <LanguagePicker />
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+
+          <AccordionItem value='location' className='border-0'>
+            <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>
+              <span>Location</span>
+              <span className='ml-auto pr-2 text-xs font-medium text-muted-foreground'>{locationSummary}</span>
+            </AccordionTrigger>
+            <AccordionContent className='px-2'>
+              <p className='pb-2 text-xs text-muted-foreground'>
+                Filter search results and charts to stations in these countries. Empty means worldwide.
+              </p>
+              <div className='rounded-2xl border border-border bg-card p-3'>
+                <LocationPicker />
               </div>
             </AccordionContent>
           </AccordionItem>

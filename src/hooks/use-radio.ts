@@ -6,6 +6,7 @@ import { play } from "@/hooks/use-player";
 import { LISTENING_KEY } from "@/lib/player/store";
 import { queryClient } from "@/lib/query-client";
 import type { StationSearch } from "@/lib/radio/api";
+import { readCountries } from "@/lib/radio/countries";
 import { readLanguages } from "@/lib/radio/languages";
 import { readMinBitrate } from "@/lib/radio/quality";
 import { pickSurpriseStation } from "@/lib/radio/surprise";
@@ -18,21 +19,28 @@ const HISTORY_KEY = [...RADIO_KEY, "history"] as const;
 
 const STALE_MS = 1000 * 60 * 5;
 
-const loadTopVoted = (languages: string[], minBitrate: number) => () =>
-  import("@/lib/radio/api").then((api) => api.topVotedStations(50, languages, minBitrate));
-const loadTopClicked = (languages: string[], minBitrate: number) => () =>
-  import("@/lib/radio/api").then((api) => api.topClickedStations(50, languages, minBitrate));
+const loadTopVoted = (languages: string[], minBitrate: number, countries: string[]) => () =>
+  import("@/lib/radio/api").then((api) => api.topVotedStations(50, languages, minBitrate, countries));
+const loadTopClicked = (languages: string[], minBitrate: number, countries: string[]) => () =>
+  import("@/lib/radio/api").then((api) => api.topClickedStations(50, languages, minBitrate, countries));
 const loadSearch = (search: StationSearch) =>
   import("@/lib/radio/api").then((api) => {
     if ((search.name ?? "").trim() !== "") {
-      return api.searchStationsIlike(search.name ?? "", search.tag, search.limit, search.languages, search.minBitrate);
+      return api.searchStationsIlike(
+        search.name ?? "",
+        search.tag,
+        search.limit,
+        search.languages,
+        search.minBitrate,
+        search.countries,
+      );
     }
     // Genre chips: highest-rated top 50 for the tag, not most-clicked.
     return api.searchStations({ ...search, order: "votes" });
   });
 const loadStats = () => import("@/lib/radio/api").then((api) => api.serverStats());
-const loadSurpriseFallback = (languages: string[], minBitrate: number) => () =>
-  import("@/lib/radio/api").then((api) => api.topVotedStations(50, languages, minBitrate));
+const loadSurpriseFallback = (languages: string[], minBitrate: number, countries: string[]) => () =>
+  import("@/lib/radio/api").then((api) => api.topVotedStations(50, languages, minBitrate, countries));
 const loadFavourites = () => import("@/lib/radio/store").then((store) => store.listFavourites());
 const loadHistory = () => import("@/lib/radio/store").then((store) => store.listHistory());
 const loadListening = () => import("@/lib/radio/store").then((store) => store.summarizeListening());
@@ -40,11 +48,19 @@ const saveFavourite = (station: Station) => import("@/lib/radio/store").then((st
 const wipeHistory = () => import("@/lib/radio/store").then((store) => store.clearHistory());
 const wipeListening = () => import("@/lib/radio/store").then((store) => store.clearListening());
 
-export function useTopStations(sort: "votes" | "clicks" = "votes", languages: string[] = [], minBitrate = 0) {
+export function useTopStations(
+  sort: "votes" | "clicks" = "votes",
+  languages: string[] = [],
+  minBitrate = 0,
+  countries: string[] = [],
+) {
   const isClient = useIsClient();
   return useQuery({
-    queryKey: [...RADIO_KEY, "top", sort, languages, minBitrate],
-    queryFn: sort === "votes" ? loadTopVoted(languages, minBitrate) : loadTopClicked(languages, minBitrate),
+    queryKey: [...RADIO_KEY, "top", sort, languages, minBitrate, countries],
+    queryFn:
+      sort === "votes"
+        ? loadTopVoted(languages, minBitrate, countries)
+        : loadTopClicked(languages, minBitrate, countries),
     enabled: isClient,
     staleTime: STALE_MS,
     placeholderData: keepPreviousData,
@@ -172,7 +188,7 @@ export function useClearListening() {
 
 /**
  * "Surprise me": play a random station. Prefers the already-cached Top
- * charts (instant, offline-capable, language-aware via the cached queries)
+ * charts (instant, offline-capable, language- and country-aware via the cached queries)
  * and falls back to one network fetch when nothing is cached yet. Promise
  * chains (not try/finally) so the hooks lint stays green.
  */
@@ -195,7 +211,7 @@ export function useSurpriseMe() {
     const fromCache = pickSurpriseStation(cached, excludeUuid);
     const pending: Promise<Station | null> =
       fromCache === null
-        ? loadSurpriseFallback(readLanguages(), readMinBitrate())().then((fresh) =>
+        ? loadSurpriseFallback(readLanguages(), readMinBitrate(), readCountries())().then((fresh) =>
             pickSurpriseStation(fresh, excludeUuid),
           )
         : Promise.resolve(fromCache);
