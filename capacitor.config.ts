@@ -1,6 +1,10 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
-const isFdroidBuild = process.env.VITE_DISTRIBUTION?.trim().toLowerCase() === "fdroid";
+declare const process: {
+  env?: Record<string, string | undefined>;
+};
+
+const isFdroidBuild = process.env?.VITE_DISTRIBUTION?.trim().toLowerCase() === "fdroid";
 
 /**
  * Capacitor native shell. `webDir` MUST stay in sync with
