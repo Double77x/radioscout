@@ -139,8 +139,8 @@ Builds:
     sudo:
       - apt-get update
       - apt-get install -y ca-certificates curl
-      - curl -Lo /tmp/node.tar.gz https://nodejs.org/download/release/v22.21.1/node-v22.21.1-linux-x64.tar.gz
-      - echo "219a152ea859861d75adea578bdec3dce8143853c13c5187f40c40e77b0143b2 /tmp/node.tar.gz" | sha256sum -c -
+      - curl -Lo /tmp/node.tar.gz https://nodejs.org/download/release/v26.8.2/node-v26.8.2-linux-x64.tar.gz
+      - echo "badb3fe6a61b85e1352ca6564dc56b8b7bd5ecd5c474c52acc21dd0cdd586f35 /tmp/node.tar.gz" | sha256sum -c -
       - tar xzf /tmp/node.tar.gz --strip-components=1 -C /usr/local/
       - npm install --global pnpm@10.34.5
     gradle: yes
@@ -172,9 +172,10 @@ Why this shape:
   `VITE_DISTRIBUTION=fdroid` to both the web build and `cap sync`; normal
   sideload builds retain the existing automatic updater.
 - Capacitor 8 requires Node.js 22 or newer, while the buildserver image ships
-  Debian's Node 20. The recipe installs the official Node `22.21.1` archive used
-  by current `fdroiddata` recipes, verifies its SHA-256 digest, and keeps pnpm
-  pinned separately at `10.34.5`.
+  Debian's Node 20. The F-Droid-only recipe installs the official Node `26.8.2`
+  archive, verifies its SHA-256 digest, and keeps pnpm pinned separately at
+  `10.34.5`; normal local/GitHub builds use the workstation's current Node
+  runtime.
 - Dependencies are installed in `build`, after F-Droid's source scan. Installing
   them in `prebuild` lets the scanner remove package-manager tool binaries that
   the later Vite and TypeScript build still needs.
