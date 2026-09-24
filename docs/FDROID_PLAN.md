@@ -149,7 +149,7 @@ Builds:
       - cd ..
       - pnpm install --frozen-lockfile
       - VITE_DISTRIBUTION=fdroid pnpm build
-      - npx cap sync android
+      - VITE_DISTRIBUTION=fdroid npx cap sync android
       - cd android
     postbuild:
       - rm -rf ../node_modules
@@ -166,6 +166,11 @@ MaintainerNotes: |-
 
 Why this shape:
 
+- Capacitor's native Updater plugin starts before JavaScript, so the build
+  flavor also sets `CapacitorUpdater.autoUpdate: false` and an empty
+  `statsUrl` in `capacitor.config.ts`. The recipe passes
+  `VITE_DISTRIBUTION=fdroid` to both the web build and `cap sync`; normal
+  sideload builds retain the existing automatic updater.
 - Capacitor 8 requires Node.js 22 or newer, while the buildserver image ships
   Debian's Node 20. The recipe installs the official Node `22.21.1` archive used
   by current `fdroiddata` recipes, verifies its SHA-256 digest, and keeps pnpm

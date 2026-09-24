@@ -1,5 +1,7 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
+const isFdroidBuild = process.env.VITE_DISTRIBUTION?.trim().toLowerCase() === "fdroid";
+
 /**
  * Capacitor native shell. `webDir` MUST stay in sync with
  * `pages_build_output_dir` in wrangler.toml — one SSG artifact
@@ -28,10 +30,13 @@ const config: CapacitorConfig = {
       resize: "body",
       resizeOnFullScreen: true,
     },
-    // OTA needs no server config: the Capgo plugin only stages/applies
-    // bundles (`download`/`next`/`notifyAppReady` in NativeShell) while
-    // version selection reads the in-repo manifest + GitHub Release zips
-    // (`src/lib/ota.ts`, published by `pnpm ota:publish`). Nothing here.
+    // The native plugin checks Capgo before JavaScript can run. Disable that
+    // automatic path for store-managed builds; NativeShell's manual manifest
+    // check remains enabled for sideload builds.
+    CapacitorUpdater: {
+      autoUpdate: !isFdroidBuild,
+      ...(isFdroidBuild ? { statsUrl: "" } : {}),
+    },
   },
 };
 
