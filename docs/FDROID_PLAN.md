@@ -150,6 +150,9 @@ Builds:
       - pnpm install --frozen-lockfile
       - VITE_DISTRIBUTION=fdroid pnpm build
       - VITE_DISTRIBUTION=fdroid npx cap sync android
+      - sed -i '/capgo-capacitor-updater/d' capacitor.settings.gradle
+      - sed -i '/capgo-capacitor-updater/d' app/capacitor.build.gradle
+      - node -e "const fs=require('fs');const p='app/src/main/assets/capacitor.plugins.json';const a=JSON.parse(fs.readFileSync(p,'utf8'));fs.writeFileSync(p,JSON.stringify(a.filter((x)=>x.pkg!=='@capgo/capacitor-updater'),null,2));"
       - cd android
     postbuild:
       - rm -rf ../node_modules
@@ -171,6 +174,10 @@ Why this shape:
   `statsUrl` in `capacitor.config.ts`. The recipe passes
   `VITE_DISTRIBUTION=fdroid` to both the web build and `cap sync`; normal
   sideload builds retain the existing automatic updater.
+- The F-Droid recipe removes the Capgo module from the generated Gradle project
+  and plugin registry after sync. This keeps its Google Play/Firebase classes
+  out of the APK, which is required for F-Droid's binary scanner; the
+  JavaScript guard still prevents any updater call if the module is present.
 - Capacitor 8 requires Node.js 22 or newer, while the buildserver image ships
   Debian's Node 20. The F-Droid-only recipe installs the official Node `26.8.2`
   archive, verifies its SHA-256 digest, and keeps pnpm pinned separately at
