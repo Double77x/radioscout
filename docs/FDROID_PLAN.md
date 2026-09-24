@@ -141,14 +141,14 @@ Builds:
       - apt-get install -y nodejs npm
       - npm install --global pnpm@10.34.5
     gradle: yes
-    scandelete:
-      - node_modules
     build:
       - cd ..
       - pnpm install --frozen-lockfile
       - VITE_DISTRIBUTION=fdroid pnpm build
       - npx cap sync android
       - cd android
+    postbuild:
+      - rm -rf ../node_modules
 
 UpdateCheckMode: Static
 CurrentVersion: 0.3.6
@@ -165,8 +165,9 @@ Why this shape:
 - Dependencies are installed in `build`, after F-Droid's source scan. Installing
   them in `prebuild` lets the scanner remove package-manager tool binaries that
   the later Vite and TypeScript build still needs.
-- `scandelete: node_modules` removes the installed dependency tree after the
-  APK has been built.
+- `scandelete` is intentionally not used: it operates during the source scan
+  and rejects paths that do not exist yet. `postbuild` removes the installed
+  dependency tree after Gradle has produced the APK.
 - The dependency install, web build, and Capacitor sync all run in `build`,
   matching existing Capacitor recipes in `fdroiddata`.
 - F-Droid's own `gradlew-fdroid` runs `assembleRelease` and finds the single
