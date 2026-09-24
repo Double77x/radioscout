@@ -141,13 +141,11 @@ Builds:
       - apt-get install -y nodejs npm
       - npm install --global pnpm@10.34.5
     gradle: yes
-    prebuild:
-      - cd ..
-      - pnpm install --frozen-lockfile
     scandelete:
       - node_modules
     build:
       - cd ..
+      - pnpm install --frozen-lockfile
       - VITE_DISTRIBUTION=fdroid pnpm build
       - npx cap sync android
       - cd android
@@ -164,11 +162,13 @@ MaintainerNotes: |-
 
 Why this shape:
 
-- `scandelete: node_modules` removes dependency binaries flagged by the source
-  scanner while retaining the JavaScript modules needed by the later `build`
-  commands.
-- The web build and Capacitor sync run in `build`, after scanning, matching
-  existing Capacitor recipes in `fdroiddata`.
+- Dependencies are installed in `build`, after F-Droid's source scan. Installing
+  them in `prebuild` lets the scanner remove package-manager tool binaries that
+  the later Vite and TypeScript build still needs.
+- `scandelete: node_modules` removes the installed dependency tree after the
+  APK has been built.
+- The dependency install, web build, and Capacitor sync all run in `build`,
+  matching existing Capacitor recipes in `fdroiddata`.
 - F-Droid's own `gradlew-fdroid` runs `assembleRelease` and finds the single
   renamed `radioscout-release.apk` in the standard Gradle output directory, so
   no custom `output:` glob is needed.
