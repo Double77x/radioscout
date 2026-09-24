@@ -150,10 +150,10 @@ Builds:
       - pnpm install --frozen-lockfile
       - VITE_DISTRIBUTION=fdroid pnpm build
       - VITE_DISTRIBUTION=fdroid npx cap sync android
+      - cd android
       - sed -i '/capgo-capacitor-updater/d' capacitor.settings.gradle
       - sed -i '/capgo-capacitor-updater/d' app/capacitor.build.gradle
       - node -e "const fs=require('fs');const p='app/src/main/assets/capacitor.plugins.json';const a=JSON.parse(fs.readFileSync(p,'utf8'));fs.writeFileSync(p,JSON.stringify(a.filter((x)=>x.pkg!=='@capgo/capacitor-updater'),null,2));"
-      - cd android
     postbuild:
       - rm -rf ../node_modules
 
