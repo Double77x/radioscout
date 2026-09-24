@@ -67,6 +67,9 @@ jobs:
 
       - name: Build the F-Droid flavor
         run: |
+          export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+          export NODE_OPTIONS="--require=$PWD/scripts/reproducible-date.cjs${NODE_OPTIONS:+ $NODE_OPTIONS}"
+          export TZ=UTC
           VITE_DISTRIBUTION=fdroid pnpm build
           VITE_DISTRIBUTION=fdroid npx cap sync android
           cd android

@@ -147,6 +147,9 @@ Builds:
     output: app/build/outputs/apk/release/radioscout-release.apk
     build:
       - cd ..
+      - export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
+      - export NODE_OPTIONS="--require=$PWD/scripts/reproducible-date.cjs${NODE_OPTIONS:+ $NODE_OPTIONS}"
+      - export TZ=UTC
       - pnpm install --frozen-lockfile
       - VITE_DISTRIBUTION=fdroid pnpm build
       - VITE_DISTRIBUTION=fdroid npx cap sync android
@@ -195,6 +198,9 @@ Why this shape:
   is `app`. F-Droid's default Gradle discovery looks directly under
   `android/build/outputs`, so `output:` explicitly names the produced
   `app/build/outputs/apk/release/radioscout-release.apk`.
+- The F-Droid recipe pins `SOURCE_DATE_EPOCH` to the source commit timestamp and
+  preloads `scripts/reproducible-date.cjs`, making TanStack Start's serialized
+  SSR match timestamps deterministic for reproducible-build verification.
 - `UpdateCheckMode: Static` is deliberate for the initial submission. The
   already-published `v0.3.6` tag still contains versionCode `202`; asking
   F-Droid to compare it with the corrected `306` build fails with
