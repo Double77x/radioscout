@@ -7,6 +7,7 @@ name: F-Droid reproducible reference
 # the APK.
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - 'fdroid-reference-*'
