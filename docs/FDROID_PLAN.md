@@ -144,6 +144,7 @@ Builds:
       - tar xzf /tmp/node.tar.gz --strip-components=1 -C /usr/local/
       - npm install --global pnpm@10.34.5
     gradle: yes
+    output: app/build/outputs/apk/release/radioscout-release.apk
     build:
       - cd ..
       - pnpm install --frozen-lockfile
@@ -177,9 +178,10 @@ Why this shape:
   dependency tree after Gradle has produced the APK.
 - The dependency install, web build, and Capacitor sync all run in `build`,
   matching existing Capacitor recipes in `fdroiddata`.
-- F-Droid's own `gradlew-fdroid` runs `assembleRelease` and finds the single
-  renamed `radioscout-release.apk` in the standard Gradle output directory, so
-  no custom `output:` glob is needed.
+- `subdir: android` is a multi-module Gradle project whose application module
+  is `app`. F-Droid's default Gradle discovery looks directly under
+  `android/build/outputs`, so `output:` explicitly names the produced
+  `app/build/outputs/apk/release/radioscout-release.apk`.
 - `UpdateCheckMode: Static` is deliberate for the initial submission. The
   already-published `v0.3.6` tag still contains versionCode `202`; asking
   F-Droid to compare it with the corrected `306` build fails with
