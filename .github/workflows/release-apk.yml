@@ -1,8 +1,8 @@
 # Release APK — tag a version, get a signed downloadable APK on the GitHub Release,
 # plus a matching OTA bundle for sideloaded devices.
 #
-# Usage: bump `version` in package.json, commit, then
-# `git tag vX.Y.Z && git push origin vX.Y.Z`. Tagging is the deliberate
+# Usage: bump `version` in package.json, run `pnpm cap:version`, commit both
+# files, then `git tag vX.Y.Z && git push origin vX.Y.Z`. Tagging is the deliberate
 # release act: every `v*` tag builds the release-signed APK from that commit,
 # attaches it to the release, then publishes a `production` OTA bundle
 # (`publish-ota` job below — same web build devices already have baked in,
@@ -70,6 +70,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Check F-Droid release metadata
+        run: pnpm fdroid:check
+
       - name: Check tag matches package.json
         if: startsWith(github.ref, 'refs/tags/')
         run: |
@@ -80,11 +83,15 @@ jobs:
             exit 1
           fi
 
-      - name: Build web + sync + stamp version
+      - name: Build web + sync + verify committed version
         run: |
           pnpm build
           npx cap sync android
           node scripts/cap-version.js
+          git diff --exit-code -- android/app/build.gradle || {
+            echo "::error::android/app/build.gradle was stale in the tagged commit. Run pnpm cap:version and commit it before tagging."
+            exit 1
+          }
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -1,0 +1,50 @@
+# Keep the F-Droid release contract valid without invoking fdroidserver.
+# The official metadata lint/build remains a pre-submission step in
+# docs/FDROID_PLAN.md because it needs the F-Droid build container.
+
+name: F-Droid Readiness
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fdroid-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Validate version and listing metadata
+        run: pnpm fdroid:check
+
+      - name: Build the F-Droid flavor
+        env:
+          VITE_DISTRIBUTION: fdroid
+        run: pnpm build

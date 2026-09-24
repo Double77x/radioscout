@@ -7,6 +7,7 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
+import { isFdroidDistribution } from "@/lib/distribution";
 import { pickOtaUpdate } from "@/lib/ota";
 import { playBackTransition } from "@/lib/animated-back";
 import { checkpointListeningSession } from "@/lib/player/store";
@@ -26,6 +27,10 @@ import { checkpointListeningSession } from "@/lib/player/store";
  * the boot path. Returns the staged version, or null when nothing staged.
  */
 async function runOtaUpdateCheck(signal: AbortSignal): Promise<string | null> {
+  // Store-managed builds must not contact or stage anything through the
+  // sideload updater, including its initial app-ready notification.
+  if (isFdroidDistribution()) return null;
+
   try {
     await CapacitorUpdater.notifyAppReady();
   } catch (error: unknown) {

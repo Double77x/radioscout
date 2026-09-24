@@ -1,6 +1,7 @@
 import { App } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { isNative } from "@/lib/capacitor";
+import { isFdroidDistribution } from "@/lib/distribution";
 import { compareOtaVersions } from "@/lib/ota";
 
 /**
@@ -62,7 +63,7 @@ export function pickDownloadUrl(payload: { assets?: unknown; html_url?: unknown 
  * Marks the check date only on a successful fetch so failures retry next boot.
  */
 export async function checkApkUpdate(): Promise<ApkUpdate | null> {
-  if (!isNative()) return null;
+  if (!isNative() || isFdroidDistribution()) return null;
   try {
     const last = Number(globalThis.localStorage?.getItem(CHECK_KEY));
     if (Number.isFinite(last) && Date.now() - last < CHECK_INTERVAL_MS) return null;

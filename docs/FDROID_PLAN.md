@@ -1,94 +1,256 @@
-# F-Droid Assessment + Plan — RadioScout
+# F-Droid Readiness Plan — RadioScout
 
-> Verdict: feasible with no blockers. Three small repo changes, one metadata
-> file, one merge request. No new APK needed for any of it — and once listed,
-> F-Droid itself becomes the update channel for those users (our Capgo OTA
-> stays for sideload/GitHub users, dormant in the F-Droid build).
+> **Status (2026-09-24):** repository-side readiness work is complete,
+> including normal/F-Droid web builds, an unsigned release APK, and real
+> `fdroidserver` `readmeta` / `rewritemeta` / `checkupdates` / `lint` checks
+> against the recipe template. No `fdroiddata` merge request exists yet.
+> Remaining steps are to push the completed commit, replace the placeholder
+> commit in the recipe, run the official F-Droid container build, boot-test its
+> APK, and submit the metadata.
 
-## 1. Audit (2026-09-23, all verified in-tree)
+## 1. Release contract
 
-| Requirement | State |
-|---|---|
-| FLOSS license | MIT `LICENSE` at repo root ✓ |
-| Tracking / proprietary SDKs | None. No `google-services.json` (the conditional plugin hook in `android/app/build.gradle:76-83` never fires), no Firebase/Crashlytics/ads. Deps: Capacitor (MIT), Capgo updater (MPL-2.0 — FOSS, fine), AndroidX + Media3 + Guava (Apache) |
-| Self-update policy ([Inclusion Policy §5](https://f-droid.org/en/docs/Inclusion_Policy/): no auto-update downloads without explicit user consent — cf. the WireGuard #3110 precedent) | **Needs the gating change below.** Our Capgo OTA auto-downloads the bundle, then toasts restart. On an F-Droid install that bypasses store checks with no opt-in |
-| Reproducible versioning | `scripts/cap-version.js` encodes semver → versionCode monotonically (0.3.5 → 305). **BUT** the committed `android/app/build.gradle` still says 202/0.2.2 — F-Droid's update checker scrapes build files without running build code, so releases must commit the synced file (process change, §2.3) |
-| Capacitor-on-F-Droid precedent | Exists: GraphHopper Maps Capacitor wrapper ships on F-Droid (`com.graphhopper.maps`), building web assets + gradle in-recipe |
-| Store listing assets | Missing: no `fastlane/` or `metadata/en-US` in repo (needed for description/screenshots) |
+F-Droid signs and distributes its own APK. That creates one hard rule for the
+F-Droid build: it must not silently download or stage an update outside the
+store.
 
-## 2. Repo changes (all small, all web-layer — still no APK rebuild)
+RadioScout has two sideload update paths:
 
-### 2.1 F-Droid distribution flag (the only code change)
+1. Capgo OTA bundles checked by `runOtaUpdateCheck()` in `NativeShell.tsx`.
+2. The GitHub APK prompt checked by `checkApkUpdate()` and rendered by
+   `AppUpdateDialog.tsx`.
 
-F-Droid builds must have **two** update paths silenced (both bypass the store):
+The F-Droid recipe sets the public build flag `VITE_DISTRIBUTION=fdroid` while
+running `pnpm build`. `src/lib/distribution.ts` makes both paths stand down.
+Normal web, sideload, and release-APK builds do not set the flag and retain
+their existing behavior.
 
-1. **Capgo OTA** — already dormant when `VITE_OTA_URL` is unset (`src/lib/ota.ts:7`, `NativeShell.tsx:38`). A clean F-Droid checkout has no `.env`, so it is dormant by accident today; make it deliberate.
-2. **`AppUpdateDialog`** — currently live on *every* native build (`enabled: isClient && isNative()`, `AppUpdateDialog.tsx:21`): it polls GitHub `releases/latest` and offers a browser APK download. On an F-Droid install that means prompting users to sideload a differently-signed APK over the store install — must be off.
+The build-time flag is intentional even though a clean checkout normally has
+no OTA environment variables: an F-Droid build must not depend on ignored local
+`.env` files to remain store-safe.
 
-Introduce one build-time flag, e.g. `VITE_DISTRIBUTION=fdroid`, and gate both paths on it:
+## 2. Repository changes
 
-- `NativeShell` OTA check: skip when distribution is `fdroid` (belt-and-braces over the unset URL).
-- `AppUpdateDialog`: `enabled: isClient && isNative() && import.meta.env.VITE_DISTRIBUTION !== "fdroid"`.
+### 2.1 Store-owned updates
 
-Default (unset) keeps today's behavior everywhere else. Unit-test the gate predicate; no e2e change (existing specs run with the flag unset).
+- `src/lib/distribution.ts` exposes the single F-Droid flavor predicate.
+- `NativeShell.tsx` returns before any Capgo app-ready call, manifest fetch, or
+  bundle download when the predicate is true.
+- `checkApkUpdate()` returns before install inspection or GitHub access, so the
+  existing `AppUpdateDialog` receives no update and remains closed. The dialog
+  component itself is unchanged.
+- Unit tests cover the flavor predicate and prove the APK checker does not call
+  `fetch` in the F-Droid flavor.
 
-### 2.2 Commit the synced `android/app/build.gradle` at release time
+### 2.2 Reproducible version metadata
 
-`pnpm cap:version` already computes versionCode/versionName from `package.json`; add it to the release checklist and commit the result. F-Droid's tag scraper then sees the true `versionCode`/`versionName`, and `UpdateCheckMode: Tags` (`v*` tags already exist for APK releases) detects new versions with no metadata edits.
+`package.json` is the release version source. `scripts/cap-version.js` encodes
+stable semantic versions as:
 
-### 2.3 Pin the package manager
+```text
+versionCode = major * 10000 + minor * 100 + patch
+```
 
-Add `"packageManager": "pnpm@12.3.4"` to `package.json` so Corepack resolves pnpm identically everywhere, including the F-Droid container (recipe runs `corepack enable && pnpm install`).
+For `0.3.6`, that is `306`. The committed `android/app/build.gradle` must carry
+both values because F-Droid reads source files directly instead of running the
+project's version script.
 
-### 2.4 Optional hardening (not blocking)
+The release flow is therefore:
 
-- Remove the dead `google-services` conditional (`android/build.gradle:11`, `android/app/build.gradle:76-83`): no `google-services.json` exists and push is unplanned — one less question from reviewers.
-- `VITE_OTA_URL` is currently only documented as commented in `wrangler.toml:32`; no change needed for F-Droid (absence = dormant), noted here so nobody "fixes" it later.
+```bash
+# 1. edit package.json version
+pnpm cap:version
+pnpm fdroid:check
+# 2. commit package.json + android/app/build.gradle + metadata together
+# 3. tag that commit vX.Y.Z and push the tag
+```
 
-## 3. F-Droid side (their infra, our merge request)
+The release workflow also runs `pnpm cap:version` and fails if it changes the
+committed Gradle file. A tag can no longer hide stale Android metadata.
 
-Draft `metadata/io.github.double77x.radioscout.yml` (in a fork of `fdroiddata`, MR titled `New App: RadioScout`):
+### 2.3 FOSS-only Android build
+
+The unused Google Services Gradle plugin and its conditional application hook
+were removed. The project has no `google-services.json`, Firebase, Crashlytics,
+ads, or proprietary Android SDK dependency. Capacitor, Capgo updater, AndroidX,
+Media3, and Guava are free-software dependencies.
+
+The Capgo updater code remains in the shared project but is unreachable in the
+F-Droid flavor. F-Droid maintainers make the final decision on whether the
+disabled optional integration or the app's network APIs require an Anti-Feature.
+
+### 2.4 Isolated F-Droid package-manager version
+
+The repository's existing pnpm 10 workflow configuration is unchanged. The
+F-Droid recipe installs exact `pnpm@10.34.5` in its own build environment rather
+than relying on whichever package manager happens to be installed globally.
+
+### 2.5 Listing metadata
+
+Fastlane/Triple-T-compatible files live at:
+
+```text
+fastlane/metadata/android/en-US/
+├── title.txt
+├── short_description.txt
+├── full_description.txt
+├── changelogs/306.txt
+└── images/
+    ├── icon.png
+    └── phoneScreenshots/{1,2}.png
+```
+
+`pnpm fdroid:check` verifies all required files, text limits, PNG validity,
+portrait screenshot dimensions, and the changelog filename/versionCode link.
+
+## 3. `fdroiddata` recipe template
+
+Create `metadata/io.github.double77x.radioscout.yml` in a fork of `fdroiddata`
+only after the repository-side work has been merged.
+
+- Replace the all-zero commit with the **full 40-character merge commit hash**.
+- Do not move or replace the existing `v0.3.6` tag. It points to a commit whose
+  Gradle file still says versionCode `202`; F-Droid's tag scanner therefore
+  rejects it as older than the corrected `306` build. The initial submission
+  uses `UpdateCheckMode: Static`. The next release should be `v0.3.7` with
+  committed versionCode `307`, after which tag-based auto-update can be enabled.
+- `prebuild` and `build` command lists are joined into one shell, so `cd ..`
+  persists until the explicit `cd android` at the end.
 
 ```yaml
-Categories: [Multimedia]
+Categories:
+  - Multimedia
 License: MIT
+AuthorName: Double77x
+WebSite: https://radioscout.pages.dev
 SourceCode: https://github.com/Double77x/radioscout
 IssueTracker: https://github.com/Double77x/radioscout/issues
 Changelog: https://github.com/Double77x/radioscout/blob/main/src/pages/Changelog.tsx
-AutoUpdateMode: Version v%v
-UpdateCheckMode: Tags
-CurrentVersion: 0.3.5
-CurrentVersionCode: 305
+
+RepoType: git
+Repo: https://github.com/Double77x/radioscout.git
+
 Builds:
-  - versionName: 0.3.5
-    versionCode: 305
-    commit: v0.3.5
+  - versionName: 0.3.6
+    versionCode: 306
+    # REQUIRED: replace after merging the repository-side F-Droid work.
+    commit: 0000000000000000000000000000000000000000
     subdir: android
-    gradle: [yes]
+    sudo:
+      - apt-get update
+      - apt-get install -y nodejs npm
+      - npm install --global pnpm@10.34.5
+    gradle: yes
     prebuild:
-      - corepack enable
-      - pnpm install
-      - pnpm build
+      - cd ..
+      - pnpm install --frozen-lockfile
+    scandelete:
+      - node_modules
+    build:
+      - cd ..
+      - VITE_DISTRIBUTION=fdroid pnpm build
       - npx cap sync android
-      - node scripts/cap-version.js
+      - cd android
+
+UpdateCheckMode: Static
+CurrentVersion: 0.3.6
+CurrentVersionCode: 306
+
+MaintainerNotes: |-
+  The web bundle must be built with VITE_DISTRIBUTION=fdroid. That build flag
+  disables both the Capgo OTA path and the GitHub APK update prompt so F-Droid
+  remains the only update channel for this build.
 ```
 
-Notes for the MR: `prebuild` order mirrors our own `build:android:apk` chain minus signing (F-Droid signs with its keys); `VITE_DISTRIBUTION=fdroid` + empty `VITE_OTA_URL` exported in the recipe environment; `output` left default (gradle `radioscout-release.apk` rename already handled in `build.gradle:12-16` — confirm the recipe's `output:` glob matches or drop the rename for this flavor).
+Why this shape:
 
-Upstream listing assets (Triple-T, preferred by reviewers): `metadata/en-US/{short_description.txt (≤50 chars), full_description.txt, images/{icon.png, phoneScreenshots/}, changelogs/<vercode>.txt (≤500 chars)}` — screenshots can reuse Play-store art when it exists.
+- `scandelete: node_modules` removes dependency binaries flagged by the source
+  scanner while retaining the JavaScript modules needed by the later `build`
+  commands.
+- The web build and Capacitor sync run in `build`, after scanning, matching
+  existing Capacitor recipes in `fdroiddata`.
+- F-Droid's own `gradlew-fdroid` runs `assembleRelease` and finds the single
+  renamed `radioscout-release.apk` in the standard Gradle output directory, so
+  no custom `output:` glob is needed.
+- `UpdateCheckMode: Static` is deliberate for the initial submission. The
+  already-published `v0.3.6` tag still contains versionCode `202`; asking
+  F-Droid to compare it with the corrected `306` build fails with
+  `current version is newer`. Moving a published tag would break release
+  provenance, so the first listing stays static.
 
-Anti-features expected: none (no tracking, no non-free services in the F-Droid flavor — radio-browser directory + GitHub file hosting don't trigger `NonFreeNet`; reviewers have the final word).
+## 4. Validation
 
-## 4. Migration warning (communicate, don't code)
+### 4.1 Repository checks
 
-F-Droid signs with **its own key**, so the store build cannot update over a sideloaded/GitHub APK (same `applicationId`, different signature): switching channels means **uninstall → reinstall**, which wipes the WebView's IndexedDB (favourites, history, prefs). The existing Settings → Data backup export/import (`src/lib/radio/backup.ts`, versioned envelope) is the migration path — call it out in the F-Droid description's first line and in the GitHub release notes that first ship alongside the listing.
+Run from a normal full checkout:
 
-## 5. Validation before submitting
+```bash
+pnpm install --frozen-lockfile
+pnpm fdroid:check
+pnpm test:unit
+pnpm lint
+pnpm build
+VITE_DISTRIBUTION=fdroid pnpm build
+cd android && ./gradlew assembleRelease --no-daemon
+```
 
-1. Land §2.1–2.3 + listing assets on main, tag normally.
-2. Locally reproduce the F-Droid build per the [Quick Start Guide](https://f-droid.org/en/docs/Submitting_to_F-Droid_Quick_Start_Guide) (their Docker container): `fdroid lint` + `fdroid build io.github.double77x.radioscout` with network unplugged mid-build if you want to prove no hidden downloads — plus a boot smoke test of the resulting APK (OTA check must not fire, update dialog must not appear).
-3. Submit the fdroiddata MR; expect review rounds (respond, don't argue policy). Post-listing, new `v*` tags are picked up automatically with a few days' lag — keep publishing Capgo OTA in parallel for sideload users; the two channels never interact (F-Droid builds ignore the manifest).
+The release APK must report:
 
-## 6. Effort
+```text
+package: name='io.github.double77x.radioscout' versionCode='306' versionName='0.3.6'
+```
 
-Half a day for §2 + assets, plus review latency on the F-Droid side (days to weeks, mostly waiting). No native work, no new APK, no backend.
+### 4.2 Official F-Droid checks
+
+After replacing the placeholder commit, follow the current
+[Submitting to F-Droid Quick Start Guide](https://f-droid.org/en/docs/Submitting_to_F-Droid_Quick_Start_Guide/)
+in separate temporary directories for `fdroidserver`, `fdroiddata`, and the app
+checkout. At minimum run:
+
+```bash
+fdroid readmeta
+fdroid rewritemeta io.github.double77x.radioscout
+fdroid checkupdates --allow-dirty io.github.double77x.radioscout
+fdroid lint io.github.double77x.radioscout
+fdroid build io.github.double77x.radioscout
+```
+
+**Never use `git sparse-checkout` on the RadioScout working repository to obtain
+fdroidserver files.** That mode hides unrelated tracked files behind
+`skip-worktree` while ordinary `git status` can still look deceptively clean.
+Clone or mount fdroidserver outside the app checkout instead.
+
+### 4.3 APK smoke test
+
+Install the F-Droid-built APK on a clean Android device or emulator and verify:
+
+- the app boots and radio playback works;
+- no GitHub APK update dialog appears;
+- no Capgo OTA bundle is staged or announced;
+- package version is `0.3.6` / `306`;
+- switching from the GitHub-signed APK is documented as uninstall + reinstall.
+
+## 5. Submission and future updates
+
+1. Merge the repository-side readiness branch.
+2. Capture its full commit hash and replace the placeholder in the recipe.
+3. Pass `fdroid lint`, `fdroid build`, and the APK smoke test.
+4. Open a `New App: RadioScout` merge request in `fdroiddata`.
+5. Keep the initial listing on `UpdateCheckMode: Static` until a correctly
+   stamped release tag exists (`v0.3.7` / `307`).
+6. At that point, replace `UpdateCheckMode: Static` with:
+
+   ```yaml
+   AutoUpdateMode: Version
+   UpdateCheckMode: Tags ^v[0-9.]+$
+   UpdateCheckData: 'android/app/build.gradle|versionCode\s(\d+)||v([\d.]+)'
+   ```
+
+7. For every future native release: bump `package.json`, run `pnpm cap:version`,
+   add/update the versionCode changelog, commit both, then tag `vX.Y.Z`.
+8. Keep Capgo OTA enabled for GitHub/sideload installs; the F-Droid flavor stays
+   store-managed.
+
+F-Droid and the GitHub APK use different signing keys. Moving an existing
+install between them requires uninstall/reinstall, so users should export their
+data from **Settings → Data backup** first.

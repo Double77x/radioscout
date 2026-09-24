@@ -15,6 +15,7 @@
     "cap:android": "pnpm build && npx cap sync android",
     "cap:open:android": "npx cap open android",
     "cap:version": "node scripts/cap-version.js",
+    "fdroid:check": "node scripts/fdroid-check.mjs",
     "ota:publish": "node scripts/publish-ota.mjs",
     "cap:assets": "node scripts/generate-native-assets.mjs",
     "cap:doctor": "npx cap doctor",
