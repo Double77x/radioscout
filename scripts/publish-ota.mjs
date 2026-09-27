@@ -133,6 +133,14 @@ const checksum = createHash("sha256").update(bytes).digest("hex");
 console.log(`[ota:publish] bundle ${(bytes.length / 1024).toFixed(0)} KB, sha256 ${checksum.slice(0, 16)}…`);
 
 const tag = `ota-${channel}-${version}`;
+// Prerelease so `…/releases/latest` keeps pointing at the APK releases. OTA
+// bundles are for the in-app updater, not for humans.
+//
+// The prerelease flag is also what keeps these invisible to Obtainium, whose
+// GitHub source skips prereleases by default (`includePrereleases` defaults to
+// false). Do not "fix" that by flipping `includePrereleases` in
+// `distribution/obtainium/*.json`. A config that opts in would let a scraper
+// walk these `.zip`-only releases. See docs/OBTAINIUM_PLAN.md §4.1.
 // `gh release create <file>#<label>` renaming is a no-op on Windows, and
 // GitHub serves `+` in asset names only percent-encoded — so stage an
 // exactly-named copy: the uploaded asset, the manifest URL and the on-disk

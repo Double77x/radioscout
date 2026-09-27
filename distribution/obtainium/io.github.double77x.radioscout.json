@@ -1,0 +1,13 @@
+{
+  "config": {
+    "id": "io.github.double77x.radioscout",
+    "url": "https://github.com/Double77x/radioscout",
+    "author": "Double77x",
+    "name": "RadioScout"
+  },
+  "icon": "https://radioscout.pages.dev/web-app-manifest-512x512.png",
+  "categories": ["music"],
+  "description": {
+    "en": "Free worldwide radio player. No accounts, no tracking"
+  }
+}
