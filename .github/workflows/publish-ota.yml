@@ -95,14 +95,14 @@ jobs:
           curl -sL "$URL" -o /tmp/ota-verify.zip
           echo "$SUM  /tmp/ota-verify.zip" | sha256sum -c -
 
+      # The publish step above rewrote the (tracked) manifest, so the tree is
+      # dirty by design — autostash it across the rebase.
       - name: Commit manifest back
         run: |
           MANIFEST="public/ota/${{ inputs.channel }}.json"
           VERSION="$(node -p "require('./$MANIFEST').versions[0].version")"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The publish step above rewrote the (tracked) manifest, so the
-          # tree is dirty by design — autostash it across the rebase.
           git status --porcelain
           git pull --rebase --autostash origin "${{ github.ref_name }}"
           git add "$MANIFEST"
