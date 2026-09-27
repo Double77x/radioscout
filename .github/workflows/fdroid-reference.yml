@@ -135,6 +135,7 @@ jobs:
       - name: Publish public reference asset
         uses: softprops/action-gh-release@v3
         with:
+          prerelease: true
           tag_name: ${{ env.REFERENCE_TAG }}
           name: F-Droid reproducible reference 0.3.6 (306)
           body: |
