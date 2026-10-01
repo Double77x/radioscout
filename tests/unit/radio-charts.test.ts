@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { searchStations, topClickedStations, topVotedStations } from "@/lib/radio/api";
 
 function row(uuid: string, playable: boolean, bitrate = 0): Record<string, unknown> {
@@ -11,22 +11,22 @@ function row(uuid: string, playable: boolean, bitrate = 0): Record<string, unkno
 }
 
 function stubFetch(rows: Record<string, unknown>[], seen: string[]): void {
-  (globalThis as Record<string, unknown>).fetch = ((url: unknown) => {
+  (globalThis as Record<string, unknown>).fetch = (url: unknown) => {
     seen.push(String(url));
     return Promise.resolve({ ok: true, json: () => Promise.resolve(rows) });
-  }) as typeof fetch;
+  };
 }
 
 /** Param-honoring stub: slices the directory like the server's limit/offset. */
 function stubPaged(rows: Record<string, unknown>[], seen: string[]): void {
-  (globalThis as Record<string, unknown>).fetch = ((url: unknown) => {
+  (globalThis as Record<string, unknown>).fetch = (url: unknown) => {
     const urlString = String(url);
     seen.push(urlString);
     const params = new URL(urlString).searchParams;
     const limit = Number(params.get("limit") ?? "0");
     const offset = Number(params.get("offset") ?? "0");
     return Promise.resolve({ ok: true, json: () => Promise.resolve(rows.slice(offset, offset + limit)) });
-  }) as typeof fetch;
+  };
 }
 
 function offsetOf(url: string): number {

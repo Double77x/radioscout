@@ -8,6 +8,7 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
 import { isFdroidDistribution } from "@/lib/distribution";
+import { envString } from "@/lib/utils";
 import { pickOtaUpdate } from "@/lib/ota";
 import { playBackTransition } from "@/lib/animated-back";
 import { checkpointListeningSession } from "@/lib/player/store";
@@ -40,8 +41,9 @@ async function runOtaUpdateCheck(signal: AbortSignal): Promise<string | null> {
   // Manifest host: explicit override wins, else the site serves its own
   // manifest (`public/ota/` in this repo). Unresolvable base (or a 404
   // before the first publish) means dormant — never an error.
-  const override = (import.meta.env.VITE_OTA_URL as string | undefined)?.replace(/\/+$/, "");
-  const canonical = (import.meta.env.VITE_CANONICAL_URL as string | undefined)?.replace(/\/+$/, "");
+  const override = envString("VITE_OTA_URL")?.replace(/\/+$/, "");
+  const canonical = envString("VITE_CANONICAL_URL")?.replace(/\/+$/, "");
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- empty env var counts as unset and falls through to the canonical base
   const base = override || (canonical ? `${canonical}/ota` : "");
   if (!base) return null;
   const info = await App.getInfo().catch((error: unknown) => {
@@ -62,7 +64,7 @@ async function runOtaUpdateCheck(signal: AbortSignal): Promise<string | null> {
     // Bundle info unavailable — the native version stands.
   }
   if (signal.aborted) return null;
-  const manifest = await fetch(`${base}/production.json`, { cache: "no-store", signal })
+  const manifest: unknown = await fetch(`${base}/production.json`, { cache: "no-store", signal })
     .then((response) => (response.ok ? response.json() : null))
     .catch((error: unknown) => {
       // Aborts are cleanup, not failures — stay quiet on unmount.
@@ -93,13 +95,15 @@ export function NativeShell() {
 
   // Status bar follows the resolved theme (re-runs on theme change).
   useEffect(() => {
-    if (!isNative()) return;
+    if (!isNative()) return () => {};
     let cancelled = false;
     (async () => {
       await StatusBar.setOverlaysWebView({ overlay: false });
       if (cancelled) return;
       await StatusBar.setStyle({ style: resolvedTheme === "dark" ? Style.Dark : Style.Light });
-    })().catch((error: unknown) => console.error("[native] status-bar", error));
+    })().catch((error: unknown) => {
+      console.error("[native] status-bar", error);
+    });
     return () => {
       cancelled = true;
     };
@@ -112,7 +116,7 @@ export function NativeShell() {
   // outlives this effect — the rule cannot see that ownership statically.
   // eslint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
-    if (!isNative()) return;
+    if (!isNative()) return () => {};
     let handle: { remove: () => Promise<void> } | undefined = undefined;
     let cancelled = false;
     (async () => {
@@ -122,7 +126,9 @@ export function NativeShell() {
       const listener = await App.addListener("backButton", () => {
         if (globalThis.history.length > 1) {
           // Animated when a SwipeBack frame is mounted; instant otherwise.
-          playBackTransition(() => router.history.back());
+          playBackTransition(() => {
+            router.history.back();
+          });
         } else {
           void App.exitApp();
         }
@@ -131,11 +137,15 @@ export function NativeShell() {
       // empty handle, so own this allocation and remove it immediately —
       // otherwise the listener outlives the shell and fires into a dead router.
       if (cancelled) {
-        await listener.remove().catch((error: unknown) => console.error("[native] shell", error));
+        await listener.remove().catch((error: unknown) => {
+          console.error("[native] shell", error);
+        });
         return;
       }
       handle = listener;
-    })().catch((error: unknown) => console.error("[native] shell", error));
+    })().catch((error: unknown) => {
+      console.error("[native] shell", error);
+    });
     return () => {
       cancelled = true;
       void handle?.remove();
@@ -148,7 +158,7 @@ export function NativeShell() {
   // effect above (checkpointing is idempotent: sub-threshold banks no-op).
   // eslint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
-    if (!isNative()) return;
+    if (!isNative()) return () => {};
     let handle: { remove: () => Promise<void> } | undefined = undefined;
     let cancelled = false;
     void App.addListener("appStateChange", (event) => {
@@ -156,12 +166,16 @@ export function NativeShell() {
     })
       .then((listener) => {
         if (cancelled) {
-          listener.remove().catch((error: unknown) => console.error("[native] listening", error));
+          listener.remove().catch((error: unknown) => {
+            console.error("[native] listening", error);
+          });
           return;
         }
         handle = listener;
       })
-      .catch((error: unknown) => console.error("[native] listening", error));
+      .catch((error: unknown) => {
+        console.error("[native] listening", error);
+      });
     return () => {
       cancelled = true;
       void handle?.remove();
@@ -179,7 +193,7 @@ export function NativeShell() {
   // fire-and-forget bridge call), abort-guarded end to end.
   // eslint-disable-next-line react-doctor/effect-needs-cleanup, react-doctor/no-fetch-in-effect
   useEffect(() => {
-    if (!isNative()) return;
+    if (!isNative()) return () => {};
     const controller = new AbortController();
     void runOtaUpdateCheck(controller.signal)
       .then((staged) => {
@@ -189,12 +203,16 @@ export function NativeShell() {
             action: {
               label: "Restart now",
               onClick: () =>
-                void CapacitorUpdater.reload().catch((error: unknown) => console.error("[ota] reload", error)),
+                void CapacitorUpdater.reload().catch((error: unknown) => {
+                  console.error("[ota] reload", error);
+                }),
             },
           });
         }
       })
-      .catch((error: unknown) => console.error("[ota]", error));
+      .catch((error: unknown) => {
+        console.error("[ota]", error);
+      });
     return () => {
       controller.abort();
     };

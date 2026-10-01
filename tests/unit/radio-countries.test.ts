@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import {
   COUNTRIES_KEY,
   displayCountryName,
@@ -7,6 +7,7 @@ import {
   writeCountries,
 } from "@/lib/radio/countries";
 
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
 const globalScope = globalThis as unknown as { window?: unknown; localStorage?: Storage };
 const backing = new Map<string, string>();
 
@@ -21,12 +22,14 @@ function installStorageStub(): void {
     removeItem: (key: string) => {
       backing.delete(key);
     },
-    clear: () => backing.clear(),
+    clear: () => {
+      backing.clear();
+    },
     get length() {
       return backing.size;
     },
     key: (index: number) => [...backing.keys()][index] ?? null,
-  } as Storage;
+  };
 }
 
 afterEach(() => {

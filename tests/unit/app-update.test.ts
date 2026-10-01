@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { isUpgradeAvailable, pickDownloadUrl, stripReleasePrefix } from "@/lib/app-update";
 
 describe("stripReleasePrefix", () => {

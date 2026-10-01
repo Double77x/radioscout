@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach } from "vite-plus/test";
 import {
   canonicalStreamUrl,
   filterPlayableStations,
@@ -35,6 +35,8 @@ const row = {
   clicktrend: 5,
   lastcheckok: 1,
 };
+
+const https = (uuid: string, url: string) => parseStation({ ...row, stationuuid: uuid, url, url_resolved: url });
 
 describe("parseStation", () => {
   it("coerces numeric strings from the API", () => {
@@ -170,7 +172,6 @@ describe("isPlayableStreamUrl", () => {
 });
 
 describe("filterPlayableStations", () => {
-  const https = (uuid: string, url: string) => parseStation({ ...row, stationuuid: uuid, url, url_resolved: url });
   it("drops HTTP-only and URL-less rows, keeps order of survivors", () => {
     const httpOld = https("http-old", "http://stream-kiss.planetradio.co.uk/kisstory.mp3?direct=true");
     const httpJunk = https(

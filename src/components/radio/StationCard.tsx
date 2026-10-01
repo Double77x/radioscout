@@ -59,7 +59,13 @@ export function StationCard({
       data-testid='station-row'
       data-playing={playing ? "true" : "false"}
       style={outerStyle}
-      onPointerDown={onRowPointerDown ? (event) => dataUuid && onRowPointerDown(event, dataUuid) : undefined}
+      onPointerDown={
+        onRowPointerDown
+          ? (event) => {
+              if (dataUuid) onRowPointerDown(event, dataUuid);
+            }
+          : undefined
+      }
       className={cn(
         "flex min-h-16 items-center gap-2 rounded-3xl border border-border bg-card p-3 pr-2",
         animate && "animate-scout-enter",
@@ -70,7 +76,9 @@ export function StationCard({
         size='icon'
         data-testid='station-play'
         aria-label={playing ? `Pause ${station.name}` : `Play ${station.name}`}
-        onClick={() => onPlay(station)}
+        onClick={() => {
+          onPlay(station);
+        }}
         className={cn(
           "size-10 shrink-0 rounded-full",
           playing ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground",
@@ -90,7 +98,9 @@ export function StationCard({
       <button
         type='button'
         aria-label={`Details for ${station.name}`}
-        onClick={() => onOpenDetail(station)}
+        onClick={() => {
+          onOpenDetail(station);
+        }}
         className='min-w-0 flex-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
         <span className='block truncate text-sm font-semibold'>{station.name}</span>
         <span className='flex items-center gap-1.5 truncate text-xs text-muted-foreground'>
@@ -105,7 +115,9 @@ export function StationCard({
         type='button'
         aria-label={favourited ? `Remove ${station.name} from favourites` : `Save ${station.name} to favourites`}
         aria-pressed={favourited}
-        onClick={() => onToggleFavourite(station)}
+        onClick={() => {
+          onToggleFavourite(station);
+        }}
         className={cn(
           "grid size-10 shrink-0 place-items-center rounded-full transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
           favourited ? "text-amber-500" : "text-muted-foreground hover:bg-muted hover:text-foreground",

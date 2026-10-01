@@ -15,7 +15,7 @@ const VALID = new Set<number>(QUALITY_OPTIONS.map((option) => option.minBitrate)
 /** Stored value → valid minimum, collapsing garbage to any quality. Never throws. */
 export function normalizeMinBitrate(value: unknown): number {
   const parsed = typeof value === "string" ? Number(value) : typeof value === "number" ? value : NaN;
-  return Number.isInteger(parsed) && VALID.has(parsed) ? (parsed as number) : 0;
+  return Number.isInteger(parsed) && VALID.has(parsed) ? parsed : 0;
 }
 
 /** Selected minimum bitrate, any quality (`0`) during prerender. Never throws. */

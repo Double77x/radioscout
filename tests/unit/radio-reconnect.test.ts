@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAYS_MS, ReconnectTimer, reconnectDelayMs } from "@/lib/radio/reconnect";
 
 beforeEach(() => {
@@ -29,7 +29,7 @@ describe("reconnectDelayMs", () => {
 describe("ReconnectTimer", () => {
   it("fires once after the attempt's delay", () => {
     const timer = new ReconnectTimer();
-    const onRetry = vi.fn();
+    const onRetry = vi.fn<() => void>();
     timer.schedule(1, onRetry);
     expect(timer.pending).toBe(true);
     vi.advanceTimersByTime(RECONNECT_DELAYS_MS[0] - 1);
@@ -41,7 +41,7 @@ describe("ReconnectTimer", () => {
 
   it("cancel drops the wait", () => {
     const timer = new ReconnectTimer();
-    const onRetry = vi.fn();
+    const onRetry = vi.fn<() => void>();
     timer.schedule(2, onRetry);
     timer.cancel();
     expect(timer.pending).toBe(false);
@@ -51,8 +51,8 @@ describe("ReconnectTimer", () => {
 
   it("rescheduling replaces the pending wait", () => {
     const timer = new ReconnectTimer();
-    const first = vi.fn();
-    const second = vi.fn();
+    const first = vi.fn<() => void>();
+    const second = vi.fn<() => void>();
     timer.schedule(1, first);
     timer.schedule(3, second);
     vi.advanceTimersByTime(RECONNECT_DELAYS_MS[2]);
@@ -62,7 +62,7 @@ describe("ReconnectTimer", () => {
 
   it("exhausted attempts arm nothing", () => {
     const timer = new ReconnectTimer();
-    const onRetry = vi.fn();
+    const onRetry = vi.fn<() => void>();
     timer.schedule(MAX_RECONNECT_ATTEMPTS + 1, onRetry);
     expect(timer.pending).toBe(false);
     vi.advanceTimersByTime(60_000);

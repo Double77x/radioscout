@@ -62,9 +62,15 @@ export function updateMediaSession(station: Station, handlers: MediaSessionHandl
           ? []
           : [{ src: upgradeInsecureUrl(station.favicon), sizes: "512x512", type: "image/png" }],
     });
-    mediaSession.setActionHandler("play", () => void handlers.onPlay());
-    mediaSession.setActionHandler("pause", () => handlers.onPause());
-    mediaSession.setActionHandler("stop", () => handlers.onStop());
+    mediaSession.setActionHandler("play", () => {
+      handlers.onPlay();
+    });
+    mediaSession.setActionHandler("pause", () => {
+      handlers.onPause();
+    });
+    mediaSession.setActionHandler("stop", () => {
+      handlers.onStop();
+    });
   } catch {
     // MediaSession is progressive enhancement — never break playback.
   }

@@ -56,7 +56,13 @@ export function AppUpdateDialog() {
             fixes) need a fresh APK.
           </BaseDialog.Description>
           <div className='mt-4 grid grid-cols-2 gap-2'>
-            <Button type='button' variant='secondary' onClick={() => setDismissed(true)} className='h-11 rounded-full'>
+            <Button
+              type='button'
+              variant='secondary'
+              onClick={() => {
+                setDismissed(true);
+              }}
+              className='h-11 rounded-full'>
               Later
             </Button>
             <Button type='button' onClick={download} className='h-11 rounded-full'>

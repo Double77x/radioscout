@@ -78,8 +78,8 @@ test("a11y: switches have accessible names", async ({ page }) => {
     const s = switches.nth(i);
     await expect(s).toHaveAttribute("aria-checked", /true|false/);
     const name = await s.evaluate(
-      (el) =>
-        (el as HTMLElement).textContent || el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || "",
+      // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- a11y chain: empty text falls through to aria-label attributes
+      (el) => el.textContent || el.getAttribute("aria-label") || el.getAttribute("aria-labelledby") || "",
     );
     const labelledBy = await s.getAttribute("aria-labelledby");
     const ariaLabel = await s.getAttribute("aria-label");

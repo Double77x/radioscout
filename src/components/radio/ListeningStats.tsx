@@ -86,7 +86,9 @@ export function ListeningStats() {
           type='button'
           variant='ghost'
           size='sm'
-          onClick={() => setConfirmClear(true)}
+          onClick={() => {
+            setConfirmClear(true);
+          }}
           className='min-w-36 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'>
           <Trash2 aria-hidden='true' />
           Clear stats

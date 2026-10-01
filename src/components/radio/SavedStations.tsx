@@ -117,6 +117,9 @@ function dragVisualReducer(state: DragVisualState, action: DragVisualAction): Dr
         ? state
         : { ...state, id: null, overIndex: null, dy: 0 };
     }
+    default: {
+      return state;
+    }
   }
 }
 
@@ -242,12 +245,12 @@ export function SavedStations() {
         const newTop = topOfOrder(next, state.id, state);
         dispatch({ type: "commit", order: next, settle: { id: state.id, dy: originTop + dropDy - newTop } });
         if (settleRaf.current !== 0) globalThis.cancelAnimationFrame(settleRaf.current);
-        settleRaf.current = globalThis.requestAnimationFrame(() =>
+        settleRaf.current = globalThis.requestAnimationFrame(() => {
           globalThis.requestAnimationFrame(() => {
             settleRaf.current = 0;
             dispatch({ type: "settle-done" });
-          }),
-        );
+          });
+        });
         persistOrder(next);
         // A real drag just ended: swallow the click landing on the row so a
         // drop over a button can't trigger it. Plain taps never set this.
@@ -296,13 +299,13 @@ export function SavedStations() {
    * (threshold-gated so taps, button clicks and touch scrolls pass
    * through untouched).
    */
-  const beginDrag = (event: React.PointerEvent, uuid: string, immediate: boolean) => {
+  const beginDrag = (event: React.PointerEvent<HTMLElement>, uuid: string, immediate: boolean) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     const list = listRef.current;
     const item = event.currentTarget.closest("li");
     if (!list || !item) return;
-    const target = event.target as HTMLElement | null;
-    if (!immediate && target?.closest("button, a, input, textarea, select")) return;
+    const target = event.target;
+    if (!immediate && target instanceof Element && target.closest("button, a, input, textarea, select")) return;
     if (immediate) event.preventDefault();
 
     const controller = new AbortController();
@@ -314,7 +317,7 @@ export function SavedStations() {
     if (immediate) {
       activateDrag({
         uuid,
-        element: event.currentTarget as HTMLElement,
+        element: event.currentTarget,
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
@@ -324,7 +327,7 @@ export function SavedStations() {
     } else {
       const pending: PendingDrag = {
         uuid,
-        element: event.currentTarget as HTMLElement,
+        element: event.currentTarget,
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
@@ -438,11 +441,15 @@ export function SavedStations() {
             playing={player.station?.stationuuid === row.stationuuid && player.status === "playing"}
             favourited
             onPlay={togglePlay}
-            onToggleFavourite={(item) => toggleFavourite.mutate(item)}
+            onToggleFavourite={(item) => {
+              toggleFavourite.mutate(item);
+            }}
             onOpenDetail={openDetail}
             animate={false}
             dataUuid={row.stationuuid}
-            onRowPointerDown={(event, uuid) => beginDrag(event, uuid, false)}
+            onRowPointerDown={(event, uuid) => {
+              beginDrag(event, uuid, false);
+            }}
             outerStyle={rowOuterStyle({ dragging, dragDy, settleDy: settling, shift, frozen: settle !== null })}
             outerClassName={cn(
               "cursor-grab transition-transform duration-200 active:cursor-grabbing",
@@ -452,8 +459,12 @@ export function SavedStations() {
               <button
                 type='button'
                 aria-label={`Reorder ${row.snapshot.name}`}
-                onPointerDown={(event) => beginDrag(event, row.stationuuid, true)}
-                onContextMenu={(event) => event.preventDefault()}
+                onPointerDown={(event) => {
+                  beginDrag(event, row.stationuuid, true);
+                }}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                }}
                 className='grid h-11 w-7 shrink-0 cursor-grab touch-none place-items-center rounded-full text-muted-foreground transition active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
                 <GripVertical className='size-4' />
               </button>

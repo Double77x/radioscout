@@ -80,7 +80,9 @@ export function LanguagePicker() {
 
   const ensureDirectory = () => {
     if (directory !== null) return;
-    void loadDirectory().then((mod) => setDirectory(mod.DIRECTORY_LANGUAGES));
+    void loadDirectory().then((mod) => {
+      setDirectory(mod.DIRECTORY_LANGUAGES);
+    });
   };
 
   const toggleOpen = () => {
@@ -141,7 +143,9 @@ export function LanguagePicker() {
               <button
                 type='button'
                 aria-label={`Remove ${name}`}
-                onClick={() => select(toggleMembership(languages, name))}
+                onClick={() => {
+                  select(toggleMembership(languages, name));
+                }}
                 className='flex min-h-9 items-center gap-1.5 rounded-full bg-scout-ink pr-2.5 pl-3 text-xs font-semibold text-scout-paper transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
                 <SelectedFlag name={name} />
                 <span className='capitalize'>{name}</span>
@@ -184,7 +188,9 @@ export function LanguagePicker() {
               type='search'
               autoComplete='off'
               value={query}
-              onChange={(event) => onQuery(event.target.value)}
+              onChange={(event) => {
+                onQuery(event.target.value);
+              }}
               placeholder='Search 600+ languages…'
               className='h-10 w-full rounded-full border border-border bg-card pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden'
             />
@@ -206,7 +212,9 @@ export function LanguagePicker() {
                         key={lang.name}
                         type='button'
                         aria-pressed={active}
-                        onClick={() => select(toggleMembership(languages, lang.name))}
+                        onClick={() => {
+                          select(toggleMembership(languages, lang.name));
+                        }}
                         style={{
                           position: "absolute",
                           top: 0,

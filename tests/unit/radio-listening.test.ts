@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { clearListening, logListening, RadioDB, summarizeListening, type ListeningRow } from "@/lib/radio/store";
 
 let counter = 0;

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, getRouteApi } from "@tanstack/react-router";
+import { isRecord } from "@/lib/utils";
 import { ChartColumn, Heart, SearchX, Star, TextAlignStart, Trash2 } from "lucide-react";
 import { SEO } from "@/components/Seo";
 import { AppShell } from "@/components/scout/AppShell";
@@ -110,7 +111,8 @@ export default function HomePage() {
   // A window event (not props) because the palette lives outside Home.
   useEffect(() => {
     const onOpenSection = (event: Event) => {
-      const section = (event as CustomEvent<{ section?: unknown }>).detail?.section;
+      const detail: unknown = event instanceof CustomEvent ? event.detail : undefined;
+      const section = isRecord(detail) ? detail.section : undefined;
       if (typeof section !== "string" || !HOME_SECTION_IDS.has(section)) return;
       if (!openSections.includes(section)) setOpenSections([...openSections, section]);
       requestAnimationFrame(() => {
@@ -120,7 +122,9 @@ export default function HomePage() {
       });
     };
     globalThis.addEventListener("open-home-section", onOpenSection);
-    return () => globalThis.removeEventListener("open-home-section", onOpenSection);
+    return () => {
+      globalThis.removeEventListener("open-home-section", onOpenSection);
+    };
   }, [openSections, setOpenSections]);
 
   const renderRow = (station: Station, key?: string) => (
@@ -130,7 +134,9 @@ export default function HomePage() {
       playing={player.station?.stationuuid === station.stationuuid && player.status === "playing"}
       favourited={favouriteIds.has(station.stationuuid)}
       onPlay={togglePlay}
-      onToggleFavourite={(item) => toggleFavourite.mutate(item)}
+      onToggleFavourite={(item) => {
+        toggleFavourite.mutate(item);
+      }}
       onOpenDetail={openDetail}
     />
   );
@@ -250,7 +256,9 @@ export default function HomePage() {
                         type='button'
                         variant='ghost'
                         size='sm'
-                        onClick={() => setConfirmClearHistory(true)}
+                        onClick={() => {
+                          setConfirmClearHistory(true);
+                        }}
                         className='min-w-36 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground'>
                         <Trash2 aria-hidden='true' />
                         Clear history

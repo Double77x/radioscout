@@ -28,6 +28,11 @@ const DARK = "#171717";
 const RES = "android/app/src/main/res";
 const ANYDPI = `${RES}/mipmap-anydpi-v26`;
 
+/**
+ * @param {number} size
+ * @param {string} color
+ * @returns {{ create: { width: number, height: number, channels: 4, background: string } }}
+ */
 const solid = (size, color) => ({
   create: { width: size, height: size, channels: 4, background: color },
 });
@@ -49,6 +54,10 @@ const BACKGROUND_COLOR_XML = `<?xml version="1.0" encoding="utf-8"?>
 async function main() {
   await mkdir("assets", { recursive: true });
   const mark = await readFile("public/logo.svg");
+  /**
+   * @param {number} size
+   * @returns {Promise<Buffer>}
+   */
   const art = (size) => sharp(mark).resize(size, size).png().toBuffer();
 
   // Adaptive background: full-bleed dark tile.

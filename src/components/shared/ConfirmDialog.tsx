@@ -40,7 +40,9 @@ export function ConfirmDialog({
               <Button
                 type='button'
                 variant='outline'
-                onClick={() => onOpenChange(false)}
+                onClick={() => {
+                  onOpenChange(false);
+                }}
                 className='h-11 flex-1 rounded-full'>
                 Cancel
               </Button>

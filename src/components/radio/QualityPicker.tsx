@@ -39,7 +39,9 @@ export function QualityPicker() {
           ),
         }))}
         value={String(active)}
-        onChange={(id) => select(Number(id))}
+        onChange={(id) => {
+          select(Number(id));
+        }}
         optionClassName='min-h-11 flex-col gap-0.5'
       />
       <p className='px-2 pt-1.5 text-xs text-muted-foreground'>

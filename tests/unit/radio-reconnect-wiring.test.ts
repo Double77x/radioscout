@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import { radioDb } from "@/lib/radio/store";
 import { MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAYS_MS } from "@/lib/radio/reconnect";
@@ -12,11 +12,11 @@ type AudioHandler = () => void;
 class FakeAudio {
   static created: FakeAudio[] = [];
   src = "";
-  volume = 1;
+  readonly volume = 1;
   muted = false;
-  preload = "";
-  private attrs = new Map<string, string>();
-  private handlers = new Map<string, Set<AudioHandler>>();
+  readonly preload = "";
+  private readonly attrs = new Map<string, string>();
+  private readonly handlers = new Map<string, Set<AudioHandler>>();
   constructor() {
     FakeAudio.created.push(this);
   }
@@ -70,7 +70,9 @@ async function settle(): Promise<void> {
 /** Real-timer sleep (the warm-up below needs the live clock). */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
-    setTimeout(() => resolve(), ms);
+    setTimeout(() => {
+      resolve();
+    }, ms);
   });
 }
 
@@ -82,10 +84,11 @@ function latest(): FakeAudio {
 }
 
 function installStubs(): void {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
   const scope = globalThis as unknown as { Audio?: new () => FakeAudio; fetch?: typeof fetch };
   scope.Audio = FakeAudio;
   // Never touch the live directory — resolve falls back to the local URL.
-  scope.fetch = (() => Promise.reject(new Error("offline"))) as typeof fetch;
+  scope.fetch = () => Promise.reject(new Error("offline"));
 }
 
 beforeEach(async () => {

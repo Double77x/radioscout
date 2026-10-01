@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { FADE_STEPS, PLAY_FADE_MS, TRANSPORT_FADE_MS, fadeLevelAt, rampElement, runFadeRamp } from "@/lib/player/fades";
 
 describe("fade constants", () => {
@@ -102,6 +102,7 @@ function stubElement(): HTMLAudioElement & { writes: number[] } {
       volume = next;
       writes.push(next);
     },
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as HTMLAudioElement & { writes: number[] };
   return element;
 }
@@ -163,9 +164,10 @@ describe("rampElement", () => {
       set volume(_next: number) {
         throw new Error("gone");
       },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
     let done = 0;
-    expect(() =>
+    expect(() => {
       rampElement(
         element,
         1,
@@ -173,8 +175,8 @@ describe("rampElement", () => {
         1000,
         () => false,
         () => void (done += 1),
-      ),
-    ).not.toThrow();
+      );
+    }).not.toThrow();
     expect(done).toBe(1);
   });
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach } from "vite-plus/test";
 import { stationShareUrl } from "@/lib/radio/share";
 import { siteConfig } from "@/lib/site";
 

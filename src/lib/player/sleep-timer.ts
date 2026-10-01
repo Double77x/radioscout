@@ -47,7 +47,12 @@ export function armSleepTimer(minutes: number, onFire: () => void): void {
   const endsAt = Date.now() + validated * 60_000;
   emit({ sleepEndsAt: endsAt });
   if (canUseNativeAudio()) void nativeSetSleepTimer(validated * 60).catch(() => {});
-  sleepTimeout = globalThis.setTimeout(() => fireSleepTimer(onFire), Math.max(0, endsAt - Date.now()));
+  sleepTimeout = globalThis.setTimeout(
+    () => {
+      fireSleepTimer(onFire);
+    },
+    Math.max(0, endsAt - Date.now()),
+  );
   toast("Sleep timer set", { description: `Playback fades out in ${validated} min.` });
 }
 

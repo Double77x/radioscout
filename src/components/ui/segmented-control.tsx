@@ -52,6 +52,7 @@ export function SegmentedControl<T extends string>({
           "--active-index": activeIndex,
           "--segment-count": options.length,
           "--segment-height": density === "compact" ? "1.75rem" : "2.25rem",
+          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- CSS custom properties are not in React's CSSProperties
         } as CSSProperties
       }>
       <legend className='sr-only'>{label}</legend>
@@ -65,7 +66,9 @@ export function SegmentedControl<T extends string>({
               type='radio'
               aria-label={option.ariaLabel}
               checked={value === option.id}
-              onChange={() => onChange(option.id)}
+              onChange={() => {
+                onChange(option.id);
+              }}
             />
             <label htmlFor={id} className={optionClassName}>
               {option.label}

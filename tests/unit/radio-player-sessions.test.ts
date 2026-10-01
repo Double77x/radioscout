@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import { radioDb, summarizeListening } from "@/lib/radio/store";
 import { checkpointListeningSession } from "@/lib/player/store";
@@ -12,10 +12,10 @@ type AudioHandler = () => void;
 class FakeAudio {
   static created: FakeAudio[] = [];
   src = "";
-  volume = 1;
-  preload = "";
-  private attrs = new Map<string, string>();
-  private handlers = new Map<string, Set<AudioHandler>>();
+  readonly volume = 1;
+  readonly preload = "";
+  private readonly attrs = new Map<string, string>();
+  private readonly handlers = new Map<string, Set<AudioHandler>>();
   constructor() {
     FakeAudio.created.push(this);
   }
@@ -59,7 +59,9 @@ const STATION: Station = {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
-    setTimeout(() => resolve(), ms);
+    setTimeout(() => {
+      resolve();
+    }, ms);
   });
 }
 
@@ -74,10 +76,11 @@ beforeEach(async () => {
   vi.spyOn(Date, "now").mockImplementation(() => nowMs);
   // The player owns one audio singleton per module lifetime — track every
   // element ever created and always drive the latest (do NOT reset here).
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
   const scope = globalThis as unknown as { Audio?: new () => FakeAudio; fetch?: typeof fetch };
   scope.Audio = FakeAudio;
   // Never touch the live directory — resolve falls back to the local URL.
-  scope.fetch = (() => Promise.reject(new Error("offline"))) as typeof fetch;
+  scope.fetch = () => Promise.reject(new Error("offline"));
   await radioDb.listening.clear();
   await radioDb.history.clear();
 });

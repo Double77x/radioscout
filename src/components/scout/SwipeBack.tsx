@@ -127,7 +127,9 @@ export function SwipeBack({ children }: { children: ReactNode }) {
     const width = frameWidth(frame);
     const flick = dx > MIN_FLICK_PX && dx / dt > FLICK_VELOCITY_PX_MS;
     if (!cancelled && (dx > width * COMMIT_FRACTION || flick)) {
-      flyOut(() => router.history.back());
+      flyOut(() => {
+        router.history.back();
+      });
     } else {
       setX(frame, 0, SNAP_BACK_MS);
     }
@@ -138,8 +140,12 @@ export function SwipeBack({ children }: { children: ReactNode }) {
       ref={frameRef}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
-      onTouchEnd={(event) => endTouch(event, false)}
-      onTouchCancel={(event) => endTouch(event, true)}
+      onTouchEnd={(event) => {
+        endTouch(event, false);
+      }}
+      onTouchCancel={(event) => {
+        endTouch(event, true);
+      }}
       style={{ touchAction: "pan-y" }}
       className='flex min-h-full flex-1 flex-col overflow-x-clip'>
       {children}

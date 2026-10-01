@@ -167,7 +167,9 @@ let onVisibilityHidden: (() => void) | null = null;
 export function armListeningFlush(): void {
   if (flushArmed || globalThis.window === undefined) return;
   flushArmed = true;
-  onPageHide = () => checkpointListeningSession();
+  onPageHide = () => {
+    checkpointListeningSession();
+  };
   onVisibilityHidden = () => {
     if (globalThis.window.document.visibilityState === "hidden") checkpointListeningSession();
   };

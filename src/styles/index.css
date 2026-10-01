@@ -72,6 +72,7 @@
   --animate-pulse-glow: pulseGlow 2s infinite;
   --animate-scout-enter: scout-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-dropdown-in: dropdown-in 0.25s cubic-bezier(0.87, 0, 0.13, 1) both;
+  --animate-ticker: ticker linear infinite;
   --animate-draw-circle: draw-stroke 0.3s ease-out both;
   --animate-draw-check: draw-stroke 0.22s ease-out 0.18s both;
 
@@ -104,6 +105,16 @@
     }
     100% {
       box-shadow: 0 0 0 0 rgba(0, 0, 0, 0);
+    }
+  }
+  /* Seamless loop over two identical copies: -50% lands exactly one copy
+     over (each copy carries its own trailing gap via pr-8). */
+  @keyframes ticker {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
     }
   }
   @keyframes scout-enter {
@@ -527,6 +538,9 @@
   /* Scout — entrance animations stay off until they run */
   @media (prefers-reduced-motion: reduce) {
     .animate-scout-enter {
+      animation: none;
+    }
+    .animate-ticker {
       animation: none;
     }
     .animate-dropdown-in {

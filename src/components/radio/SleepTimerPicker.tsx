@@ -76,7 +76,9 @@ export function SleepTimerPicker() {
           type='button'
           aria-expanded={open}
           aria-controls={panelId}
-          onClick={() => setOpen((prev) => !prev)}
+          onClick={() => {
+            setOpen((prev) => !prev);
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape") setOpen(false);
           }}
@@ -98,7 +100,9 @@ export function SleepTimerPicker() {
                       key={option}
                       type='button'
                       aria-pressed={active}
-                      onClick={() => changeDuration(String(option))}
+                      onClick={() => {
+                        changeDuration(String(option));
+                      }}
                       className={cn(
                         "flex min-h-11 items-center gap-2 rounded-xl px-3 text-left text-sm transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
                         active ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground",

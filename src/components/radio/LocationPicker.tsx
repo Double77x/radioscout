@@ -75,7 +75,9 @@ export function LocationPicker() {
 
   const ensureDirectory = () => {
     if (directory !== null) return;
-    void loadDirectory().then((mod) => setDirectory(mod.DIRECTORY_COUNTRIES));
+    void loadDirectory().then((mod) => {
+      setDirectory(mod.DIRECTORY_COUNTRIES);
+    });
   };
 
   const toggleOpen = () => {
@@ -138,7 +140,9 @@ export function LocationPicker() {
               <button
                 type='button'
                 aria-label={`Remove ${name}`}
-                onClick={() => select(toggleMembership(countries, name))}
+                onClick={() => {
+                  select(toggleMembership(countries, name));
+                }}
                 className='flex min-h-9 items-center gap-1.5 rounded-full bg-scout-ink pr-2.5 pl-3 text-xs font-semibold text-scout-paper transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
                 <CountryFlag code={isoFor(name, directory)} name={displayCountryName(name)} />
                 <span>{displayCountryName(name)}</span>
@@ -181,7 +185,9 @@ export function LocationPicker() {
               type='search'
               autoComplete='off'
               value={query}
-              onChange={(event) => onQuery(event.target.value)}
+              onChange={(event) => {
+                onQuery(event.target.value);
+              }}
               placeholder='Search 200+ countries…'
               className='h-10 w-full rounded-full border border-border bg-card pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden'
             />
@@ -203,7 +209,9 @@ export function LocationPicker() {
                         key={country.name}
                         type='button'
                         aria-pressed={active}
-                        onClick={() => select(toggleMembership(countries, country.name))}
+                        onClick={() => {
+                          select(toggleMembership(countries, country.name));
+                        }}
                         style={{
                           position: "absolute",
                           top: 0,

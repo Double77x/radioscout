@@ -19,6 +19,11 @@ const DIST_HEADERS = path.resolve("dist", "client", "_headers");
 const PUBLIC_HEADERS = path.resolve("public", "_headers");
 const ROUTES_DIR = path.resolve("src", "routes");
 
+/**
+ * @param {string} dir
+ * @param {string} [base]
+ * @returns {string[]}
+ */
 function routeFiles(dir, base = "") {
   const entries = [];
   for (const file of fs.readdirSync(dir)) {
@@ -33,7 +38,10 @@ function routeFiles(dir, base = "") {
   return entries;
 }
 
-/** `space.$spaceId.lazy.tsx` → `/space/*`; index → `/`; bare `$` → skipped. */
+/** `space.$spaceId.lazy.tsx` → `/space/*`; index → `/`; bare `$` → skipped.
+ * @param {string} routeFile
+ * @returns {string | null}
+ */
 function toDynamicPrefix(routeFile) {
   const withoutExt = routeFile.replace(/\.lazy\.tsx$/, "").replace(/\.tsx$/, "");
   const parts = withoutExt
@@ -57,9 +65,9 @@ const prefixes = [
   ...new Set(
     routeFiles(ROUTES_DIR)
       .map((file) => toDynamicPrefix(file))
-      .filter(Boolean),
+      .filter((prefix) => typeof prefix === "string"),
   ),
-].toSorted();
+].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
 function readBaseHeaders() {
   if (fs.existsSync(DIST_HEADERS)) {

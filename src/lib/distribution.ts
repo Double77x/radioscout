@@ -3,6 +3,7 @@
  * producing the web assets copied into its APK; every other build keeps the
  * existing sideload updater behavior.
  */
+import { envString } from "./utils";
 export function isFdroidDistribution(): boolean {
-  return import.meta.env.VITE_DISTRIBUTION?.trim().toLowerCase() === "fdroid";
+  return envString("VITE_DISTRIBUTION")?.trim().toLowerCase() === "fdroid";
 }

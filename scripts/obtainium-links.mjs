@@ -51,20 +51,38 @@ const BADGE_TARGETS = [{ file: "README.md", src: "./image/README/obtainium-badge
 /** Public redirect that tries the app link, then falls back to a store prompt. */
 const REDIRECT_BASE = "https://apps.obtainium.imranr.dev/redirect?r=";
 
+/**
+ * @param {string} message
+ * @returns {never}
+ */
 function fail(message) {
   console.error(`[obtainium:links] ${message}`);
   process.exit(1);
 }
 
+/**
+ * @param {unknown} value
+ * @returns {value is Record<string, unknown>}
+ */
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+
 const check = process.argv.includes("--check");
 
-const config = JSON.parse(fs.readFileSync(path.join(root, CONFIG_PATH), "utf8"));
+/** @type {unknown} */
+const rawConfig = JSON.parse(fs.readFileSync(path.join(root, CONFIG_PATH), "utf8"));
+if (!isRecord(rawConfig)) {
+  fail(`${CONFIG_PATH} does not contain a JSON object.`);
+}
+const config = rawConfig;
 const shortDescription = fs.readFileSync(path.join(root, SHORT_DESCRIPTION_PATH), "utf8").trim();
 
-if (config.description?.en !== shortDescription) {
+const descriptionEn = isRecord(config.description) ? config.description.en : undefined;
+if (descriptionEn !== shortDescription) {
   fail(
     `Listing description drifted from ${SHORT_DESCRIPTION_PATH}.\n` +
-      `  config:      ${JSON.stringify(config.description?.en)}\n` +
+      `  config:      ${JSON.stringify(descriptionEn)}\n` +
       `  short_desc:  ${JSON.stringify(shortDescription)}\n` +
       `Reuse the one-liner — edit ${SHORT_DESCRIPTION_PATH} and mirror it here.`,
   );
@@ -79,7 +97,7 @@ if (config.description?.en !== shortDescription) {
 // prerelease removes the need for the filter, and the directory's own criteria
 // ask for defaults wherever they work. See §4.2 of docs/OBTAINIUM_PLAN.md.
 const entry = config.config;
-if (!entry) {
+if (!isRecord(entry)) {
   fail(
     `${CONFIG_PATH} has no \`config\` object. This entry is meant for the directory's \`simple/\` bucket, which needs no custom settings.`,
   );

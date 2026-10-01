@@ -12,8 +12,10 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-const version = String(pkg.version ?? "0.1.0");
+/** @type {unknown} */
+const rawPkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const rawVersion = typeof rawPkg === "object" && rawPkg !== null && "version" in rawPkg ? rawPkg.version : undefined;
+const version = typeof rawVersion === "string" ? rawVersion : "0.1.0";
 const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
 const versionCode = major * 10_000 + minor * 100 + patch;
 

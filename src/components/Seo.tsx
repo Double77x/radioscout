@@ -37,6 +37,7 @@ export const SEO = ({
   breadcrumbItems,
 }: SEOProps) => {
   const fullTitle = title.includes(siteConfig.name) ? title : `${title} | ${siteConfig.name}`;
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- empty canonical counts as absent and falls through to the page url
   const canonicalUrl = canonical || url;
   const siteUrl = siteConfig.url;
 

@@ -30,6 +30,7 @@ export {
   pause,
   play,
   resume,
+  setIcyProbing,
   setNormalization,
   setSleepTimer,
   setVolume,

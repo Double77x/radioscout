@@ -22,7 +22,12 @@ const PKG = "io.github.double77x.radioscout";
 
 const [command, ...rest] = process.argv.slice(2);
 
+/**
+ * @param {import("@playwright/test").AndroidDevice} device
+ * @returns {string}
+ */
 function deviceSerial(device) {
+  // oxlint-disable-next-line typescript/unbound-method -- rebound via .call(device) below; getters evaluate with the right receiver anyway
   const value = device.serial;
   return typeof value === "function" ? value.call(device) : value;
 }
@@ -45,11 +50,19 @@ async function attach() {
   console.log(`device: ${deviceSerial(device)}`);
   const webview = await device.webView({ pkg: PKG });
   const page = await webview.page();
-  page.on("console", (msg) => console.log(`PAGE-CONSOLE [${msg.type()}]: ${msg.text().slice(0, 300)}`));
-  page.on("pageerror", (error) => console.log(`PAGE-ERROR: ${String(error).slice(0, 300)}`));
+  page.on("console", (msg) => {
+    console.log(`PAGE-CONSOLE [${msg.type()}]: ${msg.text().slice(0, 300)}`);
+  });
+  page.on("pageerror", (error) => {
+    console.log(`PAGE-ERROR: ${String(error).slice(0, 300)}`);
+  });
   return page;
 }
 
+/**
+ * @param {import("@playwright/test").Page} page
+ * @returns {Promise<string | null>}
+ */
 function dockText(page) {
   return page.getByRole("region", { name: "Player" }).textContent();
 }
@@ -115,6 +128,7 @@ if (command === "eval") {
   const expression = rest.join(" ");
   if (!expression) throw new Error('usage: eval "<js expression>"');
   const page = await attach();
+  /** @type {unknown} */
   const result = await page.evaluate(`(${expression})`);
   console.log(typeof result === "string" ? result : JSON.stringify(result));
   process.exit(0);

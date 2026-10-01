@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { collectRadioBackup, radioBackupFilename, restoreRadioBackup, RADIO_BACKUP_VERSION } from "@/lib/radio/backup";
 import { RadioDB, toggleFavourite } from "@/lib/radio/store";
 import { EMPTY_STATION } from "@/lib/radio/types";
@@ -11,6 +11,7 @@ let database = new RadioDB(`radioscout-backup-test-${counter}`);
  * Node has no DOM storage — stub the two globals the radio state touches.
  * Seeded with the app defaults so untouched prefs read exactly as in prod.
  */
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
 const globalScope = globalThis as unknown as { window?: unknown; localStorage?: Storage };
 const backing = new Map<string, string>();
 
@@ -27,12 +28,14 @@ function installStorageStub(): void {
     removeItem: (key: string) => {
       backing.delete(key);
     },
-    clear: () => backing.clear(),
+    clear: () => {
+      backing.clear();
+    },
     get length() {
       return backing.size;
     },
     key: (index: number) => [...backing.keys()][index] ?? null,
-  } as Storage;
+  };
 }
 
 function uninstallStorageStub(): void {

@@ -20,7 +20,8 @@ test("favicon adapts to the color scheme", async ({ browser }) => {
     const page = await context.newPage();
     await page.goto("/favicon.svg");
     await page.waitForLoadState("networkidle");
-    const shot = await page.screenshot();
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- tsc-clean: Playwright screenshot() returns Buffer, the rule's type info disagrees
+    const shot: Uint8Array = await page.screenshot();
     digests[scheme] = await digest(shot);
     await context.close();
   }

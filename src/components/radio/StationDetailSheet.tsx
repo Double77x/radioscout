@@ -57,7 +57,9 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
   const vote = () => {
     if (!live || alreadyVoted) return;
     const station = live;
-    void loadDetailApi().then((api) => api.voteStation(station.stationuuid));
+    void loadDetailApi().then((api) => {
+      api.voteStation(station.stationuuid);
+    });
     markVoted(station.stationuuid);
     setVoted(true);
     // Optimistic +1: directory counts refresh every few minutes, so bump the
@@ -66,8 +68,8 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
     // a rejected duplicate overshooting by one is accepted.
     void loadQueryClient().then(({ queryClient }) => {
       queryClient.setQueryData(["radio", "detail", station.stationuuid], { ...station, votes: station.votes + 1 });
-      queryClient.invalidateQueries({ queryKey: ["radio", "top"] });
-      queryClient.invalidateQueries({ queryKey: ["radio", "search"] });
+      void queryClient.invalidateQueries({ queryKey: ["radio", "top"] });
+      void queryClient.invalidateQueries({ queryKey: ["radio", "search"] });
     });
   };
 
@@ -220,7 +222,9 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
                   <Button
                     type='button'
                     variant='secondary'
-                    onClick={() => toggleFavourite.mutate(live)}
+                    onClick={() => {
+                      toggleFavourite.mutate(live);
+                    }}
                     aria-pressed={favourited}
                     className='h-11 rounded-full'>
                     <Star className='size-4' fill='currentColor' />
@@ -238,7 +242,7 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
               </div>
 
               <p className='mt-4 text-center text-xs text-muted-foreground'>
-                {player.status === "error" && playing === false && player.station?.stationuuid === live.stationuuid
+                {player.status === "error" && !playing && player.station?.stationuuid === live.stationuuid
                   ? "Couldn't start this stream — it may be offline."
                   : "Votes and clicks feed the global Most loved / Most played charts."}
               </p>

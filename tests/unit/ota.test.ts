@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { compareOtaVersions, parseOtaVersion, pickOtaUpdate, type OtaManifest } from "@/lib/ota";
 
 function manifest(versions: unknown[]): OtaManifest {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   return { channel: "production", versions: versions as OtaManifest["versions"] };
 }
 

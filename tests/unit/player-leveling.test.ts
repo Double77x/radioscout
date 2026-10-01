@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import { SETTLE_TICKS } from "@/lib/radio/normalize";
 import {
@@ -28,6 +28,7 @@ function stubAnalyser(samples: number[], fftSize = 8): AnalyserNode & { calls: n
       calls += 1;
       output.set(samples.slice(0, output.length));
     },
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as AnalyserNode & { calls: number };
   return stub;
 }
@@ -42,11 +43,13 @@ function stubGain(value = 1): GainNode & { targetCalls: [number, number, number]
       },
     },
     targetCalls,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as GainNode & { targetCalls: [number, number, number][] };
   return stub;
 }
 
 function stubElement(volume = 1): HTMLAudioElement {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   return { volume } as unknown as HTMLAudioElement;
 }
 
@@ -56,9 +59,10 @@ describe("canRouteLeveling", () => {
   });
 
   it("routes null stations and unparseable hosts when on (nothing to block)", () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
     const holder = globalThis as unknown as Record<string, unknown>;
-    const saved = holder["AudioContext"];
-    holder["AudioContext"] = FakeAudioContext;
+    const saved = holder.AudioContext;
+    holder.AudioContext = FakeAudioContext;
     try {
       expect(canRouteLeveling(null, true, new Set())).toBe(true);
       expect(canRouteLeveling(station({ url: "https://example.com/live", url_resolved: "" }), true, new Set())).toBe(
@@ -66,20 +70,21 @@ describe("canRouteLeveling", () => {
       );
       expect(canRouteLeveling(station({ url: "not a url", url_resolved: "" }), true, new Set())).toBe(true);
     } finally {
-      holder["AudioContext"] = saved;
+      holder.AudioContext = saved;
     }
   });
 
   it("remembers session-blocked hosts", () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
     const holder = globalThis as unknown as Record<string, unknown>;
-    const saved = holder["AudioContext"];
-    holder["AudioContext"] = FakeAudioContext;
+    const saved = holder.AudioContext;
+    holder.AudioContext = FakeAudioContext;
     try {
       const item = station({ url: "https://blocked.example/live", url_resolved: "" });
       expect(canRouteLeveling(item, true, new Set())).toBe(true);
       expect(canRouteLeveling(item, true, new Set(["blocked.example"]))).toBe(false);
     } finally {
-      holder["AudioContext"] = saved;
+      holder.AudioContext = saved;
     }
   });
 });
@@ -97,29 +102,40 @@ describe("routeLevelingAudio", () => {
 describe("resumeLevelingContext", () => {
   it("resumes a policy-suspended context and ignores the rest", () => {
     const resume = vi.fn(() => Promise.resolve());
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     resumeLevelingContext({ state: "suspended", resume } as unknown as AudioContext);
     expect(resume).toHaveBeenCalledTimes(1);
     const running = vi.fn(() => Promise.resolve());
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     resumeLevelingContext({ state: "running", resume: running } as unknown as AudioContext);
     expect(running).not.toHaveBeenCalled();
-    expect(() => resumeLevelingContext(null)).not.toThrow();
+    expect(() => {
+      resumeLevelingContext(null);
+    }).not.toThrow();
   });
 });
 
 describe("freezeLevelingGain", () => {
   it("eases to unity via setTargetAtTime, or snaps when unavailable", () => {
     const gain = stubGain(0.7);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     freezeLevelingGain(gain, { currentTime: 12 } as unknown as AudioContext);
     expect(gain.targetCalls).toEqual([[1, 12, 0.05]]);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const direct = { gain: { value: 0.7 } } as unknown as GainNode;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     freezeLevelingGain(direct, { currentTime: 0 } as unknown as AudioContext);
     expect(direct.gain.value).toBe(1);
   });
 
   it("tolerates missing parts", () => {
     const gain = stubGain();
-    expect(() => freezeLevelingGain(null, null)).not.toThrow();
-    expect(() => freezeLevelingGain(gain, null)).not.toThrow();
+    expect(() => {
+      freezeLevelingGain(null, null);
+    }).not.toThrow();
+    expect(() => {
+      freezeLevelingGain(gain, null);
+    }).not.toThrow();
     expect(gain.targetCalls).toEqual([]);
   });
 });
@@ -136,6 +152,7 @@ describe("resetLevelingGain", () => {
       get gain(): { value: number } {
         throw new Error("gone");
       },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as GainNode;
     expect(() => resetLevelingGain(torn)).not.toThrow();
     expect(resetLevelingGain(null)).toBe(SETTLE_TICKS);
@@ -218,6 +235,7 @@ describe("levelingTick", () => {
       getFloatTimeDomainData: () => {
         throw new Error("gone");
       },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as AnalyserNode;
     const survived = levelingTick({
       analyser: failing,

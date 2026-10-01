@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { pickSurpriseStation } from "@/lib/radio/surprise";
 import type { Station } from "@/lib/radio/types";
 import { EMPTY_STATION } from "@/lib/radio/types";

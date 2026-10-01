@@ -78,7 +78,9 @@ export function RadioHeader({
     if (autoFocus && globalThis.matchMedia?.("(pointer: fine)").matches) searchRef.current?.focus();
     const onFocusSearch = () => searchRef.current?.focus();
     globalThis.addEventListener(FOCUS_RADIO_SEARCH_EVENT, onFocusSearch);
-    return () => globalThis.removeEventListener(FOCUS_RADIO_SEARCH_EVENT, onFocusSearch);
+    return () => {
+      globalThis.removeEventListener(FOCUS_RADIO_SEARCH_EVENT, onFocusSearch);
+    };
   }, [autoFocus]);
 
   // Adopt URL edits from elsewhere (chips, clear button, back/forward,
@@ -92,16 +94,18 @@ export function RadioHeader({
     }
   }, [query]);
 
-  const setSearch = (next: { q?: string; tag?: string }) =>
-    navigate({
+  const setSearch = (next: { q?: string; tag?: string }) => {
+    void navigate({
       to: "/",
       search: (prev) => ({
+        // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- empty query clears the param instead of polluting the url
         q: next.q || undefined,
         tag: next.tag === "all" ? undefined : next.tag,
         station: prev.station,
       }),
       replace: true,
     });
+  };
 
   const clearSearch = () => {
     pushedRef.current = "";

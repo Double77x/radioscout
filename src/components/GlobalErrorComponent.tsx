@@ -16,7 +16,12 @@ export function GlobalErrorComponent({ error }: { error: unknown }) {
           description="An unexpected error occurred while processing your data. We've been notified and are working on it."
           actions={
             <>
-              <Button variant='outline' className='w-full gap-2' onClick={() => router.invalidate()}>
+              <Button
+                variant='outline'
+                className='w-full gap-2'
+                onClick={() => {
+                  void router.invalidate();
+                }}>
                 <RotateCcw className='size-4' />
                 Try Again
               </Button>

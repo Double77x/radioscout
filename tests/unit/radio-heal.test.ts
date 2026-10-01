@@ -1,5 +1,5 @@
 import "fake-indexeddb/auto";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { listFavourites, RadioDB } from "@/lib/radio/store";
 import { EMPTY_STATION } from "@/lib/radio/types";
 

@@ -6,6 +6,7 @@ import {
   Home,
   ListPlus,
   Radio,
+  Settings,
   Smartphone,
   Sparkles,
   Star,
@@ -203,4 +204,13 @@ export const COMMAND_ACTION_THEME: Omit<CommandItemStatic, "to"> & { id: "action
   category: "Actions",
   icon: SunMoon,
   synonyms: ["theme", "dark", "light", "mode", "color", "appearance"],
+};
+
+/** Opens the settings flyout wherever it lives (dispatched as `open-settings`). */
+export const COMMAND_ACTION_SETTINGS: Omit<CommandItemStatic, "to"> & { id: "action-settings" } = {
+  id: "action-settings",
+  title: "Open Settings",
+  category: "Actions",
+  icon: Settings,
+  synonyms: ["settings", "preferences", "options", "audio", "style", "volume"],
 };

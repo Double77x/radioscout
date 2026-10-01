@@ -27,7 +27,12 @@ export const NotFoundComponent = () => {
         titleClassName='text-3xl'
         actions={
           <>
-            <Button variant='outline' className='h-11 w-full gap-2 sm:w-48' onClick={() => globalThis.history.back()}>
+            <Button
+              variant='outline'
+              className='h-11 w-full gap-2 sm:w-48'
+              onClick={() => {
+                globalThis.history.back();
+              }}>
               <ArrowLeft className='size-4' />
               Go Back
             </Button>

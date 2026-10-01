@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import {
   INSECURE_HTTP_MESSAGE,
@@ -41,13 +41,16 @@ describe("parkWebAudioElement", () => {
       pause: () => void calls.push("pause"),
       removeAttribute: () => void calls.push("removeAttribute"),
       load: () => void calls.push("load"),
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
     parkWebAudioElement(element);
     expect(calls).toEqual(["pause", "removeAttribute", "load"]);
   });
 
   it("tolerates a missing element and a teardown race on pause", () => {
-    expect(() => parkWebAudioElement(null)).not.toThrow();
+    expect(() => {
+      parkWebAudioElement(null);
+    }).not.toThrow();
     const calls: string[] = [];
     const element = {
       pause: () => {
@@ -55,27 +58,34 @@ describe("parkWebAudioElement", () => {
       },
       removeAttribute: () => void calls.push("removeAttribute"),
       load: () => void calls.push("load"),
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
-    expect(() => parkWebAudioElement(element)).not.toThrow();
+    expect(() => {
+      parkWebAudioElement(element);
+    }).not.toThrow();
     expect(calls).toEqual(["removeAttribute", "load"]);
   });
 });
 
 describe("updateMediaSession", () => {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
   const navigatorHolder = globalThis.navigator as unknown as Record<string, unknown>;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
   const globalHolder = globalThis as unknown as Record<string, unknown>;
-  const savedSession = navigatorHolder["mediaSession"];
-  const savedMetadata = globalHolder["MediaMetadata"];
+  const savedSession = navigatorHolder.mediaSession;
+  const savedMetadata = globalHolder.MediaMetadata;
 
   afterEach(() => {
-    navigatorHolder["mediaSession"] = savedSession;
-    globalHolder["MediaMetadata"] = savedMetadata;
+    navigatorHolder.mediaSession = savedSession;
+    globalHolder.MediaMetadata = savedMetadata;
   });
 
   it("is a no-op without a session (never breaks playback)", () => {
-    navigatorHolder["mediaSession"] = undefined;
+    navigatorHolder.mediaSession = undefined;
     const handlers = { onPlay: vi.fn(), onPause: vi.fn(), onStop: vi.fn() };
-    expect(() => updateMediaSession(station({ name: "No Session FM" }), handlers)).not.toThrow();
+    expect(() => {
+      updateMediaSession(station({ name: "No Session FM" }), handlers);
+    }).not.toThrow();
     expect(handlers.onPlay).not.toHaveBeenCalled();
   });
 
@@ -83,7 +93,7 @@ describe("updateMediaSession", () => {
     const actions = new Map<string, () => void>();
     const seen: { title?: string; artist?: string; album?: string; artwork?: unknown[] } = {};
     const holder: { current?: Record<string, unknown> } = {};
-    navigatorHolder["mediaSession"] = {
+    navigatorHolder.mediaSession = {
       get metadata(): Record<string, unknown> | undefined {
         return holder.current;
       },
@@ -96,10 +106,12 @@ describe("updateMediaSession", () => {
       },
       setActionHandler: (action: string, handler: () => void) => void actions.set(action, handler),
     };
-    globalHolder["MediaMetadata"] = FakeMediaMetadata;
+    globalHolder.MediaMetadata = FakeMediaMetadata;
     const handlers = { onPlay: vi.fn(), onPause: vi.fn(), onStop: vi.fn() };
     const item = station({ name: "Session FM", tags: "rock", favicon: "" });
-    expect(() => updateMediaSession(item, handlers)).not.toThrow();
+    expect(() => {
+      updateMediaSession(item, handlers);
+    }).not.toThrow();
     expect(seen.title).toBe("Session FM");
     expect(seen.artist).toBe("Rock");
     expect(seen.album).toBe("RadioScout");

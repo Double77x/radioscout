@@ -176,9 +176,7 @@ test.describe("RadioScout home", () => {
     await page.mouse.move(box.x + 80, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + 80, box.y + box.height / 2 + 24, { steps: 3 });
-    await expect
-      .poll(() => row.evaluate((el) => getComputedStyle(el).translate), { timeout: 5000 })
-      .not.toBe("none");
+    await expect.poll(() => row.evaluate((el) => getComputedStyle(el).translate), { timeout: 5000 }).not.toBe("none");
     await page.mouse.move(box.x + 80, box.y + box.height + 96, { steps: 12 });
     await page.mouse.up();
 
@@ -203,9 +201,7 @@ test.describe("RadioScout home", () => {
     await page.mouse.move(box.x + 80, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + 80, box.y + box.height / 2 + 24, { steps: 3 });
-    await expect
-      .poll(() => jazz.evaluate((el) => getComputedStyle(el).translate), { timeout: 5000 })
-      .not.toBe("none");
+    await expect.poll(() => jazz.evaluate((el) => getComputedStyle(el).translate), { timeout: 5000 }).not.toBe("none");
     await page.mouse.move(box.x + 80, box.y + box.height + 96, { steps: 12 });
     const shiftedTop = await rock.evaluate((el) => el.getBoundingClientRect().top);
     // Sample Rock across the drop: it must snap straight into its new slot,
@@ -242,7 +238,9 @@ test.describe("RadioScout home", () => {
     await page.evaluate(() => {
       const request = indexedDB.open("scout-radio");
       return new Promise<void>((resolve, reject) => {
-        request.addEventListener("error", () => reject(request.error));
+        request.addEventListener("error", () => {
+          reject(request.error ?? new Error("indexeddb request failed"));
+        });
         request.addEventListener("success", () => {
           const db = request.result;
           const tx = db.transaction("listening", "readwrite");
@@ -255,7 +253,9 @@ test.describe("RadioScout home", () => {
             db.close();
             resolve();
           });
-          tx.addEventListener("error", () => reject(tx.error));
+          tx.addEventListener("error", () => {
+            reject(tx.error ?? new Error("indexeddb transaction failed"));
+          });
         });
       });
     });
@@ -275,7 +275,9 @@ test.describe("RadioScout home", () => {
     await page.evaluate(() => {
       const request = indexedDB.open("scout-radio");
       return new Promise<void>((resolve, reject) => {
-        request.addEventListener("error", () => reject(request.error));
+        request.addEventListener("error", () => {
+          reject(request.error ?? new Error("indexeddb request failed"));
+        });
         request.addEventListener("success", () => {
           const db = request.result;
           const tx = db.transaction("listening", "readwrite");
@@ -289,7 +291,9 @@ test.describe("RadioScout home", () => {
             db.close();
             resolve();
           });
-          tx.addEventListener("error", () => reject(tx.error));
+          tx.addEventListener("error", () => {
+            reject(tx.error ?? new Error("indexeddb transaction failed"));
+          });
         });
       });
     });
@@ -309,7 +313,9 @@ test.describe("RadioScout home", () => {
     await page.evaluate(() => {
       const request = indexedDB.open("scout-radio");
       return new Promise<void>((resolve, reject) => {
-        request.addEventListener("error", () => reject(request.error));
+        request.addEventListener("error", () => {
+          reject(request.error ?? new Error("indexeddb request failed"));
+        });
         request.addEventListener("success", () => {
           const db = request.result;
           const tx = db.transaction("history", "readwrite");
@@ -332,7 +338,9 @@ test.describe("RadioScout home", () => {
             db.close();
             resolve();
           });
-          tx.addEventListener("error", () => reject(tx.error));
+          tx.addEventListener("error", () => {
+            reject(tx.error ?? new Error("indexeddb transaction failed"));
+          });
         });
       });
     });
@@ -380,7 +388,12 @@ test.describe("RadioScout home", () => {
   });
 
   test("opening details keeps the list scroll position", async ({ page }) => {
-    await page.evaluate(() => window.scrollTo(0, 300));
+    // Instant (not smooth): the app enables smooth scrolling on fine-pointer
+    // desktops, which animates scrollTo asynchronously — setup must land
+    // synchronously or the read below races the animation.
+    await page.evaluate(() => {
+      window.scrollTo({ top: 300, behavior: "instant" });
+    });
     const y = await page.evaluate(() => window.scrollY);
     expect(y).toBeGreaterThan(0);
     // A button already fully in view, so the click itself moves nothing —

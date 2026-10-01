@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
 
 describe("hostOf", () => {
@@ -19,17 +19,20 @@ function stubRecord(overrides: Partial<RetiredOutput> = {}): RetiredOutput & {
   const calls: string[] = [];
   return {
     calls,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     abort: { abort: () => void calls.push("abort") } as unknown as AbortController,
     element: {
       pause: () => void calls.push("pause"),
       removeAttribute: () => void calls.push("removeAttribute"),
       load: () => void calls.push("load"),
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement,
     ctx: {
       close: () => {
         calls.push("close");
         return Promise.resolve();
       },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as AudioContext,
     ...overrides,
   };
@@ -44,7 +47,9 @@ describe("parkRecord", () => {
 
   it("tolerates missing abort and context", () => {
     const record = stubRecord({ abort: null, ctx: null });
-    expect(() => parkRecord(record)).not.toThrow();
+    expect(() => {
+      parkRecord(record);
+    }).not.toThrow();
     expect(record.calls).toEqual(["pause", "removeAttribute", "load"]);
   });
 
@@ -56,9 +61,12 @@ describe("parkRecord", () => {
         },
         removeAttribute: vi.fn(),
         load: vi.fn(),
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
       } as unknown as HTMLAudioElement,
     });
-    expect(() => parkRecord(record)).not.toThrow();
+    expect(() => {
+      parkRecord(record);
+    }).not.toThrow();
     expect(record.calls).toContain("close");
   });
 });

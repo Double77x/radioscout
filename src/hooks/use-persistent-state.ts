@@ -41,7 +41,9 @@ export function usePersistentStrings(key: string, fallback: string[]): [string[]
         if (event.key === key) notify();
       };
       globalThis.addEventListener("storage", onStorage);
-      return () => globalThis.removeEventListener("storage", onStorage);
+      return () => {
+        globalThis.removeEventListener("storage", onStorage);
+      };
     },
     [key],
   );
@@ -96,7 +98,9 @@ export function usePersistentString(key: string, fallback: string): [string, (ne
         if (event.key === key) notify();
       };
       globalThis.addEventListener("storage", onStorage);
-      return () => globalThis.removeEventListener("storage", onStorage);
+      return () => {
+        globalThis.removeEventListener("storage", onStorage);
+      };
     },
     [key],
   );

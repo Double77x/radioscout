@@ -3,6 +3,7 @@ import { Browser } from "@capacitor/browser";
 import { isNative } from "@/lib/capacitor";
 import { isFdroidDistribution } from "@/lib/distribution";
 import { compareOtaVersions } from "@/lib/ota";
+import { isRecord } from "@/lib/utils";
 
 /**
  * APK update check for sideloaded installs (no Play Store to do it).
@@ -41,15 +42,11 @@ export function isUpgradeAvailable(tag: string, installed: string): boolean {
   }
 }
 
-interface ReleaseAsset {
-  name?: unknown;
-  browser_download_url?: unknown;
-}
-
 /** APK asset wins; the release page is the fallback. Null when neither exists. */
 export function pickDownloadUrl(payload: { assets?: unknown; html_url?: unknown }): string | null {
   if (Array.isArray(payload.assets)) {
-    for (const row of payload.assets as ReleaseAsset[]) {
+    for (const row of payload.assets) {
+      if (!isRecord(row)) continue;
       const url = typeof row.browser_download_url === "string" ? row.browser_download_url : "";
       const name = typeof row.name === "string" ? row.name : "";
       if (url !== "" && /\.apk$/i.test(name)) return url;
@@ -72,15 +69,14 @@ export async function checkApkUpdate(): Promise<ApkUpdate | null> {
   }
   const info = await App.getInfo().catch(() => null);
   if (!info) return null;
-  const payload = await fetch(LATEST_RELEASE_URL, {
+  const raw: unknown = await fetch(LATEST_RELEASE_URL, {
     headers: { Accept: "application/vnd.github+json" },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   })
-    .then((response) =>
-      response.ok ? (response.json() as Promise<{ tag_name?: unknown; assets?: unknown; html_url?: unknown }>) : null,
-    )
+    .then((response) => (response.ok ? response.json() : null))
     .catch(() => null);
-  if (!payload) return null;
+  if (!isRecord(raw)) return null;
+  const payload = raw;
   try {
     globalThis.localStorage?.setItem(CHECK_KEY, String(Date.now()));
   } catch {

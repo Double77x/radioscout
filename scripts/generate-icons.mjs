@@ -25,6 +25,11 @@ const MARK_DEFS = markDefs("#3a3a3a", "#0a0a0a");
 // query, so the adaptive defs below would rasterize as dark-on-dark there).
 const MARK_DEFS_SILVER = markDefs("#ffffff", "#c4c4ca");
 
+/**
+ * @param {string} noteFrom
+ * @param {string} noteTo
+ * @returns {string}
+ */
 function markDefs(noteFrom, noteTo) {
   return `
     <defs>
@@ -66,6 +71,12 @@ const MARK_STYLE = `
     }
   </style>`;
 
+/**
+ * @param {number} tx
+ * @param {number} ty
+ * @param {number} scale
+ * @returns {string}
+ */
 function markGroup(tx, ty, scale) {
   return `<g fill="none" transform="translate(${tx},${ty}) scale(${scale})">${MARK_PATHS}</g>`;
 }

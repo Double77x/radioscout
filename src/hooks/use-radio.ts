@@ -105,7 +105,7 @@ export function useToggleFavourite() {
   return useMutation({
     mutationFn: (station: Station) => saveFavourite(station),
     onSuccess: (nowFavourite, station) => {
-      queryClient.invalidateQueries({ queryKey: FAVOURITES_KEY });
+      void queryClient.invalidateQueries({ queryKey: FAVOURITES_KEY });
       toast(nowFavourite ? "Saved to favourites" : "Removed from favourites", {
         description: station.name,
       });
@@ -131,7 +131,7 @@ export function useClearHistory() {
   return useMutation({
     mutationFn: wipeHistory,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: HISTORY_KEY });
+      void queryClient.invalidateQueries({ queryKey: HISTORY_KEY });
       toast("History cleared");
     },
   });
@@ -180,7 +180,7 @@ export function useClearListening() {
   return useMutation({
     mutationFn: wipeListening,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: LISTENING_KEY });
+      void queryClient.invalidateQueries({ queryKey: LISTENING_KEY });
       toast("Listening stats cleared");
     },
   });

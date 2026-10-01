@@ -13,7 +13,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
       // Theme state initializes from localStorage during hydration while the
       // prerender used the default — pin to the default until mounted so the
       // toaster shell hydrates identical for stored-theme users.
-      theme={isClient ? (theme as ToasterProps["theme"]) : "system"}
+      theme={isClient && (theme === "light" || theme === "dark" || theme === "system") ? theme : "system"}
       className='toaster group'
       toastOptions={{
         classNames: {

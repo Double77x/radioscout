@@ -4,14 +4,23 @@ import path from "path";
 const SITE_URL = "https://radioscout.pages.dev";
 const ROUTES_DIR = path.resolve("src", "routes");
 const OUTPUT_PATH = path.resolve("public", "sitemap.xml");
+/** @type {Set<string>} */
 const toolPaths = new Set();
 
 /**
  * Programmatically discover routes from the src/routes directory.
  * Each entry carries the mtime of its source file so the sitemap can track
  * which routes actually changed since the last build.
+ *
+ * @typedef {{ path: string, priority: string, changefreq: string, mtimeMs: number }} SitemapRoute
+ */
+/**
+ * @param {string} dir
+ * @param {string} [baseRoute]
+ * @returns {SitemapRoute[]}
  */
 const getRoutes = (dir, baseRoute = "") => {
+  /** @type {SitemapRoute[]} */
   let results = [];
   const files = fs.readdirSync(dir);
 
@@ -55,8 +64,10 @@ const getRoutes = (dir, baseRoute = "") => {
 
 /**
  * Read the existing sitemap and index lastmod values by <loc> path.
+ * @returns {Map<string, string>}
  */
 const readExistingLastmods = () => {
+  /** @type {Map<string, string>} */
   const map = new Map();
   if (!fs.existsSync(OUTPUT_PATH)) return map;
   const xml = fs.readFileSync(OUTPUT_PATH, "utf8");
@@ -64,9 +75,10 @@ const readExistingLastmods = () => {
   const locRegex = /<loc>(?<loc>\S+)<\/loc>/u;
   const lastmodRegex = /<lastmod>(?<lastmod>\S+)<\/lastmod>/u;
   for (const match of xml.matchAll(urlRegex)) {
-    const block = match.groups.block;
-    const loc = block.match(locRegex)?.groups.loc;
-    const lastmod = block.match(lastmodRegex)?.groups.lastmod;
+    const block = match.groups?.block;
+    if (!block) continue;
+    const loc = locRegex.exec(block)?.groups?.loc;
+    const lastmod = lastmodRegex.exec(block)?.groups?.lastmod;
     if (loc) map.set(loc, lastmod ?? "");
   }
   return map;
@@ -84,6 +96,7 @@ const generateSitemap = () => {
   for (const route of routes) {
     const loc = `${SITE_URL}${route.path}`;
     const prevLastmod = existing.get(loc);
+    // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- the map stores "" for a missing <lastmod>, so only || falls through to today
     const lastmod = prevLastmod || today;
 
     xml += "  <url>\n";

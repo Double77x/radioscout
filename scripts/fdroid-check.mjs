@@ -9,17 +9,31 @@ import fs from "node:fs";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
+/** @type {string[]} */
 const failures = [];
 
+/**
+ * @param {string} name
+ * @param {boolean} ok
+ * @returns {void}
+ */
 function check(name, ok) {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}`);
   if (!ok) failures.push(name);
 }
 
+/**
+ * @param {string[]} parts
+ * @returns {string}
+ */
 function absolute(...parts) {
   return path.join(root, ...parts);
 }
 
+/**
+ * @param {string} relativePath
+ * @returns {string}
+ */
 function readText(relativePath) {
   const file = absolute(relativePath);
   if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -30,6 +44,11 @@ function readText(relativePath) {
   return fs.readFileSync(file, "utf8");
 }
 
+/**
+ * @param {string} relativePath
+ * @param {number} maxLength
+ * @returns {string}
+ */
 function checkText(relativePath, maxLength) {
   const text = readText(relativePath);
   check(`${relativePath} is non-empty`, text.trim().length > 0);
@@ -37,6 +56,10 @@ function checkText(relativePath, maxLength) {
   return text;
 }
 
+/**
+ * @param {string} relativePath
+ * @returns {{ width: number, height: number } | null}
+ */
 function pngDimensions(relativePath) {
   const file = absolute(relativePath);
   if (!fs.existsSync(file)) {
@@ -53,8 +76,11 @@ function pngDimensions(relativePath) {
   return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
 }
 
-const pkg = JSON.parse(readText("package.json"));
-const version = String(pkg.version ?? "");
+/** @type {unknown} */
+const pkgJson = JSON.parse(readText("package.json"));
+const pkgVersion =
+  typeof pkgJson === "object" && pkgJson !== null && "version" in pkgJson ? pkgJson.version : undefined;
+const version = typeof pkgVersion === "string" ? pkgVersion : "";
 const versionParts = /^(?<major>0|[1-9]\d*)\.(?<minor>0|[1-9]\d*)\.(?<patch>0|[1-9]\d*)$/.exec(version);
 check(`package.json version is stable semver (${version || "missing"})`, versionParts !== null);
 

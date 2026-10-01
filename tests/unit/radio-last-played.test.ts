@@ -1,8 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
 import { readLastStation, writeLastStation } from "@/lib/radio/last-played";
 import { EMPTY_STATION } from "@/lib/radio/types";
 
 /** Node has no DOM storage — stub the globals the module touches. */
+// oxlint-disable-next-line typescript/no-unsafe-type-assertion -- mutable record view of a global for stub install/restore
 const globalScope = globalThis as unknown as { window?: unknown; localStorage?: Storage };
 const backing = new Map<string, string>();
 
@@ -17,12 +18,14 @@ function installStorageStub(): void {
     removeItem: (key: string) => {
       backing.delete(key);
     },
-    clear: () => backing.clear(),
+    clear: () => {
+      backing.clear();
+    },
     get length() {
       return backing.size;
     },
     key: (index: number) => [...backing.keys()][index] ?? null,
-  } as Storage;
+  };
 }
 
 function uninstallStorageStub(): void {

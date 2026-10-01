@@ -1,4 +1,5 @@
 import { filterPlayableStations, parseStation, parseStations, type Station } from "./types";
+import { isRecord } from "@/lib/utils";
 
 /**
  * Minimal radio-browser.info client. RadioDroid resolved
@@ -327,8 +328,9 @@ export async function stationsByUuid(uuids: string[]): Promise<Station[]> {
  * the server also records the click.
  */
 export async function resolveStreamUrl(stationuuid: string): Promise<string | null> {
-  const payload = (await fetchJson(`/json/url/${stationuuid}`)) as { url?: unknown };
-  return typeof payload.url === "string" && payload.url !== "" ? payload.url : null;
+  const raw: unknown = await fetchJson(`/json/url/${stationuuid}`);
+  const url = isRecord(raw) ? raw.url : undefined;
+  return typeof url === "string" && url !== "" ? url : null;
 }
 
 /** Single-station refresh (favourite revalidation). */
@@ -354,7 +356,8 @@ export interface ServerStats {
 
 /** Directory totals (station count for the header). Cached aggressively. */
 export async function serverStats(): Promise<ServerStats> {
-  const payload = (await fetchJson("/json/stats")) as Record<string, unknown>;
+  const raw: unknown = await fetchJson("/json/stats");
+  const payload = isRecord(raw) ? raw : {};
   const number = (key: string): number => {
     const value = payload[key];
     return typeof value === "number" && Number.isFinite(value) ? value : 0;

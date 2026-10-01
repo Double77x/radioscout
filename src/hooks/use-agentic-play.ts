@@ -75,7 +75,9 @@ export function useAgenticPlay(): void {
             })
             .finally(stripPlay);
         },
-        () => stripPlay(),
+        () => {
+          stripPlay();
+        },
       );
       return;
     }
@@ -91,7 +93,9 @@ export function useAgenticPlay(): void {
           })
           .finally(stripPlay);
       },
-      () => stripPlay(),
+      () => {
+        stripPlay();
+      },
     );
   }, [isClient, searchStr, pathname, navigate]);
 }

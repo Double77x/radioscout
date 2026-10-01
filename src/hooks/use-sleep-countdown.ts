@@ -15,9 +15,13 @@ export function useSleepCountdown(): string | null {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    if (sleepEndsAt <= 0) return;
-    const timer = globalThis.setInterval(() => setNow(Date.now()), COUNTDOWN_TICK_MS);
-    return () => globalThis.clearInterval(timer);
+    if (sleepEndsAt <= 0) return () => {};
+    const timer = globalThis.setInterval(() => {
+      setNow(Date.now());
+    }, COUNTDOWN_TICK_MS);
+    return () => {
+      globalThis.clearInterval(timer);
+    };
   }, [sleepEndsAt]);
 
   return formatSleepCountdown(sleepEndsAt, now);

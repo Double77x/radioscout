@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { canonicalStreamUrl, withStationDefaults } from "@/lib/radio/types";
 import { processBritishStations } from "@/hooks/use-best-of-british";
 

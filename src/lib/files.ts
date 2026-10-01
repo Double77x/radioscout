@@ -7,8 +7,12 @@
 export function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.addEventListener("load", () => resolve(String(reader.result)));
-    reader.addEventListener("error", () => reject(new Error("Could not read file bytes")));
+    reader.addEventListener("load", () => {
+      resolve(typeof reader.result === "string" ? reader.result : "");
+    });
+    reader.addEventListener("error", () => {
+      reject(new Error("Could not read file bytes"));
+    });
     reader.readAsDataURL(blob);
   });
 }
@@ -48,5 +52,7 @@ export function downloadBlob(filename: string, blob: Blob): void {
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
-  globalThis.setTimeout(() => URL.revokeObjectURL(url), 5000);
+  globalThis.setTimeout(() => {
+    URL.revokeObjectURL(url);
+  }, 5000);
 }

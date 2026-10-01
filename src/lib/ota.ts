@@ -8,6 +8,8 @@
  * the updater stays dormant and boot is never blocked.
  */
 
+import { isRecord } from "./utils";
+
 export interface OtaBundle {
   /** Bundle version, e.g. "0.4.0+ota.2" (package.json core + per-core sequence). */
   version: string;
@@ -31,8 +33,8 @@ export function parseOtaVersion(version: string): { core: number[]; ota: number 
   const match = /^(?<core>\d+(?:\.\d+)*)(?:\+ota\.(?<seq>\d+))?$/.exec(version.trim());
   if (!match?.groups) return null;
   return {
-    core: (match.groups["core"] ?? "").split(".").map((part) => Math.trunc(Number(part))),
-    ota: Number(match.groups["seq"] ?? "0"),
+    core: (match.groups.core ?? "").split(".").map((part) => Math.trunc(Number(part))),
+    ota: Number(match.groups.seq ?? "0"),
   };
 }
 
@@ -52,17 +54,17 @@ export function compareOtaVersions(a: string, b: string): number {
 }
 
 function isBundle(value: unknown): value is OtaBundle {
-  if (typeof value !== "object" || value === null) return false;
-  const row = value as Record<string, unknown>;
+  if (!isRecord(value)) return false;
+  const row = value;
   return (
-    typeof row["version"] === "string" &&
-    parseOtaVersion(row["version"]) !== null &&
-    typeof row["min_version_code"] === "number" &&
-    (row["max_version_code"] === null || typeof row["max_version_code"] === "number") &&
-    typeof row["url"] === "string" &&
-    (row["url"] as string).startsWith("https://") &&
-    typeof row["checksum"] === "string" &&
-    (row["checksum"] as string) !== ""
+    typeof row.version === "string" &&
+    parseOtaVersion(row.version) !== null &&
+    typeof row.min_version_code === "number" &&
+    (row.max_version_code === null || typeof row.max_version_code === "number") &&
+    typeof row.url === "string" &&
+    row.url.startsWith("https://") &&
+    typeof row.checksum === "string" &&
+    row.checksum !== ""
   );
 }
 

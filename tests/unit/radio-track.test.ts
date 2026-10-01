@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { emit, getSnapshot } from "@/lib/player/store";
 
 describe("player track title", () => {
