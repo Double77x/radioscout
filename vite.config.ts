@@ -1,15 +1,36 @@
-/// <reference types="vitest" />
-import { defineConfig } from "vite";
+/// <reference types="vite-plus/test" />
+import { defineConfig } from "vite-plus";
 import path from "node:path";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
+import toolchain from "./toolchain.config";
 
 export default defineConfig(({ mode }) => {
   const isProduction = mode === "production";
 
   return {
+    // Lint/format live in toolchain.config.ts, which must keep a single
+    // default export.
+    lint: toolchain.lint,
+    fmt: toolchain.fmt,
+    // Tasks: a name may live here OR in package.json, never both.
+    run: {
+      // Cache everything; Vite+ auto-excludes tasks that read and write the same paths.
+      cache: true,
+      tasks: {
+        build: {
+          // `vp build` is the Vite build (incl. prerender) alone; tsc and the
+          // postbuild scripts are separate cached stages in one chain.
+          // `cap:android` consumes this task, so keep the full chain here.
+          command: "vp build && tsc -b && node scripts/generate-sitemap.js && node scripts/apply-header-policy.js",
+          cache: {
+            output: ["dist/**"],
+          },
+        },
+      },
+    },
     test: {
       globals: true,
       // Most suites are pure logic / fake-indexeddb — node is enough and
@@ -52,7 +73,8 @@ export default defineConfig(({ mode }) => {
           },
         },
       }),
-      react(),
+      // React Compiler via the plugin's Oxc transform. No options, see AGENTS.md.
+      react({ compiler: true }),
       tailwindcss(),
       {
         ...visualizer({
@@ -195,7 +217,7 @@ export default defineConfig(({ mode }) => {
           },
           chunkFileNames: "assets/chunk-[name]-[hash].js",
           assetFileNames: (assetInfo) => {
-            if (assetInfo.name?.endsWith(".css")) {
+            if (assetInfo.names.some((name) => name.endsWith(".css"))) {
               return "assets/[name][extname]";
             }
             return "assets/[name]-[hash][extname]";

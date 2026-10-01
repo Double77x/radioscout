@@ -47,4 +47,4 @@ jobs:
       - name: Build the F-Droid flavor
         env:
           VITE_DISTRIBUTION: fdroid
-        run: pnpm build
+        run: pnpm exec vp run build

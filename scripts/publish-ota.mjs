@@ -34,6 +34,11 @@ import AdmZip from "adm-zip";
 
 const root = process.cwd();
 
+/**
+ * @param {string} name
+ * @param {unknown} [fallback]
+ * @returns {unknown}
+ */
 function arg(name, fallback) {
   const flag = `--${name}`;
   const idx = process.argv.findIndex((entry) => entry === flag || entry.startsWith(`${flag}=`));
@@ -48,30 +53,58 @@ function arg(name, fallback) {
   return next;
 }
 
+/**
+ * @param {string} message
+ * @returns {never}
+ */
 function fail(message) {
   console.error(`[ota:publish] ${message}`);
   process.exit(1);
 }
 
+/**
+ * @param {string} command
+ * @param {object} [options]
+ * @returns {string | undefined}
+ */
 function sh(command, options) {
   try {
     return execSync(command, { cwd: root, encoding: "utf8", stdio: "pipe", ...options }).trim();
   } catch (error) {
-    fail(`${command} failed:\n${error.stderr || error.message}`);
+    // execSync rejects with stderr on failure; anything else carries a message.
+    const execError = error instanceof Error ? error : new Error("command failed");
+    /** @type {unknown} */
+    const stderr = Reflect.get(execError, "stderr");
+    const detail = typeof stderr === "string" && stderr !== "" ? stderr : execError.message;
+    fail(`${command} failed:\n${detail}`);
+    return undefined;
   }
 }
 
+/**
+ * @param {string} version
+ * @returns {number}
+ */
 function versionCode(version) {
   const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
   return major * 10_000 + minor * 100 + patch;
 }
 
+/**
+ * @param {unknown} version
+ * @returns {{ core: string, seq: number } | null}
+ */
 function parseOta(version) {
-  const match = String(version).match(/^(?<core>\d+\.\d+\.\d+)(?:\+ota\.(?<seq>\d+))?$/);
+  const match = /^(?<core>\d+\.\d+\.\d+)(?:\+ota\.(?<seq>\d+))?$/.exec(String(version));
   if (!match?.groups) return null;
   return { core: match.groups.core, seq: Math.trunc(Number(match.groups.seq ?? "0")) || 0 };
 }
 
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ * @returns {number}
+ */
 function toPositiveInt(value, fallback) {
   const parsed = typeof value === "string" ? Math.trunc(Number(value)) : NaN;
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
@@ -79,8 +112,11 @@ function toPositiveInt(value, fallback) {
 
 const channel = String(arg("channel", "production"));
 const keep = toPositiveInt(arg("keep", "3"), 3);
-const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-const core = String(pkg.version ?? "0.1.0");
+/** @type {unknown} */
+const pkgJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+const pkgVersion =
+  typeof pkgJson === "object" && pkgJson !== null && "version" in pkgJson ? pkgJson.version : undefined;
+const core = typeof pkgVersion === "string" ? pkgVersion : "0.1.0";
 const explicitVersion = arg("version", null);
 const minNativeCode = arg("min-native-code", null);
 const maxNativeCode = arg("max-native-code", null);
@@ -91,9 +127,11 @@ if (!repo) fail("Couldn't resolve the repo — is `gh` logged in (`gh auth login
 // The local manifest is the source of truth for sequencing (single
 // publisher: it always reflects the last publish once committed).
 const manifestPath = path.join(root, "public", "ota", `${channel}.json`);
+/** @type {{ channel: string, versions: Array<{ version: string }> }} */
 let manifest = { channel, versions: [] };
 if (fs.existsSync(manifestPath)) {
   try {
+    // oxlint-disable-next-line typescript/no-unsafe-assignment -- JSON.parse is inherently any; shape validated below and on use
     manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch {
     fail(`Couldn't parse ${manifestPath} — fix or delete it first.`);
@@ -121,8 +159,8 @@ if (!Number.isInteger(minCode) || (maxCode !== null && !Number.isInteger(maxCode
 
 // Fresh production build, then zip it.
 console.log(`[ota:publish] building ${version} for channel "${channel}"…`);
-const built = spawnSync("pnpm", ["build"], { cwd: root, stdio: "inherit", shell: true });
-if (built.status !== 0) fail("pnpm build failed — not publishing.");
+const built = spawnSync("pnpm", ["exec", "vp", "run", "build"], { cwd: root, stdio: "inherit", shell: true });
+if (built.status !== 0) fail("web build failed — not publishing.");
 const assetName = `${version}.zip`;
 const zipPath = path.join(os.tmpdir(), `radioscout-ota-${randomUUID()}.zip`);
 const zip = new AdmZip();

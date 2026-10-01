@@ -15,6 +15,7 @@ plain static build, so it works offline once loaded and needs no account.
 **On Android.** The APK is published on every GitHub release. Two ways in.
 
 ### Install with Obtainium [![Get it on Obtainium](./image/README/obtainium-badge.png)][obtainium]
+
 <!-- regenerate the badge and its link with: pnpm obtainium:links -->
 
 Or download an APK directly from
@@ -94,35 +95,34 @@ git clone https://github.com/Double77x/radioscout.git
 cd radioscout
 pnpm install
 pnpm dev        # http://localhost:8080
-pnpm build      # prerenders to dist/
+pnpm exec vp run build  # prerenders to dist/
 pnpm preview    # wrangler pages dev --port 8788
 ```
 
-`pnpm dev` starts the Vite dev server with HMR. `pnpm build` runs
-`vite build && tsc -b` and crawls links to emit static HTML for every route into
-`dist/client`.
+`pnpm dev` starts the Vite dev server with HMR. `pnpm exec vp run build` runs
+the cached `build` task (`vp build` + `tsc -b` + sitemap + header policy) and
+crawls links to emit static HTML for every route into `dist/client`.
 
 ## Requirements
 
-- Node 24+
-- pnpm 10
+- Node 26.8.2 (`.node-version`) and pnpm 12.8.1 (`packageManager`)
 - Android builds only: JDK 21 and the Android cmdline-tools (`ANDROID_HOME`,
   see `docs/CAPACITOR_PLAN.md`)
 
 ## Tooling
 
-| Area | Choice |
-| --- | --- |
-| Build | Vite 8 with Rolldown (`minify: oxc`, `target: esnext`, `cssCodeSplit: true`) |
-| Chunking | Narrow `codeSplitting.groups` vendor chunks: react, tanstack, base-ui, lucide, sonner, fuse, zod, dexie, themes. `rollup-plugin-visualizer` writes `bundle-analysis-client.html` |
-| Types | TypeScript 7 with `tsc -b`. No `any` |
-| Styles | Tailwind CSS v4 via `@tailwindcss/vite` and `@theme` in `src/styles/index.css` |
-| Lint and format | `oxlint` and `oxfmt`, both on Rust via `oxc`, so they are fast enough to keep on save. Config in `.oxlintrc.json` and `.oxfmtrc.json` |
-| Hydration lint | The `react-doctor` oxlint plugin flags `new Date()` in render, `crypto.randomUUID()` in initial state, `useEffect(setState)` cascades, missing `aria-label`, `blur-2xl` and `transition-all`. Full list in `.oxlintrc.json` |
-| Unit tests | Vitest 5 in `tests/unit`, with `@testing-library/react` and `jest-dom` |
-| e2e and a11y | Playwright with `@axe-core/playwright`. `pnpm test` runs both suites |
-| UI primitives | Base UI styled with shadcn patterns. Add one with `pnpm dlx shadcn@latest add <name> --yes`, then rewire `@radix-ui/*` to `@base-ui/react/*` |
-| Dead code | Fallow, configured in `fallow.toml`. `npx fallow audit --format json --quiet` is the gate: 0 clean, 1 findings, 2 error envelope |
+| Area            | Choice                                                                                                                                                                                                                      |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build           | Vite 8 with Rolldown (`minify: oxc`, `target: esnext`, `cssCodeSplit: true`)                                                                                                                                                |
+| Chunking        | Narrow `codeSplitting.groups` vendor chunks: react, tanstack, base-ui, lucide, sonner, fuse, zod, dexie, themes. `rollup-plugin-visualizer` writes `bundle-analysis-client.html`                                            |
+| Types           | TypeScript 7 with `tsc -b`. No `any`                                                                                                                                                                                        |
+| Styles          | Tailwind CSS v4 via `@tailwindcss/vite` and `@theme` in `src/styles/index.css`                                                                                                                                              |
+| Lint and format | `oxlint` and `oxfmt`, both on Rust via `oxc`, so they are fast enough to keep on save. Config in `.oxlintrc.json` and `.oxfmtrc.json`                                                                                       |
+| Hydration lint  | The `react-doctor` oxlint plugin flags `new Date()` in render, `crypto.randomUUID()` in initial state, `useEffect(setState)` cascades, missing `aria-label`, `blur-2xl` and `transition-all`. Full list in `.oxlintrc.json` |
+| Unit tests      | Vitest 5 in `tests/unit`, with `@testing-library/react` and `jest-dom`                                                                                                                                                      |
+| e2e and a11y    | Playwright with `@axe-core/playwright`. `pnpm test` runs both suites                                                                                                                                                        |
+| UI primitives   | Base UI styled with shadcn patterns. Add one with `pnpm dlx shadcn@latest add <name> --yes`, then rewire `@radix-ui/*` to `@base-ui/react/*`                                                                                |
+| Dead code       | Fallow, configured in `fallow.toml`. `npx fallow audit --format json --quiet` is the gate: 0 clean, 1 findings, 2 error envelope                                                                                            |
 
 ## Project structure
 
@@ -166,7 +166,7 @@ android/             committed native shell (local outputs gitignored)
 Cloudflare Pages expects `dist/client`:
 
 ```bash
-pnpm build
+pnpm exec vp run build
 wrangler pages deploy dist/client
 ```
 
@@ -266,13 +266,13 @@ This repo is meant to be read top-down. Start here:
 Gates to pass before opening a pull request:
 
 ```bash
-pnpm lint                            # oxlint
-pnpm format                          # oxfmt
+pnpm lint                            # vp lint (oxlint)
+pnpm format                          # vp fmt
 npx tsc -b --noEmit                  # typecheck
-pnpm build                           # must prerender 9 routes
+pnpm exec vp run build               # must prerender 9 routes
 npx fallow audit --format json --quiet 2>/dev/null
 # 0 = clean, 1 = findings, 2 = error envelope
-pnpm test:unit                       # vitest
+pnpm test:unit                       # vp test (vitest)
 pnpm test                            # playwright + axe
 ```
 
@@ -303,7 +303,7 @@ lint-clean.
 ### Issues
 
 Use the bug report template and include the steps to reproduce, what you
-expected, what happened, the browser, and a short `pnpm build` log if prerender
+expected, what happened, the browser, and a short `pnpm exec vp run build` log if prerender
 failed. For features, use the feature request template and describe the use case
 first. For larger work, open an issue before you start so we do not pull in
 different directions. For questions, check `docs/ARCHITECTURE.md` and
@@ -319,7 +319,7 @@ GitHub repository.
    pnpm lint
    pnpm format
    npx tsc -b --noEmit
-   pnpm build
+   pnpm exec vp run build
    npx fallow audit --format json --quiet 2>/dev/null
    pnpm test:unit
    ```
@@ -349,4 +349,5 @@ MIT © [@Double77x](https://github.com/Double77x)
 See [LICENSE](./LICENSE) for details.
 
 <!-- Kept out of the heading so the deep link does not clutter it. -->
+
 [obtainium]: https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22io.github.double77x.radioscout%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FDouble77x%2Fradioscout%22%2C%22author%22%3A%22Double77x%22%2C%22name%22%3A%22RadioScout%22%7D

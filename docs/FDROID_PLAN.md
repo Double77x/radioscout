@@ -150,7 +150,7 @@ Builds:
       - export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
       - export TZ=UTC
       - pnpm install --frozen-lockfile
-      - VITE_DISTRIBUTION=fdroid pnpm build
+      - VITE_DISTRIBUTION=fdroid pnpm exec vp run build
       - node scripts/normalize-ssr-timestamps.mjs dist/client
       - VITE_DISTRIBUTION=fdroid npx cap sync android
       - cd android
@@ -219,8 +219,8 @@ pnpm install --frozen-lockfile
 pnpm fdroid:check
 pnpm test:unit
 pnpm lint
-pnpm build
-VITE_DISTRIBUTION=fdroid pnpm build
+pnpm exec vp run build
+VITE_DISTRIBUTION=fdroid pnpm exec vp run build
 cd android && ./gradlew assembleRelease --no-daemon
 ```
 

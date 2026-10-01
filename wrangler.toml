@@ -21,8 +21,8 @@ compatibility_date = "2025-09-02"
 pages_build_output_dir = "dist/client"
 
 [vars]
-NODE_VERSION = "24.8"
-PNPM_VERSION = "10.32.1"
+NODE_VERSION = "26.8.2"
+PNPM_VERSION = "12.8.1"
 CANONICAL_URL = "https://radioscout.pages.dev"
 SITE_URL = "https://radioscout.pages.dev"
 VITE_CANONICAL_URL = "https://radioscout.pages.dev"

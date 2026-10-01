@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
   push:
     tags:
-      - 'fdroid-reference-*'
+      - "fdroid-reference-*"
 
 permissions:
   contents: write
@@ -49,7 +49,7 @@ jobs:
         uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: "21"
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -69,7 +69,7 @@ jobs:
         run: |
           export SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)"
           export TZ=UTC
-          VITE_DISTRIBUTION=fdroid pnpm build
+          VITE_DISTRIBUTION=fdroid pnpm exec vp run build
           node scripts/normalize-ssr-timestamps.mjs dist/client
           VITE_DISTRIBUTION=fdroid npx cap sync android
           cd android

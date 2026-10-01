@@ -31,7 +31,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
   - Mounts global providers (`ThemeProvider`, `TooltipProvider`, `Sonner`).
 - **File-Based Routes (`src/routes/`):**
   - Home (`/`) plus legal pages code-split via `.lazy.tsx` chunks.
-  - SSG prerender crawls chip and card links and produces static `.html` files for all 8 pages during `pnpm build`.
+  - SSG prerender crawls chip and card links and produces static `.html` files for all 8 pages during `pnpm exec vp run build`.
 - **Catch-All 404 (`src/routes/$.tsx`):**
   - Handles unmatched client routes cleanly.
 

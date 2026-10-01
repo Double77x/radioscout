@@ -9,7 +9,7 @@ This project is a mobile-first, privacy-first free worldwide radio player built 
 - **TanStack Start:** Framework providing build-time Static Site Generation (SSG) with automatic route crawling.
 - **TanStack Router:** Fully type-safe routing with file-based route tree (`src/routeTree.gen.ts`).
 - **TanStack Query (React Query):** Client & server state management.
-- **Vite (v8):** Build tool and dev server.
+- **Vite+ 1.0:** Build tool and dev server (Vite 8 + Rolldown via the `catalog:` entry; lint/format live in `toolchain.config.ts`).
 - **Cloudflare Pages:** Global CDN static asset and HTML hosting.
 
 ## Styling, Fonts & UI

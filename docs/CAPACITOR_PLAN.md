@@ -5,7 +5,7 @@ Status: decided — App name: **"RadioScout"**; App ID: **`io.github.double77x.r
 ## 1. Why Capacitor for this repo
 
 - Output is already fully static (prerendered HTML + hashed JS/CSS, no server functions). Capacitor just wraps `dist/client` in a native WebView — no backend changes.
-- Keeps one codebase: web PWA stays canonical, native is a build target (`pnpm build && cap sync`), not a rewrite. Alternatives rejected: TWA/PWABuilder (Android-only, no iOS shell, no native APIs), React Native rewrite (throws away SSG + Tailwind + Base UI work).
+- Keeps one codebase: web PWA stays canonical, native is a build target (`pnpm exec vp run build && cap sync`), not a rewrite. Alternatives rejected: TWA/PWABuilder (Android-only, no iOS shell, no native APIs), React Native rewrite (throws away SSG + Tailwind + Base UI work).
 - Local-first data (Dexie/IndexedDB, `localStorage`) works inside the WebView with no migration; native plugins are progressive enhancements, not prerequisites.
 
 ## 2. Current baseline (what native reuses)

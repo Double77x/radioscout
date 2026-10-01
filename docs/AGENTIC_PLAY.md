@@ -112,7 +112,7 @@ Implement only when agents demonstrably fail to resolve names via Tier 1
 
 - `pnpm test:unit` (alias + param parsing).
 - `pnpm lint && pnpm format`.
-- `pnpm build` — prerender count unchanged (9 pages), no new routes.
+- `pnpm exec vp run build` — prerender count unchanged (9 pages), no new routes.
 - Manual: `/?play=kisstory` starts audio; param stripped after resolve;
   `/?station=<uuid>&play=1` opens sheet + plays; `/?q=kisstory` unchanged.
 
@@ -133,7 +133,7 @@ Adding an alias (e.g. a listener requests `?play=gold`):
 4. Add a `resolveAlias` case to `tests/unit/agentic-play.test.ts`.
 5. Never commit personal data: aliases are generic names only — no uuids,
    no backup-export Station snapshots, no listening history.
-6. Verify: `pnpm test:unit`, `pnpm lint`, `pnpm format`, `pnpm build`
+6. Verify: `pnpm test:unit`, `pnpm lint`, `pnpm format`, `pnpm exec vp run build`
    (prerender count unchanged, no new routes).
 
 HTTP-only directory rows: if the `https://` twin serves the same audio
