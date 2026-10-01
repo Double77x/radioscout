@@ -34,24 +34,27 @@ Shared decoder: `src/lib/radio/icy.ts` (`parseIcyBlock`,
 `fetchIcyTitles`). Display: `TrackTicker` (scrolls only on compact
 viewports when overflowing, static otherwise).
 
-## Edge caching (verify on preview deploy)
+## Edge caching (Cache API)
 
 Ok responses carry `Cache-Control: public, max-age=60`; errors
-`no-store`. Repeats inside the TTL are served from the edge with zero
-worker invocations and zero upstream bytes — roughly one short upstream
-pull per station per minute globally, however many are listening.
+`no-store`. The header alone does not get Pages Function responses
+edge-cached (verified live: repeats re-probed upstream with no
+`cf-cache-status`), so the function also stores verdicts explicitly via
+`caches.default.put` keyed on the full request URL. Repeats inside the
+TTL are served without waking the probe or touching the station —
+roughly one short upstream pull per station per minute globally,
+however many are listening. Errors bypass the cache entirely.
 
-Verification (cannot be done locally — workerd doesn't emulate edge cache):
+Verification:
 
 ```bash
-curl -sI 'https://<preview>.pages.dev/api/icy-title?url=<stream>'  # MISS
-curl -sI 'https://<preview>.pages.dev/api/icy-title?url=<stream>'  # expect HIT
+curl -s 'https://<preview>.pages.dev/api/icy-title?url=<stream>'  # probes
+curl -s 'https://<preview>.pages.dev/api/icy-title?url=<stream>'  # cached
 ```
 
-Check `cf-cache-status: HIT` on the second response. If both are
-`DYNAMIC`, the edge isn't caching function responses: switch the function
-to an explicit `caches.default.put` instead of headers. Client polling
-(45s) vs TTL (60s) keeps worst-case staleness around a minute.
+The two bodies must be byte-identical (same embedded probe timing).
+Client polling (45s) vs TTL (60s) keeps worst-case staleness around
+a minute.
 
 ## Debugging
 
