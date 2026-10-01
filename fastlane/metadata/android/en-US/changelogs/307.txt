@@ -1,0 +1,1 @@
+Live song titles in the dock (opt-in under Settings Audio), scrolling ticker for long subtitles on compact screens, Xtra Hot joins Best of British, plus lazy-image layout-shift fixes.

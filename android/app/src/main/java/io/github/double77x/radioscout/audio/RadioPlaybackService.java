@@ -30,6 +30,46 @@ public class RadioPlaybackService extends MediaSessionService {
     }
 
     /**
+     * Metadata listeners follow the session player across crossfade swaps.
+     * Timed metadata (`Player.Listener.onMetadata`) never crosses the
+     * controller boundary — the 1.9.0 session protocol has no binder path
+     * for it — so these attach to the ExoPlayer itself, not the controller.
+     * Add is idempotent (player listener sets ignore duplicates).
+     */
+    private static final java.util.concurrent.CopyOnWriteArraySet<Player.Listener> metadataListeners =
+            new java.util.concurrent.CopyOnWriteArraySet<>();
+
+    /** Attach now if a session player exists; remembered for swaps either way. Call on main. */
+    public static void addMetadataListener(Player.Listener listener) {
+        if (listener == null) return;
+        metadataListeners.add(listener);
+        try {
+            RadioPlaybackService self = instance;
+            if (self != null && self.session != null) {
+                Player current = self.session.getPlayer();
+                if (current != null) current.addListener(listener);
+            }
+        } catch (Exception ignored) {
+            // Session not ready — the next swap attaches (see below).
+        }
+    }
+
+    /** Detach everywhere; release drops listeners anyway, so best-effort is fine. Call on main. */
+    public static void removeMetadataListener(Player.Listener listener) {
+        if (listener == null) return;
+        metadataListeners.remove(listener);
+        try {
+            RadioPlaybackService self = instance;
+            if (self != null && self.session != null) {
+                Player current = self.session.getPlayer();
+                if (current != null) current.removeListener(listener);
+            }
+        } catch (Exception ignored) {
+            // Teardown races a dead player — nothing to forward.
+        }
+    }
+
+    /**
      * Hand the session to a pre-buffered crossfade player (station switch).
      * The previous session player is released; the new player's leveling
      * processor becomes the live one. Must be called on the players'
@@ -43,6 +83,15 @@ public class RadioPlaybackService extends MediaSessionService {
             Player old = self.session.getPlayer();
             self.session.setPlayer(newPlayer);
             levelingInstance = newProcessor;
+            // Metadata listeners live on the player, not the controller —
+            // move them across so titles survive the swap.
+            for (Player.Listener metadataListener : metadataListeners) {
+                try {
+                    newPlayer.addListener(metadataListener);
+                } catch (Exception ignored) {
+                    // A dead incoming owns nothing to listen to.
+                }
+            }
             // The newcomer takes over focus/noisy handling only NOW that it
             // owns the session: asking earlier would steal focus from the
             // still-playing predecessor mid-blend. The retiree is already at

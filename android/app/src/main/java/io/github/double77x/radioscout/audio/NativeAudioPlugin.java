@@ -99,7 +99,19 @@ public class NativeAudioPlugin extends Plugin {
                     Log.i(LOG_TAG, "session player error: " + describeError(error));
                     emitStatus(controller, error.getMessage());
                 }
+                // NOTE: no onMetadata here on purpose. Timed metadata never
+                // crosses the controller boundary (no binder path for it in
+                // the session protocol), so a controller listener is deaf to
+                // ICY by framework design — see metadataListener below.
+            };
 
+    /**
+     * Stream-title listener for the session ExoPlayer itself (NOT the
+     * controller). Registered via the service so it follows crossfade
+     * swaps; add is idempotent, so re-registering per connect is safe.
+     */
+    private final Player.Listener metadataListener =
+            new Player.Listener() {
                 @Override
                 public void onMetadata(Metadata metadata) {
                     // ICY/ID3/Vorbis now-playing titles ride the stream itself
@@ -108,6 +120,7 @@ public class NativeAudioPlugin extends Plugin {
                     String title = extractTrackTitle(metadata);
                     if (title != null && !title.equals(lastTrack)) {
                         lastTrack = title;
+                        Log.i(LOG_TAG, "track: " + title);
                         JSObject data = new JSObject();
                         data.put("title", title);
                         notifyListeners(EVENT_TRACK, data, true);
@@ -233,6 +246,8 @@ public class NativeAudioPlugin extends Plugin {
                     }
                     Log.i(LOG_TAG, "controller connected");
                     controller.addListener(listener);
+                    // Titles ride the session player directly (see above).
+                    RadioPlaybackService.addMetadataListener(metadataListener);
                     try {
                         op.run(controller);
                     } catch (Exception e) {
@@ -762,6 +777,7 @@ public class NativeAudioPlugin extends Plugin {
                 // Teardown races a dead player — nothing to forward.
             }
         }
+        RadioPlaybackService.removeMetadataListener(metadataListener);
         if (controllerFuture != null) {
             MediaController.releaseFuture(controllerFuture);
             controllerFuture = null;
