@@ -8,6 +8,19 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.7 - Live song titles, ticker subtitles, Xtra Hot</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Live song titles return to the web player as an opt-in switch under Settings → Audio (off by default). The
+              dock subtitle follows the station&apos;s StreamTitle and updates as tracks change. The APK keeps its
+              native titles with no switch needed.
+            </li>
+            <li>Long subtitles scroll as a slow ticker on compact screens, static everywhere else.</li>
+            <li>Xtra Hot joins the Best of British shelf.</li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.6 - Listening stats, smoother toggles, more playable stations</h2>
           <p className='mb-4 text-sm text-muted-foreground'>September 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>

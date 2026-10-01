@@ -16,6 +16,10 @@ interface StationArtProps {
  * Station artwork with a seamless lucide fallback. Remount per `key`
  * (pass `key={station.favicon || station.stationuuid}`) so a previous
  * load error never hides a new station's art.
+ *
+ * Square contract: callers size with square classes (`size-9` etc) and the
+ * `aspect-square` below reserves the box (plus `width`/`height`) so
+ * lazy-loaded art never shifts layout. Non-square art must not use this.
  */
 export function StationArt({ src, className, fallbackClassName, iconClassName }: StationArtProps) {
   const [failed, setFailed] = useState(false);
@@ -42,12 +46,16 @@ export function StationArt({ src, className, fallbackClassName, iconClassName }:
     <img
       src={safeSrc}
       alt=''
+      width={48}
+      height={48}
       loading='lazy'
       decoding='async'
       draggable={false}
       referrerPolicy='no-referrer'
-      onError={() => setFailed(true)}
-      className={cn("shrink-0 object-cover", className)}
+      onError={() => {
+        setFailed(true);
+      }}
+      className={cn("aspect-square shrink-0 object-cover", className)}
     />
   );
 }

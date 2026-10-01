@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { version as appVersion } from "../../../package.json";
 import { Download, Monitor, Moon, Settings as SettingsIcon, Sun, Upload } from "lucide-react";
@@ -8,13 +8,16 @@ import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
 import { LocationPicker } from "@/components/radio/LocationPicker";
 import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
+import { TitlesSwitch } from "@/components/radio/TitlesSwitch";
 import { QualityPicker } from "@/components/radio/QualityPicker";
 import { SleepTimerPicker } from "@/components/radio/SleepTimerPicker";
 import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
+import { applyPlayerPrefs } from "@/hooks/use-player";
 import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
 import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
+import { isNative } from "@/lib/capacitor";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
@@ -25,7 +28,6 @@ const loadQueryClient = () => import("@/lib/query-client");
 
 /** Radio backup engine stays out of the initial bundle — loaded on demand. */
 const loadRadioBackup = () => import("@/lib/radio/backup");
-const loadPlayerPrefs = () => import("@/hooks/use-player");
 
 const THEME_OPTIONS = [
   { id: "system", label: "System", Icon: Monitor },
@@ -41,6 +43,18 @@ const LEVEL_OFF_FALLBACK = "0";
 /** Settings flyout: radio data plus style, one scroll view, no tabs. */
 export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) {
   const [open, setOpen] = useState(false);
+  // Cross-component signal from the command palette (`open-settings`):
+  // open the flyout from anywhere. A window event (not props) because the
+  // palette lives outside the shell that owns this menu.
+  useEffect(() => {
+    const onOpenSettings = (): void => {
+      setOpen(true);
+    };
+    globalThis.addEventListener("open-settings", onOpenSettings);
+    return () => {
+      globalThis.removeEventListener("open-settings", onOpenSettings);
+    };
+  }, []);
   const { theme, setTheme, resolvedTheme } = useTheme();
   // Tab variant: anchor the flyout to the whole nav bar (screen-centred) and
   // open upward — the cog sits right of centre, so trigger-anchoring skews right.
@@ -77,10 +91,14 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         aria-label='Settings'
         className={
           variant === "logo"
-            ? "grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-neutral-900 shadow-sm transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            ? "group grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-neutral-900 shadow-sm transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             : "grid size-12 place-items-center rounded-full text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-open:bg-scout-ink data-open:text-scout-paper"
         }>
-        {variant === "logo" ? <Logo className='size-7' /> : <SettingsIcon className='size-5' />}
+        {variant === "logo" ? (
+          <Logo className='size-7 transition-transform duration-300 motion-safe:group-hover:scale-110 motion-safe:group-hover:-rotate-6' />
+        ) : (
+          <SettingsIcon className='size-5' />
+        )}
       </PopoverTrigger>
       <PopoverContent
         align={variant === "tab" ? "center" : "start"}
@@ -160,6 +178,11 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
               <div className='rounded-2xl border border-border bg-card p-3'>
                 <NormalizeSwitch />
               </div>
+              {isNative() ? null : (
+                <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                  <TitlesSwitch />
+                </div>
+              )}
               <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
                 <SleepTimerPicker />
               </div>
@@ -183,7 +206,9 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
               ),
             }))}
             value={theme === "light" || theme === "dark" ? theme : "system"}
-            onChange={(id) => setTheme(id)}
+            onChange={(id) => {
+              setTheme(id);
+            }}
             optionClassName='min-h-11 flex-col gap-0.5'
           />
           <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
@@ -197,7 +222,9 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
           RadioScout{" "}
           <Link
             to='/legal/changelog'
-            onClick={() => setOpen(false)}
+            onClick={() => {
+              setOpen(false);
+            }}
             aria-label={`Changelog for version ${appVersion}`}
             className='underline underline-offset-4 hover:text-foreground'>
             v{appVersion}
@@ -221,8 +248,12 @@ function RadioDataSection() {
     setExportState("working");
     void loadRadioBackup().then(({ exportRadioBackup }) =>
       exportRadioBackup()
-        .then((mode) => setExportState(mode))
-        .catch(() => setExportState("error")),
+        .then((mode) => {
+          setExportState(mode);
+        })
+        .catch(() => {
+          setExportState("error");
+        }),
     );
   };
 
@@ -234,11 +265,12 @@ function RadioDataSection() {
       .text()
       .then((text: string): unknown => JSON.parse(text) as unknown)
       .then((json) => loadRadioBackup().then(({ restoreRadioBackup }) => restoreRadioBackup(json)))
-      .then((prefs) =>
-        Promise.all([loadPlayerPrefs().then(({ applyPlayerPrefs }) => applyPlayerPrefs(prefs)), loadQueryClient()]),
-      )
-      .then(([, { queryClient }]) => {
-        queryClient.invalidateQueries({ queryKey: ["radio"] });
+      .then((prefs) => {
+        applyPlayerPrefs(prefs);
+        return loadQueryClient();
+      })
+      .then(({ queryClient }) => {
+        void queryClient.invalidateQueries({ queryKey: ["radio"] });
         setImportState("done");
         toast("Restore complete", { description: "Stations, history, stats, volume, filters and votes are back." });
       })
@@ -281,7 +313,9 @@ function RadioDataSection() {
         accept='.json,application/json'
         aria-label='Restore file'
         className='sr-only'
-        onChange={(event) => onImportFile(event.target.files?.[0])}
+        onChange={(event) => {
+          onImportFile(event.target.files?.[0]);
+        }}
       />
       <p className='px-1 text-xs text-muted-foreground' aria-live='polite'>
         {importState === "error" && importError

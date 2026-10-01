@@ -14,6 +14,7 @@ import {
   Languages,
   MapPin,
   MoonStar,
+  Music,
   Play,
   Radio,
   RefreshCw,
@@ -158,6 +159,13 @@ const GROUPS: FeatureGroup[] = [
         tint: TINTS[0],
         title: "Sleep timer",
         body: "Fades out and pauses after the time you pick, with the countdown in the dock.",
+        platform: "Web + APK",
+      },
+      {
+        Icon: Music,
+        tint: TINTS[4],
+        title: "Live song titles",
+        body: "The dock subtitle follows the station's StreamTitle while it plays. Opt in under Settings → Audio on web. Always on in the APK.",
         platform: "Web + APK",
       },
       {

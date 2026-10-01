@@ -32,6 +32,7 @@ export const BEST_OF_BRITISH_UUIDS: string[] = [
   "80d74009-e473-4454-9602-139b88485ba5", // Capital FM London
   "df3607fb-311d-43b1-bd0c-98d91a4f2df4", // Capital Dance
   "d1bc420f-6aaa-426b-a810-b496622717d6", // Capital XTRA
+  "ba26c3b2-80a4-42a4-8569-c5cf37d249e4", // Xtra Hot
   "42679ed6-49cb-428e-9b74-94af62ad8a0a", // Heart FM
   "c4077677-dc2f-11e9-a8ba-52543be04c81", // Heart 80s
   "962b27a3-0601-11e8-ae97-52543be04c81", // Smooth Radio (http row, plays via the https-upgrade allowlist)

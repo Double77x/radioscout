@@ -7,7 +7,7 @@ import { Search, Command, ArrowRight, type LucideIcon } from "lucide-react";
 import Fuse from "fuse.js";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { COMMAND_ACTION_THEME, COMMAND_STATIC_ITEMS } from "@/data/navigation";
+import { COMMAND_ACTION_SETTINGS, COMMAND_ACTION_THEME, COMMAND_STATIC_ITEMS } from "@/data/navigation";
 
 interface CommandItem {
   id: string;
@@ -54,7 +54,15 @@ export function CommandPalette() {
       ...COMMAND_STATIC_ITEMS,
       {
         ...COMMAND_ACTION_THEME,
-        action: () => setTheme(theme === "dark" ? "light" : "dark"),
+        action: () => {
+          setTheme(theme === "dark" ? "light" : "dark");
+        },
+      } as CommandItem,
+      {
+        ...COMMAND_ACTION_SETTINGS,
+        action: () => {
+          globalThis.dispatchEvent(new CustomEvent("open-settings"));
+        },
       } as CommandItem,
     ];
   }, [theme, setTheme]);
@@ -94,7 +102,7 @@ export function CommandPalette() {
           const section = hash.startsWith("#home-section-") ? hash.slice("#home-section-".length) : null;
           // Section jumps clear search (filtering hides the sections) and let
           // Home expand the accordion before scrolling into view.
-          navigate({ to: "/", search: (prev) => ({ ...prev, q: undefined, tag: undefined }) });
+          void navigate({ to: "/", search: (prev) => ({ ...prev, q: undefined, tag: undefined }) });
           if (section) {
             globalThis.dispatchEvent(new CustomEvent("open-home-section", { detail: { section } }));
           } else {
@@ -103,7 +111,7 @@ export function CommandPalette() {
             }, 100);
           }
         } else {
-          navigate({ to: item.to });
+          void navigate({ to: item.to });
         }
       }
       setOpen(false);
@@ -152,17 +160,21 @@ export function CommandPalette() {
   // 8. Focus the search field on open. Imperative by necessity: the dialog
   // focus trap settles after mount, so the timer (not autoFocus) wins the race.
   useEffect(() => {
-    if (!open) return;
+    if (!open) return () => {};
 
     const timer = setTimeout(() => {
       inputRef.current?.focus();
     }, 50);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [open]);
 
   // 9. Custom global event listener for navbar search button
   useEffect(() => {
-    const onExternalOpen = () => setOpen(true);
+    const onExternalOpen = () => {
+      setOpen(true);
+    };
     globalThis.addEventListener("open-command-palette", onExternalOpen);
     return () => {
       globalThis.removeEventListener("open-command-palette", onExternalOpen);
@@ -225,7 +237,9 @@ export function CommandPalette() {
                       }}
                       type='button'
                       data-selected={isSelected}
-                      onClick={() => handleSelect(item)}
+                      onClick={() => {
+                        handleSelect(item);
+                      }}
                       onMouseMove={() => {
                         if (selectedIndex !== index) setSelectedIndex(index);
                       }}

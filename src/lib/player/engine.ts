@@ -12,6 +12,9 @@ import {
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
+import { fetchIcyTitles } from "@/lib/radio/icy";
+import { readTitlesEnabled } from "@/lib/radio/titles";
+import { envString, isRecord } from "@/lib/utils";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
 import { buildLevelingGraph, type LevelingGraph } from "@/lib/player/leveling-graph";
 import { PLAY_FADE_MS, TRANSPORT_FADE_MS, rampElement, runFadeRamp } from "@/lib/player/fades";
@@ -65,6 +68,114 @@ import {
 
 let audio: HTMLAudioElement | null = null;
 let playToken = 0;
+/** Aborts the in-flight ICY title probe when a new play supersedes it. */
+let icyProbeController: AbortController | null = null;
+/** Re-probes the live title while playing; cleared on stop/pause/supersede. */
+let icyPollTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+/** Fresh titles are polled this often; the edge function caches for 60s. */
+const ICY_TITLE_POLL_MS = 45_000;
+
+function clearIcyProbe(): void {
+  icyProbeController?.abort();
+  icyProbeController = null;
+  if (icyPollTimer !== null) {
+    globalThis.clearInterval(icyPollTimer);
+    icyPollTimer = null;
+  }
+}
+
+/**
+ * Track the live StreamTitle for the player subtitle. Probes once
+ * immediately (fast first paint, even while loading) then re-polls while
+ * playing so track changes replace the subtitle instead of going stale.
+ * Endpoint-first (dev middleware, edge function) with direct-fetch fallback;
+ * silent everywhere metadata is unavailable.
+ */
+function armIcyProbe(station: Station, url: string): void {
+  clearIcyProbe();
+  if (!readTitlesEnabled()) return;
+  const probeController = new AbortController();
+  icyProbeController = probeController;
+  const probeToken = playToken;
+  const isCurrent = (): boolean => probeToken === playToken && snapshot.station?.stationuuid === station.stationuuid;
+  const applyProbedTitle = (raw: string): void => {
+    if (!isCurrent()) return;
+    const title = raw.trim() === "" ? null : raw;
+    if (title !== snapshot.track) emit({ track: title });
+    if (import.meta.env.DEV) console.log("[icy-probe] subtitle:", title);
+  };
+  const refreshOnce = (): void => {
+    void (async () => {
+      // Dev probes server-side through the vite-only /__icy endpoint (no
+      // CORS limits, follows redirects); prod web and APK call the
+      // edge-cached /api/icy-title function (absolute URL on native, where
+      // relative would hit the local shell); direct fetch is the last
+      // resort everywhere.
+      const probePath = `/api/icy-title?url=${encodeURIComponent(url)}&titles=1`;
+      let endpoint: string | null = null;
+      if (import.meta.env.DEV) {
+        endpoint = `/__icy/probe?url=${encodeURIComponent(url)}&titles=1`;
+      } else {
+        // Dynamic import: @capacitor/core must never load at module scope
+        // (node/unit-test contexts have no native bridge).
+        const { isNative } = await import("@/lib/capacitor");
+        if (isNative()) {
+          const canonical = envString("VITE_CANONICAL_URL");
+          endpoint =
+            canonical === undefined
+              ? null
+              : `${canonical.replace(/\/+$/, "")}/api/icy-title?url=${encodeURIComponent(url)}`;
+        } else {
+          endpoint = probePath;
+        }
+      }
+      if (endpoint !== null) {
+        try {
+          const response = await fetch(endpoint, { signal: probeController.signal });
+          if (response.ok) {
+            const data: unknown = await response.json();
+            if (isRecord(data) && Array.isArray(data.titles)) {
+              const first: unknown = data.titles[0];
+              if (isRecord(first) && typeof first.title === "string" && first.title.trim() !== "") {
+                applyProbedTitle(first.title);
+              }
+            }
+            // The endpoint gave its verdict (titles or not): a direct
+            // fetch cannot know more and only adds console noise (CORS
+            // preflights fail loudly in the console and can't be caught).
+            return;
+          }
+        } catch {
+          // No endpoint here (or aborted) — fall through to direct fetch.
+        }
+      }
+      const { titles } = await fetchIcyTitles(url, { maxTitles: 1, signal: probeController.signal });
+      if (titles.length > 0) applyProbedTitle(titles[0].title);
+    })();
+  };
+  refreshOnce();
+  icyPollTimer = globalThis.setInterval(() => {
+    if (!isCurrent() || snapshot.status !== "playing") return;
+    refreshOnce();
+  }, ICY_TITLE_POLL_MS);
+}
+
+/**
+ * Live-apply the Titles switch: enabling mid-play probes the current
+ * station now instead of waiting for the next play; disabling drops the
+ * poller (the subtitle keeps its last title until the next state change).
+ */
+export function setIcyProbing(enabled: boolean): void {
+  if (!enabled) {
+    clearIcyProbe();
+    return;
+  }
+  const station = snapshot.station;
+  if (!station || snapshot.status !== "playing") return;
+  const src = audio?.currentSrc ?? audio?.getAttribute("src") ?? "";
+  if (src === "") return;
+  armIcyProbe(station, src);
+}
 /** Retry wait for a dropped mid-play stream (backoff + quiet toast). */
 const reconnectTimer = new ReconnectTimer();
 /** Attempts used in the live retry sequence (`0` = none). */
@@ -88,7 +199,7 @@ let lastLoadInsecure = false;
 /** Write prefs to storage and the live output (service or element). */
 export function applyPlayerPrefs(prefs: PlayerPrefs): void {
   const volume = Math.min(1, Math.max(0, Number.isFinite(prefs.volume) ? prefs.volume : DEFAULT_VOLUME));
-  const muted = prefs.muted === true;
+  const muted = prefs.muted;
   // `muted` (not volume 0) is the autoplay-policy signal — keep the element
   // mirrored so a stale flag can never strand playback silent.
   if (audio) {
@@ -856,8 +967,12 @@ function handoffToIncoming(station: Station, handoff: number): void {
   cancelReconnect();
   updateMediaSession(station, {
     onPlay: () => void resume(),
-    onPause: () => pause(),
-    onStop: () => stop(),
+    onPause: () => {
+      pause();
+    },
+    onStop: () => {
+      stop();
+    },
   });
   logPlay(station);
   resetLevelingForStation();
@@ -870,8 +985,12 @@ function handoffToIncoming(station: Station, handoff: number): void {
       0,
       CROSSFADE_MS,
       () => handoff !== handoffToken,
-      () => parkRecord(prev),
-      () => parkRecord(prev),
+      () => {
+        parkRecord(prev);
+      },
+      () => {
+        parkRecord(prev);
+      },
     );
   }
   if (!snapshot.muted) {
@@ -949,7 +1068,9 @@ function beginReconnect(station: Station): void {
   reconnectAttempt = 1;
   toast("Connection lost", { description: "Retrying the stream…" });
   emit({ status: "loading", error: null });
-  reconnectTimer.schedule(1, () => retryStation(station));
+  reconnectTimer.schedule(1, () => {
+    retryStation(station);
+  });
 }
 
 /**
@@ -971,7 +1092,9 @@ function continueReconnect(station: Station, url: string): void {
     return;
   }
   reconnectAttempt = next;
-  reconnectTimer.schedule(next, () => retryStation(station));
+  reconnectTimer.schedule(next, () => {
+    retryStation(station);
+  });
 }
 
 /** Retry replay: a cold-start-shaped `play()` with no revert target (the live element is dead). */
@@ -1039,6 +1162,7 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
       emit({ status: "error", error: "This station has no stream URL." });
       return;
     }
+    armIcyProbe(station, url);
     // APK first: the service plays every format (including HLS) with
     // system media UI. Web falls through to `<audio>`.
     // Drop a stale handoff intent if the user visibly took over mid-resolve
@@ -1131,8 +1255,10 @@ export function pause(): void {
 
 /** Immediate park (fade end-points, quiet paths, MediaSession stops). */
 function pauseNow(): void {
-  // A staged handoff dies with the pause — the user took over.
+  // A staged handoff dies with the pause — the user took over. Take the
+  // title poller down too; resume re-arms it on restart.
   killIncoming();
+  clearIcyProbe();
   // Manual pauses take over from the retry loop too.
   cancelReconnect();
   if (usingNative) {
@@ -1193,6 +1319,10 @@ export function resume(): Promise<void> {
     .play()
     .then(() => {
       fadeInFromSilence();
+      // Pause took the title poller down — re-arm it for the resumed output.
+      const resumed = snapshot.station;
+      const src = element.currentSrc === "" ? element.getAttribute("src") : element.currentSrc;
+      if (resumed && src) armIcyProbe(resumed, src);
     })
     .catch(() => {
       setFadeLevel(userLevel());
@@ -1231,7 +1361,9 @@ export function stop(): void {
     stopNow();
     return;
   }
-  fadeRamp(start, 0, TRANSPORT_FADE_MS, () => stopNow());
+  fadeRamp(start, 0, TRANSPORT_FADE_MS, () => {
+    stopNow();
+  });
 }
 
 function stopNow(): void {
@@ -1240,6 +1372,7 @@ function stopNow(): void {
   fadeToken += 1;
   // A staged handoff dies with the stop — the user took over.
   killIncoming();
+  clearIcyProbe();
   // A manual stop takes over from the retry loop too.
   cancelReconnect();
   const wasNative = usingNative;

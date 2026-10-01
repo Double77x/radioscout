@@ -167,6 +167,7 @@ export function hasCountryFlag(code: string): boolean {
 
 export function CountryFlag({ code, name, className }: CountryFlagProps) {
   const iso = code.trim().toLowerCase();
+  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- display fallback: empty name falls through to code, then placeholder
   const label = name || iso.toUpperCase() || "Unknown country";
   const src = /^[a-z]{2}$/.test(iso) ? FLAG_URLS[iso] : undefined;
   if (!src) {
@@ -190,7 +191,7 @@ export function CountryFlag({ code, name, className }: CountryFlagProps) {
       loading='lazy'
       decoding='async'
       draggable={false}
-      className={cn("inline-block h-[0.9em] w-auto shrink-0 rounded-[2px]", className)}
+      className={cn("inline-block aspect-4/3 h-[0.9em] w-auto shrink-0 rounded-[2px]", className)}
     />
   );
 }

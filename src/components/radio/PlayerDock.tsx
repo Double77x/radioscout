@@ -4,6 +4,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { Library, LoaderCircle, Pause, Play, Radio, Shuffle, Square, Volume1, Volume2, VolumeX, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StationArt } from "@/components/radio/StationArt";
+import { TrackTicker } from "@/components/radio/TrackTicker";
 import { focusRadioSearch } from "@/lib/focus-radio-search";
 import { usePlayer } from "@/hooks/use-player";
 import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
@@ -153,7 +154,7 @@ export function PlayerDock() {
     // Already home: drop the cursor straight into search. Coming from
     // elsewhere: go home first, then focus once the header mounts.
     if (location.pathname !== "/") {
-      navigate({ to: "/" });
+      void navigate({ to: "/" });
       globalThis.setTimeout(focusRadioSearch, 100);
       return;
     }
@@ -162,7 +163,9 @@ export function PlayerDock() {
 
   const pokeAutohide = () => {
     if (hideTimer.current !== null) globalThis.clearTimeout(hideTimer.current);
-    hideTimer.current = globalThis.setTimeout(() => setVolumeOpen(false), VOLUME_AUTOHIDE_MS);
+    hideTimer.current = globalThis.setTimeout(() => {
+      setVolumeOpen(false);
+    }, VOLUME_AUTOHIDE_MS);
   };
 
   const toggleVolume = () => {
@@ -182,6 +185,14 @@ export function PlayerDock() {
     };
   }, []);
 
+  const subtitle = station
+    ? busy
+      ? `Tuning in…${sleepSuffix}`
+      : playing
+        ? `${track ?? (formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live")}${sleepSuffix}`
+        : `${error ?? "Paused"}${sleepSuffix}`
+    : "";
+
   return (
     <section
       aria-label='Player'
@@ -193,7 +204,9 @@ export function PlayerDock() {
             <button
               type='button'
               aria-label={`Details for ${station.name}`}
-              onClick={() => openDetail(station)}
+              onClick={() => {
+                openDetail(station);
+              }}
               className='shrink-0 rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
               <StationArt
                 key={station.favicon || station.stationuuid}
@@ -214,7 +227,9 @@ export function PlayerDock() {
             <button
               type='button'
               aria-label={`Details for ${station.name}`}
-              onClick={() => openDetail(station)}
+              onClick={() => {
+                openDetail(station);
+              }}
               className='min-w-0 flex-1 pl-1 text-left focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'
               aria-live='polite'>
               <span className='flex items-center gap-1.5'>
@@ -226,13 +241,7 @@ export function PlayerDock() {
                 ) : null}
                 <span className='block truncate text-sm font-semibold'>{station.name}</span>
               </span>
-              <span className='block truncate text-xs text-muted-foreground'>
-                {busy
-                  ? `Tuning in…${sleepSuffix}`
-                  : playing
-                    ? `${track ?? (formatTags(station.tags) || formatCountryName(station.country, station.countrycode) || "Live")}${sleepSuffix}`
-                    : `${error ?? "Paused"}${sleepSuffix}`}
-              </span>
+              <TrackTicker key={subtitle} text={subtitle} className='text-xs text-muted-foreground' />
             </button>
           ) : (
             <span className='min-w-0 flex-1 pl-1' aria-live='polite'>
@@ -297,7 +306,9 @@ export function PlayerDock() {
               </button>
               <button
                 type='button'
-                onClick={() => surprise()}
+                onClick={() => {
+                  surprise();
+                }}
                 disabled={isSurprising}
                 aria-label='Surprise me — play a random station'
                 title='Surprise me — play a random station'
