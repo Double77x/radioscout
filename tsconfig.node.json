@@ -27,6 +27,7 @@
     "capacitor.config.ts",
     "playwright.config.ts",
     "tests/*.spec.ts",
-    "functions"
+    "functions",
+    "src/types/**/*.d.ts"
   ]
 }
