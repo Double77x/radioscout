@@ -21,7 +21,7 @@ RadioScout has two sideload update paths:
    `AppUpdateDialog.tsx`.
 
 The F-Droid recipe sets the public build flag `VITE_DISTRIBUTION=fdroid` while
-running `pnpm build`. `src/lib/distribution.ts` makes both paths stand down.
+running `pnpm exec vp run build`. `src/lib/distribution.ts` makes both paths stand down.
 Normal web, sideload, and release-APK builds do not set the flag and retain
 their existing behavior.
 
@@ -284,3 +284,16 @@ Install the F-Droid-built APK on a clean Android device or emulator and verify:
 F-Droid and the GitHub APK use different signing keys. Moving an existing
 install between them requires uninstall/reinstall, so users should export their
 data from **Settings → Data backup** first.
+
+## 0.3.7 resubmission (!49999)
+
+0.3.6 shipped with the native stream-title bug (controller listeners are deaf
+to ICY by framework design; fixed in 0.3.7), so the open inclusion MR was
+rebased from 0.3.6/306 to 0.3.7/307 before merge. Deltas versus the §3
+template: build commit `9e43f1e`, `pnpm@12.8.1` (the pnpm-12 lockfile is
+unreadable to pnpm 10), and `VITE_DISTRIBUTION=fdroid pnpm exec vp run build`
+(the bare `pnpm build` script was removed in the Vite+ migration). Node comes
+from Debian forky's npm package (Node 24, satisfies the build) per the
+reviewer's steer, not the §3 tarball. Reference release:
+`fdroid-reference-0.3.7-307` (rolled in `.github/workflows/fdroid-reference.yml`
+the same way). Everything else in the MR file is unchanged.
