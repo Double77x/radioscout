@@ -35,6 +35,8 @@ export {
   setSleepTimer,
   setVolume,
   stop,
+  syncNativePlaylist,
+  syncNativeStation,
   toggle,
   toggleMute,
   togglePlay,

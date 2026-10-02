@@ -72,41 +72,12 @@ public class RadioPlaybackService extends MediaSessionService {
     }
 
     /**
-     * Car / headset / shade skip buttons. The playlist holds one live item,
-     * so there is no next item to seek to — the web layer owns the Saved
-     * favourites and performs the actual station switch, the service only
-     * forwards the press (same split as the `trackUpdate` title event).
-     */
-    public interface SkipListener {
-        void onSkipNext();
-
-        void onSkipPrevious();
-    }
-
-    private static final java.util.concurrent.CopyOnWriteArraySet<SkipListener> skipListeners =
-            new java.util.concurrent.CopyOnWriteArraySet<>();
-
-    /** Remembered for the session's lifetime; add is idempotent. Call on main. */
-    public static void addSkipListener(SkipListener listener) {
-        if (listener == null) return;
-        skipListeners.add(listener);
-    }
-
-    /** Best-effort detach; the set dies with the process anyway. Call on main. */
-    public static void removeSkipListener(SkipListener listener) {
-        if (listener == null) return;
-        skipListeners.remove(listener);
-    }
-
-    /**
-     * Session callback: advertise skip and forward presses to the web layer.
-     * Without the {@code onConnect} half the stub rejects SEEK_TO_NEXT /
-     * SEEK_TO_PREVIOUS with NOT_SUPPORTED before this callback ever runs, and
-     * the car never lights the buttons up. The {@code onPlayerCommandRequest}
-     * return is 0 to allow (the default impl returns 0 too — any non-zero
-     * value is a SessionResult error code that rejects the command); the
-     * player itself no-ops the seek on a one-item live playlist while the
-     * bridge event below drives the real switch.
+     * Car / headset / shade skip buttons. The session now holds a genuine
+     * multi-item favourites loop (one entry per Saved station, repeat-all),
+     * so `hasNext` / `hasPrevious` stay true at every position and every
+     * surface that builds its buttons from the player commands keeps skip
+     * visible on every station. Presses execute on the player itself — no
+     * WebView round-trip, so they work locked and dozed.
      */
     private final MediaSession.Callback sessionCallback =
             new MediaSession.Callback() {
@@ -131,23 +102,11 @@ public class RadioPlaybackService extends MediaSessionService {
                         MediaSession session,
                         MediaSession.ControllerInfo controllerInfo,
                         int command) {
-                    if (command == Player.COMMAND_SEEK_TO_NEXT) {
-                        for (SkipListener listener : skipListeners) {
-                            try {
-                                listener.onSkipNext();
-                            } catch (Exception ignored) {
-                                // One bad listener must not silence the rest.
-                            }
-                        }
-                    } else if (command == Player.COMMAND_SEEK_TO_PREVIOUS) {
-                        for (SkipListener listener : skipListeners) {
-                            try {
-                                listener.onSkipPrevious();
-                            } catch (Exception ignored) {
-                                // One bad listener must not silence the rest.
-                            }
-                        }
-                    }
+                    // 0 allows (the default impl returns 0 too — any non-zero
+                    // value is a SessionResult error code that rejects). Seeks
+                    // run on the playlist above, so there is nothing to
+                    // forward: the web layer only syncs its snapshot via the
+                    // item-transition event the plugin forwards.
                     return 0;
                 }
             };

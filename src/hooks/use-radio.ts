@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useIsClient } from "@/hooks/use-is-client";
-import { play } from "@/hooks/use-player";
+import { play, syncNativePlaylist } from "@/hooks/use-player";
 import { LISTENING_KEY } from "@/lib/player/store";
 import { queryClient } from "@/lib/query-client";
 import type { StationSearch } from "@/lib/radio/api";
@@ -106,6 +106,9 @@ export function useToggleFavourite() {
     mutationFn: (station: Station) => saveFavourite(station),
     onSuccess: (nowFavourite, station) => {
       void queryClient.invalidateQueries({ queryKey: FAVOURITES_KEY });
+      // Keep the service loop in step (star/unstar changes the loop); the
+      // next play rebuilds it regardless, so this stays best-effort.
+      syncNativePlaylist();
       toast(nowFavourite ? "Saved to favourites" : "Removed from favourites", {
         description: station.name,
       });

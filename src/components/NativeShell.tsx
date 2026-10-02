@@ -12,6 +12,7 @@ import { envString } from "@/lib/utils";
 import { pickOtaUpdate } from "@/lib/ota";
 import { playBackTransition } from "@/lib/animated-back";
 import { checkpointListeningSession } from "@/lib/player/store";
+import { syncNativeStation } from "@/hooks/use-player";
 
 /**
  * Native-shell bootstrap (Capacitor only — no-op on web).
@@ -162,7 +163,11 @@ export function NativeShell() {
     let handle: { remove: () => Promise<void> } | undefined = undefined;
     let cancelled = false;
     void App.addListener("appStateChange", (event) => {
-      if (!event.isActive) checkpointListeningSession();
+      // Foreground again after car/lock-screen presses the WebView slept
+      // through: adopt whatever the service is actually playing so the dock
+      // can't show a stale station. No-op when already in sync.
+      if (event.isActive) syncNativeStation();
+      else checkpointListeningSession();
     })
       .then((listener) => {
         if (cancelled) {

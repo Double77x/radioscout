@@ -10,7 +10,7 @@
  * Nothing in here reads player state or emits snapshots. Never throws.
  */
 import { formatCountryName, formatTags } from "@/lib/radio/format";
-import { upgradeInsecureUrl, type Station } from "@/lib/radio/types";
+import { pickPlayableUrl, upgradeInsecureUrl, type Station } from "@/lib/radio/types";
 
 /** Shown instead of the generic failure when the stream is HTTP-only on a secure page. */
 export const INSECURE_HTTP_MESSAGE =
@@ -51,6 +51,9 @@ export interface MediaSessionHandlers {
  * wrapping both directions. Null means "nowhere to go" (fewer than two
  * saved — the press stays a silent no-op); an unknown current station starts
  * at the head, so skipping from idle plays Saved #1.
+ *
+ * Web path only: on native the service owns a real playlist (see
+ * `buildSkipPlaylist`) and seeks execute on the player itself.
  */
 export function favouriteLoopTarget(
   currentUuid: string | null,
@@ -61,6 +64,57 @@ export function favouriteLoopTarget(
   const index = currentUuid === null ? -1 : orderedUuids.indexOf(currentUuid);
   if (index === -1) return orderedUuids[0];
   return orderedUuids[(index + direction + orderedUuids.length) % orderedUuids.length];
+}
+
+/** One service-side playlist entry: everything the session needs per station. */
+export interface NativePlaylistItem {
+  stationuuid: string;
+  url: string;
+  title: string;
+  artist: string;
+  artwork: string;
+}
+
+/** Favourite rows in Saved order as playlist entries (directory URLs — no network). */
+export function playlistItems(rows: { stationuuid: string; snapshot: Station }[]): NativePlaylistItem[] {
+  return rows.map((row) => ({
+    stationuuid: row.stationuuid,
+    url: pickPlayableUrl(row.snapshot),
+    title: row.snapshot.name,
+    artist: nativeTrackArtist(row.snapshot),
+    artwork: row.snapshot.favicon,
+  }));
+}
+
+/**
+ * Service-side favourites loop: full Saved order with the current station at
+ * `index`, so the session holds a genuine multi-item playlist — `hasNext` /
+ * `hasPrevious` stay true at every position (with repeat-all wrapping the
+ * ends) and every surface that builds its buttons from the player commands
+ * keeps skip visible on every station. A current station outside Saved
+ * (search play) is prepended so the audible item is always present; an empty
+ * Saved list yields the single audible item (no loop — matching the silent
+ * web path, which needs two saved to step anywhere).
+ */
+export function buildSkipPlaylist(
+  current: Station,
+  currentUrl: string,
+  rows: { stationuuid: string; snapshot: Station }[],
+): { items: NativePlaylistItem[]; index: number } {
+  const items = playlistItems(rows);
+  const index = items.findIndex((item) => item.stationuuid === current.stationuuid);
+  const here: NativePlaylistItem = {
+    stationuuid: current.stationuuid,
+    url: currentUrl,
+    title: current.name,
+    artist: nativeTrackArtist(current),
+    artwork: current.favicon,
+  };
+  if (index !== -1) {
+    items[index] = here;
+    return { items, index };
+  }
+  return { items: [here, ...items], index: 0 };
 }
 
 /**

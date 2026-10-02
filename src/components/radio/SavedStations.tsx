@@ -143,6 +143,14 @@ function persistOrder(uuids: string[]): void {
   void import("@/lib/radio/store")
     .then((store) => store.reorderFavourites(uuids))
     .then(() => queryClient.invalidateQueries({ queryKey: FAVOURITES_KEY }))
+    // The service loop mirrors Saved order — push the new order so car
+    // skips follow the drag, not the pre-drag sequence. Best-effort: the
+    // next play rebuilds the loop regardless.
+    .then(() => {
+      void import("@/hooks/use-player").then((player) => {
+        player.syncNativePlaylist();
+      });
+    })
     .catch(() => {});
 }
 

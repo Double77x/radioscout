@@ -1,15 +1,16 @@
 import { toast } from "sonner";
 import {
   canUseNativeAudio,
+  nativeCurrentStation,
   nativePause,
   nativePlay,
   nativeResume,
   nativeSetLeveling,
   nativeSetVolume,
   nativeStop,
+  nativeSyncPlaylist,
   onNativePlaybackStatus,
-  onNativeSkipNext,
-  onNativeSkipPrevious,
+  onNativeStationChange,
   onNativeTrackUpdate,
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
@@ -23,11 +24,14 @@ import { PLAY_FADE_MS, TRANSPORT_FADE_MS, rampElement, runFadeRamp } from "@/lib
 import { armSleepTimer, disarmSleepTimer } from "@/lib/player/sleep-timer";
 import {
   INSECURE_HTTP_MESSAGE,
+  buildSkipPlaylist,
   favouriteLoopTarget,
   nativeTrackArtist,
   parkWebAudioElement,
+  playlistItems,
   updateMediaSession,
   type MediaSessionHandlers,
+  type NativePlaylistItem,
 } from "@/lib/player/native-bridge";
 import {
   canRouteLeveling,
@@ -112,10 +116,12 @@ function sessionHandlers(): MediaSessionHandlers {
 }
 
 /**
- * Car steering-wheel / headset / shade skip: step through Saved favourites
- * in list order, wrapping both directions. Silent unless two or more are
- * saved; skipping from idle (or from a station outside Saved) starts at the
- * head. Fire-and-forget — a press must never break playback.
+ * Car steering-wheel / headset / shade skip (web path — the `<audio>` loop):
+ * step through Saved favourites in list order, wrapping both directions.
+ * Silent unless two or more are saved; skipping from idle (or from a station
+ * outside Saved) starts at the head. Fire-and-forget — a press must never
+ * break playback. On native the service seeks its own playlist instead (see
+ * `buildSkipPlaylist`) and the web layer only syncs via `stationChange`.
  */
 function skipFavourite(direction: 1 | -1): void {
   void import("@/lib/radio/store")
@@ -131,6 +137,77 @@ function skipFavourite(direction: 1 | -1): void {
       // The uuid came from these rows, so the find only misses across a
       // concurrent unfavourite — dropping that press beats playing stale.
       if (row) play(row.snapshot);
+    })
+    .catch(() => {});
+}
+
+/**
+ * Service-side favourites loop for the coming native take-over: full Saved
+ * order with the resolving station at its index. A local IndexedDB read
+ * (~ms) ahead of the bridge call — never network.
+ */
+async function buildNativePlaylist(
+  station: Station,
+  url: string,
+): Promise<{ items: NativePlaylistItem[]; index: number }> {
+  try {
+    const { listFavourites } = await import("@/lib/radio/store");
+    return buildSkipPlaylist(station, url, await listFavourites());
+  } catch {
+    // Saved unreadable — the single audible item still plays; the loop just
+    // has nowhere to go (same as fewer-than-two saved).
+    return buildSkipPlaylist(station, url, []);
+  }
+}
+
+/**
+ * Follow a native playlist step: adopt the audible station without switching
+ * anything (the service already moved). Snapshot, history, quick-resume and
+ * the web session follow; the title arrives via `trackUpdate` as usual.
+ * Best-effort — an unknown id (legacy single item, race) keeps the old view.
+ */
+function syncEngineToStation(stationuuid: string): void {
+  if (stationuuid === "" || stationuuid === snapshot.station?.stationuuid) return;
+  void import("@/lib/radio/store")
+    .then((store) => store.listFavourites())
+    .then((rows) => {
+      const row = rows.find((candidate) => candidate.stationuuid === stationuuid);
+      if (!row || row.stationuuid === snapshot.station?.stationuuid) return;
+      emit({
+        station: row.snapshot,
+        status: snapshot.status === "idle" ? "playing" : snapshot.status,
+        error: null,
+        track: null,
+      });
+      publishSessionTrack(null);
+      logPlay(row.snapshot);
+      writeLastStation(row.snapshot);
+    })
+    .catch(() => {});
+}
+
+/**
+ * Refresh the service loop after Saved edits (reorder, star, unstar) without
+ * disturbing playback. Fire-and-forget; the next play rebuilds it regardless.
+ */
+export function syncNativePlaylist(): void {
+  if (!canUseNativeAudio()) return;
+  void import("@/lib/radio/store")
+    .then((store) => store.listFavourites())
+    .then((rows) => nativeSyncPlaylist(playlistItems(rows)))
+    .catch(() => {});
+}
+
+/**
+ * Foreground resync: after presses the WebView slept through, ask the
+ * service what is audible and adopt it. Wired to the app foreground signal;
+ * harmless when already in sync.
+ */
+export function syncNativeStation(): void {
+  if (!canUseNativeAudio()) return;
+  void nativeCurrentStation()
+    .then((stationuuid) => {
+      if (stationuuid !== null) syncEngineToStation(stationuuid);
     })
     .catch(() => {});
 }
@@ -758,21 +835,14 @@ function ensureNativeListener(): void {
   }).catch(() => {
     nativeListenerReady = false;
   });
-  // Car skip presses ride their own bridge events (same lifetime — the
-  // service has no next item to seek to, so the web layer steps through
-  // Saved favourites instead). Deliberately NOT gated on `usingNative`
-  // unlike status/track above: `stop()` parks `usingNative=false` while the
-  // service session (and its skip callback) stays alive, and an idle skip
-  // must still start Saved #1. A press only ever arrives via one session —
-  // the platform routes it to the focus holder — so web `nexttrack` and the
-  // native event can't double-fire one press.
-  void onNativeSkipNext(() => {
-    skipFavourite(1);
-  }).catch(() => {
-    nativeListenerReady = false;
-  });
-  void onNativeSkipPrevious(() => {
-    skipFavourite(-1);
+  // Native playlist steps drive the snapshot (same lifetime — the service
+  // seeks its own favourites loop, so the engine adopts instead of playing).
+  // Kept gated on `usingNative`: transitions can only happen while the
+  // service owns output (a stop clears its items, so there is nothing to
+  // step through afterwards).
+  void onNativeStationChange((event) => {
+    if (!usingNative) return;
+    syncEngineToStation(event.stationuuid);
   }).catch(() => {
     nativeListenerReady = false;
   });
@@ -793,6 +863,7 @@ async function playViaNative(
   station: Station,
   url: string,
   wantHandoff: boolean,
+  playlist: { items: NativePlaylistItem[]; index: number },
 ): Promise<{ ok: boolean; handoff: boolean }> {
   if (!canUseNativeAudio()) return { ok: false, handoff: false };
   ensureNativeListener();
@@ -814,6 +885,8 @@ async function playViaNative(
       muted: handoff ? snapshot.muted : false,
       leveling: normalizeOn,
       handoff,
+      playlist: playlist.items,
+      index: playlist.index,
     });
     usingNative = true;
     parkWebAudioElement(audio);
@@ -1249,7 +1322,13 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
     // `playing` arrival only reconfirms audible output.
     const status = snapshot.status;
     const wantHandoff = serviceAudible && (status === "loading" || status === "playing");
-    const takeover = await playViaNative(station, url, wantHandoff);
+    // The service loop needs Saved order — but only the native take-over
+    // reads it. The web path skips the IndexedDB round-trip entirely (it
+    // also keeps this chain microtask-only, which the timer-mocked unit
+    // tests rely on to settle without advancing the clock).
+    const playlist = canUseNativeAudio() ? await buildNativePlaylist(station, url) : { items: [], index: 0 };
+    if (token !== playToken) return; // superseded while reading Saved
+    const takeover = await playViaNative(station, url, wantHandoff, playlist);
     if (takeover.ok) {
       if (token !== playToken) {
         // Superseded while the bridge connected — stop the stray start.

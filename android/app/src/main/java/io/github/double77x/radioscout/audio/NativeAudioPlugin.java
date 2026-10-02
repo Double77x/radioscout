@@ -10,6 +10,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import androidx.core.content.ContextCompat;
+import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
 import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.PlaybackException;
@@ -21,6 +22,7 @@ import androidx.media3.extractor.metadata.id3.TextInformationFrame;
 import androidx.media3.extractor.metadata.vorbis.VorbisComment;
 import androidx.media3.session.MediaController;
 import androidx.media3.session.SessionToken;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
@@ -30,7 +32,11 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import com.google.common.util.concurrent.ListenableFuture;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
+import org.json.JSONObject;
 
 /**
  * Capacitor bridge to {@link RadioPlaybackService}. One method per transport
@@ -47,8 +53,7 @@ public class NativeAudioPlugin extends Plugin {
 
     private static final String EVENT_STATUS = "playbackStatus";
     private static final String EVENT_TRACK = "trackUpdate";
-    private static final String EVENT_SKIP_NEXT = "skipNext";
-    private static final String EVENT_SKIP_PREVIOUS = "skipPrevious";
+    private static final String EVENT_STATION_CHANGE = "stationChange";
     private static final String LOG_TAG = "RadioPlayback";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -108,6 +113,34 @@ public class NativeAudioPlugin extends Plugin {
                     Log.i(LOG_TAG, "session player error: " + describeError(error));
                     emitStatus(controller, error.getMessage());
                 }
+
+                @Override
+                public void onMediaItemTransition(MediaItem mediaItem, int reason) {
+                    // Unlike timed metadata, item transitions DO cross the
+                    // controller boundary — this is how the web snapshot
+                    // follows native playlist seeks (car buttons executing on
+                    // the service loop with the WebView possibly dead). A
+                    // fresh item carries its station name until its titles
+                    // arrive, so re-anchor the artist line and drop the old
+                    // title lock; the engine ignores ids it already shows
+                    // (own plays, swap echoes) and looks up the rest.
+                    if (mediaItem == null || mediaItem.mediaId == null) return;
+                    try {
+                        CharSequence name =
+                                mediaItem.mediaMetadata == null
+                                        ? null
+                                        : mediaItem.mediaMetadata.title;
+                        if (name != null && !name.toString().isEmpty()) {
+                            stationTitle = name.toString();
+                        }
+                    } catch (Exception ignored) {
+                        // Artist line stays — cosmetic either way.
+                    }
+                    lastTrack = null;
+                    JSObject data = new JSObject();
+                    data.put("stationuuid", mediaItem.mediaId);
+                    notifyListeners(EVENT_STATION_CHANGE, data, true);
+                }
                 // NOTE: no onMetadata here on purpose. Timed metadata never
                 // crosses the controller boundary (no binder path for it in
                 // the session protocol), so a controller listener is deaf to
@@ -146,35 +179,77 @@ public class NativeAudioPlugin extends Plugin {
                 }
             };
 
-    @Override
-    public void load() {
-        // Session-level, not player-level: registered once per plugin, alive
-        // across crossfade swaps (which only replace the player, never the
-        // session or its callback). The static set also remembers it if the
-        // service isn't up yet — presses land whenever a session exists.
-        RadioPlaybackService.addSkipListener(skipListener);
+    /**
+     * One service playlist entry from the bridge (uuid, resolved URL, display
+     * fields). Corrupt entries fail the whole list back to the legacy single
+     * item — a partial loop would strand skips on dead entries.
+     */
+    private static MediaItem buildPlaylistItem(
+            String mediaId, String url, String title, String artist, String artwork) {
+        MediaMetadata.Builder metadata =
+                new MediaMetadata.Builder()
+                        .setTitle(title)
+                        .setArtist(artist)
+                        .setAlbumTitle("RadioScout");
+        if (artwork != null && !artwork.isEmpty()) {
+            try {
+                metadata.setArtworkUri(Uri.parse(artwork));
+            } catch (Exception ignored) {
+                // Artwork is decorative — never fail playback.
+            }
+        }
+        return new MediaItem.Builder()
+                .setUri(Uri.parse(url))
+                .setMediaId(mediaId)
+                .setMediaMetadata(metadata.build())
+                .build();
     }
 
     /**
-     * Steering-wheel / headset / shade skip presses, forwarded from the
-     * session callback (the playlist holds one live item, so the service has
-     * no next item to seek to — the web layer steps through Saved favourites
-     * and plays the target). Same lifetime as the metadata listener above.
+     * Service-side favourites loop from the play call. Null when absent
+     * (old OTA web shells predate it) or unreadable — callers fall back to
+     * the legacy single item, where car skip behaves exactly as before.
      */
-    private final RadioPlaybackService.SkipListener skipListener =
-            new RadioPlaybackService.SkipListener() {
-                @Override
-                public void onSkipNext() {
-                    Log.i(LOG_TAG, "skip next");
-                    notifyListeners(EVENT_SKIP_NEXT, new JSObject(), true);
-                }
+    private static List<MediaItem> readPlaylist(PluginCall call) {
+        try {
+            JSArray array = call.getArray("playlist");
+            if (array == null || array.length() == 0) return null;
+            List<MediaItem> items = new ArrayList<>(array.length());
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject entry = array.optJSONObject(i);
+                if (entry == null) return null;
+                String uuid = entry.optString("stationuuid", "");
+                String itemUrl = entry.optString("url", "");
+                if (uuid.isEmpty() || itemUrl.isEmpty()) return null;
+                items.add(
+                        buildPlaylistItem(
+                                uuid,
+                                itemUrl,
+                                entry.optString("title", uuid),
+                                entry.optString("artist", "RadioScout"),
+                                entry.optString("artwork", "")));
+            }
+            return items;
+        } catch (Exception e) {
+            Log.i(LOG_TAG, "playlist unreadable, single item: " + e.getMessage());
+            return null;
+        }
+    }
 
-                @Override
-                public void onSkipPrevious() {
-                    Log.i(LOG_TAG, "skip previous");
-                    notifyListeners(EVENT_SKIP_PREVIOUS, new JSObject(), true);
-                }
-            };
+    /**
+     * Display title of a playlist item (the station name on fresh items)
+     * for the artist line. Never empty — falls back to the play-call title.
+     */
+    private static String stationNameOf(MediaItem item, String fallback) {
+        try {
+            CharSequence name =
+                    item == null || item.mediaMetadata == null ? null : item.mediaMetadata.title;
+            if (name != null && !name.toString().isEmpty()) return name.toString();
+        } catch (Exception ignored) {
+            // Artist line keeps the fallback — cosmetic either way.
+        }
+        return fallback;
+    }
 
     /** Functional interface to avoid java.util.function on older toolchains. */
     private interface ControllerOp {
@@ -400,25 +475,24 @@ public class NativeAudioPlugin extends Plugin {
                     // the new station's name. The web snapshot clears its copy
                     // at tap time in parallel — this is the native half.
                     lastTrack = null;
-                    stationTitle = title;
-                    MediaMetadata.Builder metadata =
-                            new MediaMetadata.Builder()
-                                    .setTitle(title)
-                                    .setArtist(artist)
-                                    .setAlbumTitle("RadioScout");
-                    if (artwork != null && !artwork.isEmpty()) {
+                    // Service-side favourites loop (new web) or the legacy
+                    // single item (old OTA shells send no playlist — skip
+                    // then has nowhere to go, exactly like before).
+                    List<MediaItem> items = readPlaylist(call);
+                    int startIndex = 0;
+                    if (items == null || items.isEmpty()) {
+                        items =
+                                Collections.singletonList(
+                                        buildPlaylistItem("radioscout-live", url, title, artist, artwork));
+                    } else {
                         try {
-                            metadata.setArtworkUri(Uri.parse(artwork));
+                            startIndex = call.getInt("index", 0);
                         } catch (Exception ignored) {
-                            // Artwork is decorative — never fail playback.
+                            // Missing index starts at the head — harmless.
                         }
+                        startIndex = Math.max(0, Math.min(startIndex, items.size() - 1));
                     }
-                    MediaItem item =
-                            new MediaItem.Builder()
-                                    .setUri(Uri.parse(url))
-                                    .setMediaId("radioscout-live")
-                                    .setMediaMetadata(metadata.build())
-                                    .build();
+                    stationTitle = stationNameOf(items.get(startIndex), title);
                     // Overlapping crossfade when the web layer asks for it and the
                     // service is mid-station: a second player pre-buffers the
                     // new URL while the session player keeps playing, then the
@@ -443,26 +517,40 @@ public class NativeAudioPlugin extends Plugin {
                                     + mediaController.getPlaybackState());
                     if (wantHandoff
                             && mediaController.getCurrentMediaItem() != null
-                            && mediaController.getCurrentTimeline().getWindowCount() == 1
                             && (mediaController.isPlaying()
                                     || mediaController.getPlaybackState() == Player.STATE_BUFFERING)) {
-                        if (startFadePlayer(mediaController, item, url, volume, muted)) {
+                        if (startFadePlayer(mediaController, items, startIndex, url, volume, muted)) {
                             Log.i(LOG_TAG, "crossfade staged: " + url);
                             call.resolve();
                             return;
                         }
                         // Build failed — fall through to the classic cutover.
                     }
-                    mediaController.setVolume(muted ? 0f : volume);
-                    applyLeveling();
-                    resetLeveling();
-                    mediaController.setMediaItem(item);
-                    mediaController.prepare();
-                    mediaController.play();
+                    setPlaylistAndPlay(mediaController, items, startIndex, volume, muted);
                     Log.i(LOG_TAG, "play dispatched: " + url);
                     call.resolve();
                 },
                 call);
+    }
+
+    /**
+     * Classic cutover onto a playlist: repeat-all wraps the ends so the loop
+     * never runs out (single item behaves exactly as before), then play from
+     * the resolving station. Live positions land on the live edge either way.
+     */
+    private void setPlaylistAndPlay(
+            MediaController mediaController, List<MediaItem> items, int index, float volume, boolean muted) {
+        mediaController.setVolume(muted ? 0f : volume);
+        applyLeveling();
+        resetLeveling();
+        try {
+            mediaController.setRepeatMode(Player.REPEAT_MODE_ALL);
+        } catch (Exception ignored) {
+            // Repeat only wraps the loop ends — playback starts regardless.
+        }
+        mediaController.setMediaItems(items, index, C.TIME_UNSET);
+        mediaController.prepare();
+        mediaController.play();
     }
 
     @PluginMethod
@@ -507,6 +595,137 @@ public class NativeAudioPlugin extends Plugin {
                     call.resolve();
                 },
                 call);
+    }
+
+    /**
+     * Audible station id for the foreground resync. Empty object when the
+     * service holds nothing (stopped, never played) — the engine keeps its
+     * view. Legacy single items report `radioscout-live`, which the engine
+     * ignores (it only adopts Saved uuids).
+     */
+    @PluginMethod
+    public void currentStation(PluginCall call) {
+        withController(
+                (mediaController) -> {
+                    JSObject result = new JSObject();
+                    try {
+                        MediaItem current = mediaController.getCurrentMediaItem();
+                        if (current != null && current.mediaId != null) {
+                            result.put("stationuuid", current.mediaId);
+                        }
+                    } catch (Exception ignored) {
+                        // Unknown bridles the resync — it stays best-effort.
+                    }
+                    call.resolve(result);
+                },
+                call);
+    }
+
+    /**
+     * Refresh the service loop to the latest Saved order without disturbing
+     * the audible item: drop the gone, move the audible item home, insert
+     * the new — all gapless while they avoid the current period. Rejects
+     * (best-effort upstream) when the service is unreachable or holds
+     * nothing; the next play rebuilds the loop regardless.
+     */
+    @PluginMethod
+    public void syncPlaylist(PluginCall call) {
+        List<MediaItem> items = readPlaylist(call);
+        if (items == null || items.isEmpty()) {
+            call.reject("Missing playlist");
+            return;
+        }
+        withController(
+                (mediaController) -> {
+                    try {
+                        syncPlaylistOnMain(mediaController, items);
+                        call.resolve();
+                    } catch (Exception e) {
+                        Log.i(LOG_TAG, "playlist sync failed: " + e.getMessage());
+                        call.reject(e.getMessage(), e);
+                    }
+                },
+                call);
+    }
+
+    /** Playlist surgery that never touches the audible period. Main thread only. */
+    private static void syncPlaylistOnMain(MediaController mediaController, List<MediaItem> items) {
+        MediaItem current = mediaController.getCurrentMediaItem();
+        if (current == null || current.mediaId == null) return;
+        String currentId = current.mediaId;
+        List<MediaItem> target = new ArrayList<>(items);
+        // The audible item survives unfavouriting: it heads the loop until
+        // the next manual play rebuilds from scratch.
+        if (indexOfId(target, currentId) == -1) {
+            target.add(0, current);
+        }
+        if (sameIds(mediaController, target)) return;
+        // Drop the gone from the end (earlier indices hold).
+        int currentIndex = mediaController.getCurrentMediaItemIndex();
+        for (int i = mediaController.getMediaItemCount() - 1; i >= 0; i--) {
+            if (i == currentIndex) continue;
+            if (indexOfId(target, idAt(mediaController, i)) == -1) {
+                mediaController.removeMediaItem(i);
+                if (i < currentIndex) currentIndex--;
+            }
+        }
+        // Move the audible item home.
+        int home = indexOfId(target, currentId);
+        if (home != -1 && home != currentIndex) {
+            mediaController.moveMediaItem(currentIndex, home);
+            currentIndex = home;
+        }
+        // Insert the new at their positions (later inserts account for
+        // earlier ones shifting the audible item right).
+        for (int i = 0; i < target.size(); i++) {
+            if (i < mediaController.getMediaItemCount()
+                    && target.get(i).mediaId.equals(idAt(mediaController, i))) {
+                continue;
+            }
+            mediaController.addMediaItem(i, target.get(i));
+            if (i <= currentIndex) currentIndex++;
+        }
+        try {
+            mediaController.setRepeatMode(Player.REPEAT_MODE_ALL);
+        } catch (Exception ignored) {
+            // Repeat only wraps the loop ends — the order still lands.
+        }
+    }
+
+    /** Position of a media id in a list, or -1. Null-safe on both sides. */
+    private static int indexOfId(List<MediaItem> items, String mediaId) {
+        if (mediaId == null) return -1;
+        for (int i = 0; i < items.size(); i++) {
+            MediaItem item = items.get(i);
+            if (item != null && mediaId.equals(item.mediaId)) return i;
+        }
+        return -1;
+    }
+
+    /** Media id at a controller index, or null. Never throws. */
+    private static String idAt(MediaController mediaController, int index) {
+        try {
+            MediaItem item = mediaController.getMediaItemAt(index);
+            return item == null ? null : item.mediaId;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    /** True when the controller already holds exactly these ids in order. */
+    private static boolean sameIds(MediaController mediaController, List<MediaItem> items) {
+        try {
+            if (mediaController.getMediaItemCount() != items.size()) return false;
+            for (int i = 0; i < items.size(); i++) {
+                MediaItem item = items.get(i);
+                if (item == null || item.mediaId == null || !item.mediaId.equals(idAt(mediaController, i))) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (Exception ignored) {
+            return false;
+        }
     }
 
     @PluginMethod
@@ -593,14 +812,21 @@ public class NativeAudioPlugin extends Plugin {
     }
 
     /**
-     * Start the overlap: build a second player on the new URL at zero volume
-     * and play it. When it reaches READY the 1s blend begins; stalls/errors
-     * cut over classically instead. Returns false when the incoming player
-     * can't even be built (caller falls through to the cutover). Main thread
-     * only — every touch here is a controller/player call.
+     * Start the overlap: build a second player on the new playlist at zero
+     * volume and play it. When it reaches READY the 1s blend begins;
+     * stalls/errors cut over classically instead. Returns false when the
+     * incoming player can't even be built (caller falls through to the
+     * cutover). Main thread only — every touch here is a controller/player
+     * call. The full loop rides along so the swap hands the session a
+     * ready-to-seek playlist, not a lone item.
      */
     private boolean startFadePlayer(
-            MediaController mediaController, MediaItem item, String url, float volume, boolean muted) {
+            MediaController mediaController,
+            List<MediaItem> items,
+            int index,
+            String url,
+            float volume,
+            boolean muted) {
         killFadePlayer();
         Context context = getContext();
         if (context == null) return false;
@@ -615,7 +841,8 @@ public class NativeAudioPlugin extends Plugin {
             fadeTarget = muted ? 0f : volume;
             fadeBlending = false;
             player.setVolume(0f);
-            player.setMediaItem(item);
+            player.setRepeatMode(Player.REPEAT_MODE_ALL);
+            player.setMediaItems(items, index, C.TIME_UNSET);
             fadeListener =
                     new Player.Listener() {
                         @Override
@@ -623,7 +850,7 @@ public class NativeAudioPlugin extends Plugin {
                             if (state == Player.STATE_READY
                                     && fadePlayer == player
                                     && !fadeBlending) {
-                                beginBlend(mediaController, player, item, url);
+                                beginBlend(mediaController, player, items, index, url);
                             }
                         }
 
@@ -631,7 +858,7 @@ public class NativeAudioPlugin extends Plugin {
                         public void onPlayerError(PlaybackException error) {
                             if (fadePlayer != player) return;
                             Log.i(LOG_TAG, "crossfade incoming failed, cutting over: " + describeError(error));
-                            fallbackCutover(mediaController, item, url);
+                            fallbackCutover(mediaController, items, index, url);
                         }
                     };
             player.addListener(fadeListener);
@@ -642,7 +869,7 @@ public class NativeAudioPlugin extends Plugin {
                         fadeWatchdogRunnable = null;
                         if (fadePlayer != player || fadeBlending) return;
                         Log.i(LOG_TAG, "crossfade incoming stalled, cutting over: " + url);
-                        fallbackCutover(mediaController, item, url);
+                        fallbackCutover(mediaController, items, index, url);
                     };
             mainHandler.postDelayed(fadeWatchdogRunnable, FADE_WATCHDOG_MS);
             return true;
@@ -660,7 +887,11 @@ public class NativeAudioPlugin extends Plugin {
      * nulls it and the next tick no-ops).
      */
     private void beginBlend(
-            MediaController mediaController, ExoPlayer player, MediaItem item, String url) {
+            MediaController mediaController,
+            ExoPlayer player,
+            List<MediaItem> items,
+            int index,
+            String url) {
         if (fadePlayer != player) return;
         fadeBlending = true;
         if (fadeWatchdogRunnable != null) {
@@ -704,12 +935,12 @@ public class NativeAudioPlugin extends Plugin {
                         } catch (Exception ignored) {
                             // The newcomer died mid-blend — the session player
                             // still holds the old station, so cut the same
-                            // item over classically (metadata intact).
-                            fallbackCutover(mediaController, item, url);
+                            // loop over classically (metadata intact).
+                            fallbackCutover(mediaController, items, index, url);
                             return;
                         }
                         if (t >= 1f) {
-                            finishBlend(mediaController, player, item, url);
+                            finishBlend(mediaController, player, items, index, url);
                             return;
                         }
                         fadeRampRunnable = this;
@@ -722,11 +953,15 @@ public class NativeAudioPlugin extends Plugin {
     /**
      * Blend done: the newcomer is at full level and the old at zero — move
      * the session onto the newcomer and release the retiree. On a swap
-     * failure the same item cuts over classically (the item is immutable and
-     * reusable even though the released player held it).
+     * failure the same loop cuts over classically (items are immutable and
+     * reusable even though the released player held them).
      */
     private void finishBlend(
-            MediaController mediaController, ExoPlayer player, MediaItem item, String url) {
+            MediaController mediaController,
+            ExoPlayer player,
+            List<MediaItem> items,
+            int index,
+            String url) {
         if (fadePlayer != player) return;
         try {
             player.removeListener(fadeListener);
@@ -750,7 +985,7 @@ public class NativeAudioPlugin extends Plugin {
             return;
         }
         Log.i(LOG_TAG, "crossfade swap failed, cutting over: " + url);
-        fallbackCutover(mediaController, item, url);
+        fallbackCutover(mediaController, items, index, url);
     }
 
     /**
@@ -758,17 +993,18 @@ public class NativeAudioPlugin extends Plugin {
      * player over directly. The old station plays until this lands, so the
      * worst case is the old hard cut, never silence.
      */
-    private void fallbackCutover(MediaController mediaController, MediaItem item, String url) {
+    private void fallbackCutover(
+            MediaController mediaController, List<MediaItem> items, int index, String url) {
         killFadePlayer();
         float target = lastMuted ? 0f : lastVolume;
         try {
-            mediaController.setVolume(target);
-            if (item == null) return;
-            applyLeveling();
-            resetLeveling();
-            mediaController.setMediaItem(item);
-            mediaController.prepare();
-            mediaController.play();
+            if (items == null || items.isEmpty()) return;
+            setPlaylistAndPlay(
+                    mediaController,
+                    items,
+                    Math.max(0, Math.min(index, items.size() - 1)),
+                    target,
+                    lastMuted);
             Log.i(LOG_TAG, "play dispatched (cutover after fade abort): " + url);
         } catch (Exception e) {
             Log.i(LOG_TAG, "cutover failed: " + e.getMessage());
@@ -836,7 +1072,6 @@ public class NativeAudioPlugin extends Plugin {
             }
         }
         RadioPlaybackService.removeMetadataListener(metadataListener);
-        RadioPlaybackService.removeSkipListener(skipListener);
         if (controllerFuture != null) {
             MediaController.releaseFuture(controllerFuture);
             controllerFuture = null;

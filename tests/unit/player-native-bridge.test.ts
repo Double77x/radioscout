@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import {
   INSECURE_HTTP_MESSAGE,
+  buildSkipPlaylist,
   favouriteLoopTarget,
   nativeTrackArtist,
   parkWebAudioElement,
+  playlistItems,
   updateMediaSession,
 } from "@/lib/player/native-bridge";
 
@@ -190,3 +192,48 @@ describe("favouriteLoopTarget", () => {
     expect(favouriteLoopTarget("elsewhere", uuids, 1)).toBe("a");
   });
 });
+
+describe("buildSkipPlaylist", () => {
+  it("keeps full Saved order with the current station at its index", () => {
+    const rows = [playlistRow("a", "A FM"), playlistRow("b", "B FM"), playlistRow("c", "C FM")];
+    const { items, index } = buildSkipPlaylist(rows[1].snapshot, "https://fresh-b.fm/live", rows);
+    expect(items.map((item) => item.stationuuid)).toEqual(["a", "b", "c"]);
+    expect(index).toBe(1);
+    // The resolving station carries its fresh URL and display fields.
+    expect(items[1]).toMatchObject({ url: "https://fresh-b.fm/live", title: "B FM" });
+    expect(items[0]).toMatchObject({ stationuuid: "a", title: "A FM" });
+  });
+
+  it("prepends a current station played from outside Saved", () => {
+    const rows = [playlistRow("a", "A FM"), playlistRow("b", "B FM")];
+    const outsider = station({ stationuuid: "z", name: "Z FM", url: "https://z.fm/s" });
+    const { items, index } = buildSkipPlaylist(outsider, "https://z.fm/s", rows);
+    expect(items.map((item) => item.stationuuid)).toEqual(["z", "a", "b"]);
+    expect(index).toBe(0);
+  });
+
+  it("yields the lone audible item when nothing is saved", () => {
+    const solo = station({ stationuuid: "z", name: "Z FM", url: "https://z.fm/s" });
+    const { items, index } = buildSkipPlaylist(solo, "https://z.fm/s", []);
+    expect(items).toHaveLength(1);
+    expect(index).toBe(0);
+  });
+
+  it("maps rows to entries without network", () => {
+    const items = playlistItems([playlistRow("a", "A FM", "http://a.fm/s")]);
+    expect(items).toHaveLength(1);
+    // Directory URL as stored — the service resolves nothing itself.
+    expect(items[0]).toMatchObject({ stationuuid: "a", url: "http://a.fm/s", title: "A FM" });
+  });
+});
+
+function playlistRow(
+  uuid: string,
+  name: string,
+  url = `https://${uuid}.fm/stream`,
+): {
+  stationuuid: string;
+  snapshot: Station;
+} {
+  return { stationuuid: uuid, snapshot: station({ stationuuid: uuid, name, url, url_resolved: url }) };
+}

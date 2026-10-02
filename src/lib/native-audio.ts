@@ -1,5 +1,6 @@
 import { registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { isNative } from "@/lib/capacitor";
+import type { NativePlaylistItem } from "@/lib/player/native-bridge";
 
 export interface NativePlayOptions {
   url: string;
@@ -16,6 +17,13 @@ export interface NativePlayOptions {
    * the player holds exactly one playing/buffering item.
    */
   handoff: boolean;
+  /**
+   * Service-side favourites loop (full Saved order, current at `index`).
+   * Empty/absent (old web shells) falls back to the single `url` item, in
+   * which case car skip is no different than before this feature.
+   */
+  playlist: NativePlaylistItem[];
+  index: number;
 }
 
 export type NativePlaybackStatus = "playing" | "paused" | "loading" | "error";
@@ -30,6 +38,11 @@ export interface NativeTrackEvent {
   title: string;
 }
 
+/** Session playlist step (native seek, e.g. car buttons) — the new item's id. */
+export interface NativeStationChangeEvent {
+  stationuuid: string;
+}
+
 interface NativeAudioApi {
   play: (options: NativePlayOptions) => Promise<void>;
   pause: () => Promise<void>;
@@ -39,10 +52,18 @@ interface NativeAudioApi {
   setLeveling: (options: { enabled: boolean }) => Promise<void>;
   /** Native sleep-timer arm in seconds (`0` clears); survives WebView throttle. */
   setSleepTimer: (options: { seconds: number }) => Promise<void>;
+  /**
+   * Refresh the service playlist to the latest Saved order without
+   * disturbing the audible item (gapless playlist surgery — see the plugin).
+   * Rejects when the service is unreachable; callers treat that as best-effort.
+   */
+  syncPlaylist: (options: { playlist: NativePlaylistItem[] }) => Promise<void>;
+  /** Audible station id (`""` when none); drives the foreground resync. */
+  currentStation: () => Promise<{ stationuuid?: string }>;
   addListener: {
     (event: "playbackStatus", callback: (event: NativePlaybackEvent) => void): Promise<PluginListenerHandle>;
     (event: "trackUpdate", callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle>;
-    (event: "skipNext" | "skipPrevious", callback: () => void): Promise<PluginListenerHandle>;
+    (event: "stationChange", callback: (event: NativeStationChangeEvent) => void): Promise<PluginListenerHandle>;
   };
 }
 
@@ -113,19 +134,34 @@ export function onNativeTrackUpdate(callback: (event: NativeTrackEvent) => void)
 }
 
 /**
- * Car steering-wheel / headset / shade skip presses (APK only — the service
- * forwards them because its one-item live playlist has no next item to seek
- * to). Null handle on web like the other listeners.
+ * Service playlist step (APK only — car buttons now seek the service-side
+ * favourites loop natively, so they work with the WebView dead). The web
+ * layer only syncs its snapshot; it never switches the station itself.
+ * Null handle on web like the other listeners.
  */
-export function onNativeSkipNext(callback: () => void): Promise<PluginListenerHandle | null> {
+export function onNativeStationChange(
+  callback: (event: NativeStationChangeEvent) => void,
+): Promise<PluginListenerHandle | null> {
   if (!isNative()) return Promise.resolve(null);
-  return NativeAudio.addListener("skipNext", callback);
+  return NativeAudio.addListener("stationChange", callback);
 }
 
 /**
- * Previous-step twin of {@link onNativeSkipNext} (same lifetime, same fallback).
+ * Push the latest Saved order to the service without disturbing playback
+ * (APK only — no-op on web). Fire-and-forget: favourite edits refresh the
+ * loop the service seeks through; the next play rebuilds it regardless.
  */
-export function onNativeSkipPrevious(callback: () => void): Promise<PluginListenerHandle | null> {
+export function nativeSyncPlaylist(playlist: NativePlaylistItem[]): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  return NativeAudio.syncPlaylist({ playlist });
+}
+
+/**
+ * Audible station id for the foreground resync (APK only — `null` on web or
+ * when the service holds nothing). Lets the dock catch up after presses the
+ * WebView slept through.
+ */
+export function nativeCurrentStation(): Promise<string | null> {
   if (!isNative()) return Promise.resolve(null);
-  return NativeAudio.addListener("skipPrevious", callback);
+  return NativeAudio.currentStation().then((result) => result.stationuuid ?? null);
 }
