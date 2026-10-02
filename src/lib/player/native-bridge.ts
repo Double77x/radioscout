@@ -11,6 +11,7 @@
  */
 import { formatCountryName, formatTags } from "@/lib/radio/format";
 import { pickPlayableUrl, upgradeInsecureUrl, type Station } from "@/lib/radio/types";
+import { destroyHls } from "@/lib/player/hls";
 
 /** Shown instead of the generic failure when the stream is HTTP-only on a secure page. */
 export const INSECURE_HTTP_MESSAGE =
@@ -28,6 +29,8 @@ export function nativeTrackArtist(station: Station): string {
 /** Park the web element when the service takes over (no event cross-talk). */
 export function parkWebAudioElement(element: HTMLAudioElement | null): void {
   if (!element) return;
+  // An hls.js bridge on this element must stop fetching too.
+  destroyHls(element);
   try {
     element.pause();
   } catch {

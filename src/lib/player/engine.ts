@@ -19,6 +19,15 @@ import { fetchIcyTitles } from "@/lib/radio/icy";
 import { readTitlesEnabled } from "@/lib/radio/titles";
 import { envString, isRecord } from "@/lib/utils";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
+import {
+  HLS_UNSUPPORTED_MESSAGE,
+  attachHls,
+  canBridgeHls,
+  destroyHls,
+  hlsSourceUrl,
+  hlsUnsupportedNote,
+  needsHlsBridge,
+} from "@/lib/player/hls";
 import { buildLevelingGraph, type LevelingGraph } from "@/lib/player/leveling-graph";
 import { PLAY_FADE_MS, TRANSPORT_FADE_MS, rampElement, runFadeRamp } from "@/lib/player/fades";
 import { armSleepTimer, disarmSleepTimer } from "@/lib/player/sleep-timer";
@@ -236,6 +245,10 @@ function publishSessionTrack(track: string | null): void {
 function armIcyProbe(station: Station, url: string): void {
   clearIcyProbe();
   if (!readTitlesEnabled()) return;
+  // HLS playlists carry no ICY StreamTitle (and a bridged element's own
+  // `src` is a `blob:` MediaSource) — probing either just burns a request
+  // per play and per poll for a title that can't be there.
+  if (!/^https?:/i.test(url) || isHlsUrl(url)) return;
   const probeController = new AbortController();
   icyProbeController = probeController;
   const probeToken = playToken;
@@ -472,7 +485,9 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
         // stations just fail again with the standard error below.
         if (audioRouted && normalizeOn && snapshot.station && !retriedDirect) {
           retriedDirect = true;
-          const host = hostOf(element.src);
+          // A bridged element's `src` is an opaque `blob:` — the playlist
+          // URL carries the host that must be marked unanalyzable.
+          const host = hostOf(hlsSourceUrl(element) ?? element.src);
           if (host) blockedHosts.add(host);
           const station = snapshot.station;
           rebuildAudio();
@@ -562,6 +577,8 @@ function rebuildAudio(): HTMLAudioElement | null {
   // Detach listeners first — teardown events must never fire into the void.
   audioAbort?.abort();
   audioAbort = null;
+  // A bridge on the discarded element must stop fetching too.
+  destroyHls(audio);
   if (audio) {
     try {
       audio.pause();
@@ -946,6 +963,42 @@ function incomingCurrent(token: number, handoff: number, element: HTMLAudioEleme
 }
 
 /**
+ * Point a fresh element at a stream. Native-HLS browsers (Chrome 142+,
+ * Safari) set `src` straight — the `.m3u8` is the media resource. Browsers
+ * with no demuxer (Firefox) go through the hls.js bridge, whose chunk loads
+ * asynchronously, so both shapes funnel into one failure callback: a
+ * synchronous throw and a rejected bridge fail the switch identically.
+ * `isActive` is checked before `onFail` — a superseded load never fails a
+ * switch that has already moved on.
+ */
+function startLoad(element: HTMLAudioElement, url: string, isActive: () => boolean, onFail: () => void): void {
+  const target = upgradeInsecureUrl(url);
+  if (!needsHlsBridge(element, target)) {
+    try {
+      element.src = target;
+      element.load();
+      void element.play().catch(() => {
+        // Play rejection surfaces as an element error (or a stall caught by
+        // the watchdog) — never reject unhandled out of the preload.
+      });
+    } catch {
+      if (isActive()) onFail();
+    }
+    return;
+  }
+  attachHls(element, target, isActive)
+    .then(() => {
+      if (!isActive()) return;
+      void element.play().catch(() => {});
+    })
+    .catch(() => {
+      // Chunk failed to load (offline/stale deploy) or MediaSource refused
+      // the codecs — the same verdict path as a native load failure.
+      if (isActive()) onFail();
+    });
+}
+
+/**
  * Stage an incoming station: a fresh element preloads the new stream while
  * the live element keeps playing, so the switch has zero silence. The
  * element starts muted at zero (gesture-safe); the handoff unmutes it into
@@ -993,7 +1046,8 @@ function buildIncoming(station: Station, url: string, token: number, handoff: nu
       // direct element (mirrors the live `retriedDirect` path), else fail.
       if (incomingRouted && !incomingRetried) {
         incomingRetried = true;
-        const host = hostOf(element.src);
+        // Bridged elements report a `blob:` src — read the playlist host.
+        const host = hostOf(hlsSourceUrl(element) ?? element.src);
         if (host) blockedHosts.add(host);
         buildIncomingDirect(station, url, token, handoff);
         return;
@@ -1008,16 +1062,16 @@ function buildIncoming(station: Station, url: string, token: number, handoff: nu
     failIncomingSwitch(station, url);
   }, HANDOFF_WATCHDOG_MS);
   ensureLiveContext();
-  try {
-    element.src = upgradeInsecureUrl(url);
-    element.load();
-    void element.play().catch(() => {
-      // Play rejection surfaces as an element error (or a stall caught by
-      // the watchdog) — never reject unhandled out of the preload.
-    });
-  } catch {
-    failIncomingSwitch(station, url);
-  }
+  startLoad(
+    element,
+    url,
+    // Active while staged, and still after promotion to live: a bridge
+    // failure must reach the (identity-guarded) listeners in both states.
+    () => incomingCurrent(token, handoff, element) || audio === element,
+    () => {
+      failIncomingSwitch(station, url);
+    },
+  );
 }
 
 /** Rebuild a failed routed preload as a direct element (single rescue). */
@@ -1060,13 +1114,15 @@ function buildIncomingDirect(station: Station, url: string, token: number, hando
     failIncomingSwitch(station, url);
   }, HANDOFF_WATCHDOG_MS);
   ensureLiveContext();
-  try {
-    element.src = upgradeInsecureUrl(url);
-    element.load();
-    void element.play().catch(() => {});
-  } catch {
-    failIncomingSwitch(station, url);
-  }
+  startLoad(
+    element,
+    url,
+    // Same dual state as the first build: staged, then live after promotion.
+    () => incomingCurrent(token, handoff, element) || audio === element,
+    () => {
+      failIncomingSwitch(station, url);
+    },
+  );
 }
 
 /**
@@ -1354,20 +1410,18 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
     // preloads the new stream (muted, leveled per its own host). On ready
     // the two blend over CROSSFADE_MS; on failure the old station never
     // stopped. Each play gets one CORS-rescue replay (incoming builder).
-    if (isHlsUrl(url) && !element.canPlayType("application/vnd.apple.mpegurl")) {
-      // Chrome/Android WebView can't play HLS in <audio> — and the native
-      // bridge just declined. A cold start flags it; a live station keeps
-      // playing behind a toast naming the APK need.
+    if (needsHlsBridge(element, url) && !canBridgeHls()) {
+      // No native demuxer (Firefox) and no MediaSource to bridge one with —
+      // nothing on this page can decode HLS. Otherwise `buildIncoming`
+      // attaches the hls.js bridge below. A cold start flags it; a live
+      // station keeps playing behind a toast naming the real reason.
       if (!handoffPrev?.station) {
         killIncoming();
         handoffPrev = null;
-        emit({ needsNative: true, status: "error", error: "This is an HLS stream — needs the native player (APK)." });
+        emit({ needsNative: true, status: "error", error: HLS_UNSUPPORTED_MESSAGE });
         return;
       }
-      revertToPrevious(
-        station.name,
-        `${station.name} needs the native player (APK) — kept playing the current station.`,
-      );
+      revertToPrevious(station.name, hlsUnsupportedNote(station.name));
       return;
     }
     // `http://` flag for later failure verdicts, computed from the ORIGINAL
@@ -1472,6 +1526,15 @@ export function resume(): Promise<void> {
     play(snapshot.station);
     return Promise.resolve();
   }
+  const currentSrc = element.currentSrc === "" ? (element.getAttribute("src") ?? "") : element.currentSrc;
+  if (needsHlsBridge(element, currentSrc)) {
+    // Quick-resume points a fresh element straight at the restored row
+    // (preload="none", nothing loaded, no bridge attached) — a bare
+    // `play()` would just fail on a URL this browser can't decode, so run
+    // the full path, which resolves the stream and attaches the bridge.
+    play(snapshot.station);
+    return Promise.resolve();
+  }
   emit({ status: "loading", error: null });
   // Mirror the mute pref (a stale flag from a failed start would
   // otherwise strand this gesture-driven resume silent) and sweep up.
@@ -1541,6 +1604,8 @@ function stopNow(): void {
   usingNative = false;
   if (wasNative) void nativeStop().catch(() => {});
   if (audio) {
+    // Stop the bridge fetching before the element's stream is cleared.
+    destroyHls(audio);
     audio.pause();
     audio.removeAttribute("src");
     audio.load();

@@ -212,9 +212,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
             optionClassName='min-h-11 flex-col gap-0.5'
           />
           <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
-            {theme === "system"
-              ? `Following your device (currently ${resolvedTheme})`
-              : `Locked to ${theme} mode`}
+            {theme === "system" ? `Following your device (currently ${resolvedTheme})` : `Locked to ${theme} mode`}
           </p>
         </section>
 
