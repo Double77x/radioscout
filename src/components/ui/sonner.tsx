@@ -1,11 +1,11 @@
-import { useTheme } from "next-themes";
+import { useTheme } from "@/lib/theme";
 import { Toaster as Sonner } from "sonner";
 import { useIsClient } from "@/hooks/use-is-client";
 
 type ToasterProps = React.ComponentProps<typeof Sonner>;
 
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
+  const { theme } = useTheme();
   const isClient = useIsClient();
 
   return (

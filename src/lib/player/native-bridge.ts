@@ -37,25 +37,54 @@ export function parkWebAudioElement(element: HTMLAudioElement | null): void {
   element.load();
 }
 
-/** Transport handlers behind the lock-screen / headset MediaSession actions. */
+/** Transport handlers behind the lock-screen / headset / car MediaSession actions. */
 export interface MediaSessionHandlers {
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
+  onNext: () => void;
+  onPrevious: () => void;
+}
+
+/**
+ * Step target for car skip buttons through Saved favourites in list order,
+ * wrapping both directions. Null means "nowhere to go" (fewer than two
+ * saved — the press stays a silent no-op); an unknown current station starts
+ * at the head, so skipping from idle plays Saved #1.
+ */
+export function favouriteLoopTarget(
+  currentUuid: string | null,
+  orderedUuids: string[],
+  direction: 1 | -1,
+): string | null {
+  if (orderedUuids.length < 2) return null;
+  const index = currentUuid === null ? -1 : orderedUuids.indexOf(currentUuid);
+  if (index === -1) return orderedUuids[0];
+  return orderedUuids[(index + direction + orderedUuids.length) % orderedUuids.length];
 }
 
 /**
  * Publish the station to the system MediaSession with transport actions.
  * Progressive enhancement — a missing session or a hostile browser leaves
  * playback untouched.
+ *
+ * `track` is the live `StreamTitle` when one is known. The song takes the
+ * title slot and the station moves to the artist slot, which is what a car
+ * (Bluetooth AVRCP), the lock screen or Android Auto actually renders: the
+ * station alone leaves every one of them showing the same line twice. Without
+ * a title the station leads and the tags/country keep the second line.
  */
-export function updateMediaSession(station: Station, handlers: MediaSessionHandlers): void {
+export function updateMediaSession(
+  station: Station,
+  handlers: MediaSessionHandlers,
+  track: string | null = null,
+): void {
   const mediaSession = globalThis.navigator?.mediaSession;
   if (!mediaSession) return;
   try {
     mediaSession.metadata = new MediaMetadata({
-      title: station.name,
-      artist: nativeTrackArtist(station),
+      title: track ?? station.name,
+      artist: track === null ? nativeTrackArtist(station) : station.name,
       album: "RadioScout",
       artwork:
         station.favicon === ""
@@ -70,6 +99,12 @@ export function updateMediaSession(station: Station, handlers: MediaSessionHandl
     });
     mediaSession.setActionHandler("stop", () => {
       handlers.onStop();
+    });
+    mediaSession.setActionHandler("nexttrack", () => {
+      handlers.onNext();
+    });
+    mediaSession.setActionHandler("previoustrack", () => {
+      handlers.onPrevious();
     });
   } catch {
     // MediaSession is progressive enhancement — never break playback.

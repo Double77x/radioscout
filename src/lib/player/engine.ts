@@ -8,6 +8,8 @@ import {
   nativeSetVolume,
   nativeStop,
   onNativePlaybackStatus,
+  onNativeSkipNext,
+  onNativeSkipPrevious,
   onNativeTrackUpdate,
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
@@ -21,9 +23,11 @@ import { PLAY_FADE_MS, TRANSPORT_FADE_MS, rampElement, runFadeRamp } from "@/lib
 import { armSleepTimer, disarmSleepTimer } from "@/lib/player/sleep-timer";
 import {
   INSECURE_HTTP_MESSAGE,
+  favouriteLoopTarget,
   nativeTrackArtist,
   parkWebAudioElement,
   updateMediaSession,
+  type MediaSessionHandlers,
 } from "@/lib/player/native-bridge";
 import {
   canRouteLeveling,
@@ -85,6 +89,66 @@ function clearIcyProbe(): void {
 }
 
 /**
+ * Transport handlers behind the lock-screen / headset / car MediaSession
+ * actions. Rebuilt per publish — they close over module state, not over the
+ * station, so a title republish reuses the same calls.
+ */
+function sessionHandlers(): MediaSessionHandlers {
+  return {
+    onPlay: () => void resume(),
+    onPause: () => {
+      pause();
+    },
+    onStop: () => {
+      stop();
+    },
+    onNext: () => {
+      skipFavourite(1);
+    },
+    onPrevious: () => {
+      skipFavourite(-1);
+    },
+  };
+}
+
+/**
+ * Car steering-wheel / headset / shade skip: step through Saved favourites
+ * in list order, wrapping both directions. Silent unless two or more are
+ * saved; skipping from idle (or from a station outside Saved) starts at the
+ * head. Fire-and-forget — a press must never break playback.
+ */
+function skipFavourite(direction: 1 | -1): void {
+  void import("@/lib/radio/store")
+    .then((store) => store.listFavourites())
+    .then((rows) => {
+      const target = favouriteLoopTarget(
+        snapshot.station?.stationuuid ?? null,
+        rows.map((row) => row.stationuuid),
+        direction,
+      );
+      if (target === null) return;
+      const row = rows.find((candidate) => candidate.stationuuid === target);
+      // The uuid came from these rows, so the find only misses across a
+      // concurrent unfavourite — dropping that press beats playing stale.
+      if (row) play(row.snapshot);
+    })
+    .catch(() => {});
+}
+
+/**
+ * Republish the session metadata carrying a live `StreamTitle`. Without it
+ * the only published line is the station, so a car, lock screen or Android
+ * Auto shows the station and nothing else while the dock subtitle is already
+ * tracking the song. Cheap enough to run on every title change (native
+ * forwards a deduped title; the web probe returns one per poll).
+ */
+function publishSessionTrack(track: string | null): void {
+  const station = snapshot.station;
+  if (station === null) return;
+  updateMediaSession(station, sessionHandlers(), track);
+}
+
+/**
  * Track the live StreamTitle for the player subtitle. Probes once
  * immediately (fast first paint, even while loading) then re-polls while
  * playing so track changes replace the subtitle instead of going stale.
@@ -101,7 +165,10 @@ function armIcyProbe(station: Station, url: string): void {
   const applyProbedTitle = (raw: string): void => {
     if (!isCurrent()) return;
     const title = raw.trim() === "" ? null : raw;
-    if (title !== snapshot.track) emit({ track: title });
+    if (title !== snapshot.track) {
+      emit({ track: title });
+      publishSessionTrack(title);
+    }
     if (import.meta.env.DEV) console.log("[icy-probe] subtitle:", title);
   };
   const refreshOnce = (): void => {
@@ -685,7 +752,27 @@ function ensureNativeListener(): void {
   void onNativeTrackUpdate((event) => {
     if (!usingNative) return;
     const title = event.title.trim() === "" ? null : event.title.trim();
-    if (title !== snapshot.track) emit({ track: title });
+    if (title === snapshot.track) return;
+    emit({ track: title });
+    publishSessionTrack(title);
+  }).catch(() => {
+    nativeListenerReady = false;
+  });
+  // Car skip presses ride their own bridge events (same lifetime — the
+  // service has no next item to seek to, so the web layer steps through
+  // Saved favourites instead). Deliberately NOT gated on `usingNative`
+  // unlike status/track above: `stop()` parks `usingNative=false` while the
+  // service session (and its skip callback) stays alive, and an idle skip
+  // must still start Saved #1. A press only ever arrives via one session —
+  // the platform routes it to the focus holder — so web `nexttrack` and the
+  // native event can't double-fire one press.
+  void onNativeSkipNext(() => {
+    skipFavourite(1);
+  }).catch(() => {
+    nativeListenerReady = false;
+  });
+  void onNativeSkipPrevious(() => {
+    skipFavourite(-1);
   }).catch(() => {
     nativeListenerReady = false;
   });
@@ -965,15 +1052,7 @@ function handoffToIncoming(station: Station, handoff: number): void {
   // A promoted handoff is a (re)connection landing — end any retry sequence.
   playedThrough = true;
   cancelReconnect();
-  updateMediaSession(station, {
-    onPlay: () => void resume(),
-    onPause: () => {
-      pause();
-    },
-    onStop: () => {
-      stop();
-    },
-  });
+  updateMediaSession(station, sessionHandlers());
   logPlay(station);
   resetLevelingForStation();
   // Blend: predecessor out, successor (unmuted) in. Either chain cancelled

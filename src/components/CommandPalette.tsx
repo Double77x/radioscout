@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useRef, useEffect, type KeyboardEvent a
 import { useNavigate } from "@tanstack/react-router";
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { useTheme } from "next-themes";
+import { flippedTheme, useTheme } from "@/lib/theme";
 import { Search, Command, ArrowRight, type LucideIcon } from "lucide-react";
 import Fuse from "fuse.js";
 import { cn } from "@/lib/utils";
@@ -25,7 +25,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  const { setTheme } = useTheme();
 
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -55,7 +55,7 @@ export function CommandPalette() {
       {
         ...COMMAND_ACTION_THEME,
         action: () => {
-          setTheme(theme === "dark" ? "light" : "dark");
+          setTheme(flippedTheme());
         },
       } as CommandItem,
       {
@@ -65,7 +65,7 @@ export function CommandPalette() {
         },
       } as CommandItem,
     ];
-  }, [theme, setTheme]);
+  }, [setTheme]);
 
   // 3. Initialize Fuse.js fuzzy search
   const fuse = useMemo(

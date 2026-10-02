@@ -122,7 +122,6 @@ export default defineConfig(({ mode }) => {
             "vendor-floating",
             "vendor-fuse",
             "vendor-zod",
-            "vendor-themes",
           ];
           return deps.filter((dep) => coreChunks.some((core) => dep.includes(core)));
         },
@@ -198,7 +197,6 @@ export default defineConfig(({ mode }) => {
               { name: "vendor-baseui", test: (id) => id.includes("@base-ui/"), minSize: 0 },
               { name: "vendor-lucide", test: (id) => id.includes("lucide-react/"), minSize: 0 },
               { name: "vendor-dexie", test: (id) => id.includes("/dexie/"), minSize: 0 },
-              { name: "vendor-themes", test: (id) => id.includes("next-themes"), minSize: 0 },
             ],
           },
           minify: {

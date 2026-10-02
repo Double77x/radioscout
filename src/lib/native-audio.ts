@@ -42,6 +42,7 @@ interface NativeAudioApi {
   addListener: {
     (event: "playbackStatus", callback: (event: NativePlaybackEvent) => void): Promise<PluginListenerHandle>;
     (event: "trackUpdate", callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle>;
+    (event: "skipNext" | "skipPrevious", callback: () => void): Promise<PluginListenerHandle>;
   };
 }
 
@@ -109,4 +110,22 @@ export function onNativePlaybackStatus(
 export function onNativeTrackUpdate(callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle | null> {
   if (!isNative()) return Promise.resolve(null);
   return NativeAudio.addListener("trackUpdate", callback);
+}
+
+/**
+ * Car steering-wheel / headset / shade skip presses (APK only — the service
+ * forwards them because its one-item live playlist has no next item to seek
+ * to). Null handle on web like the other listeners.
+ */
+export function onNativeSkipNext(callback: () => void): Promise<PluginListenerHandle | null> {
+  if (!isNative()) return Promise.resolve(null);
+  return NativeAudio.addListener("skipNext", callback);
+}
+
+/**
+ * Previous-step twin of {@link onNativeSkipNext} (same lifetime, same fallback).
+ */
+export function onNativeSkipPrevious(callback: () => void): Promise<PluginListenerHandle | null> {
+  if (!isNative()) return Promise.resolve(null);
+  return NativeAudio.addListener("skipPrevious", callback);
 }
