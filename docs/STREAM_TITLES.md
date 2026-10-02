@@ -1,8 +1,9 @@
-# Stream titles (dock subtitle)
+# Stream titles
 
 The player subtitle shows the live `StreamTitle` where the station sends
 one, replacing the genre/country fallback. Track changes update it;
-pause/stop/new-play clear it.
+pause/stop/new-play clear it. The same title reaches the system media
+session, so a car, the lock screen and Android Auto show the song too.
 
 ## Where titles come from
 
@@ -34,6 +35,28 @@ Shared decoder: `src/lib/radio/icy.ts` (`parseIcyBlock`,
 `fetchIcyTitles`). Display: `TrackTicker` (scrolls only on compact
 viewports when overflowing, static otherwise).
 
+## Session metadata (car, lock screen, Android Auto)
+
+The dock is not the only thing a listener looks at. Both engines publish the
+title into the media session the system renders elsewhere: with a track, the
+song takes the title slot and the station moves to the artist slot (otherwise
+every one of those surfaces prints the station twice and never names the
+song). Without a track, the station leads and tags/country keep the second
+line.
+
+- **APK:** `RadioPlaybackService.publishTrackTitle` swaps the current item's
+  metadata via `Player.replaceMediaItems`, which is the only in-place update
+  path in media3-exoplayer 1.9.0 — `canUpdateMediaItem` compares playback
+  identity and ignores metadata (URI plus `imageDurationMs`/`customCacheKey`
+  for progressive sources, URI plus stream keys/DRM/live configuration for
+  HLS), so the source already loading is reused and the position holds.
+  `setMediaItem` would build a fresh source and re-read the stream (a rebuffer
+  per track change), so it is not used here. Skipped mid-handoff: until the
+  blend swaps the session, the retiring item is what the car is showing.
+- **Web:** `updateMediaSession(station, handlers, track)` in
+  `lib/player/native-bridge`, republished from `engine.ts` whenever a probe
+  title lands. Needs *Show song titles* on, since that is what feeds it.
+
 ## Edge caching (verify on preview deploy)
 
 Ok responses carry `Cache-Control: public, max-age=60`; errors
@@ -58,6 +81,8 @@ to an explicit `caches.default.put` instead of headers. Client polling
 - **Web/dev:** open `/__icy`, probe the station URL, read `trace`. The
   engine also logs `[icy-probe] subtitle:` in dev on every paint.
 - **APK:** `adb logcat | grep 'track:'` shows titles as ExoPlayer forwards
-  them. Nothing there means the stream sends no usable frames (test an
-  MP3 ICY station like Capital Xtra, not HLS), or the APK predates the
-  v0.3.5 bridge fix — rebuild with `pnpm build:android:apk`.
+  them; `'session title:'` shows each one that also reached the media session
+  (no line between the two means the car is showing the station name).
+  Nothing at all means the stream sends no usable frames (test an MP3 ICY
+  station like Capital Xtra, not HLS), or the APK predates the v0.3.5 bridge
+  fix — rebuild with `pnpm build:android:apk`.

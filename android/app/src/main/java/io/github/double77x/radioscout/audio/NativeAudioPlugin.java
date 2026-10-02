@@ -47,6 +47,8 @@ public class NativeAudioPlugin extends Plugin {
 
     private static final String EVENT_STATUS = "playbackStatus";
     private static final String EVENT_TRACK = "trackUpdate";
+    private static final String EVENT_SKIP_NEXT = "skipNext";
+    private static final String EVENT_SKIP_PREVIOUS = "skipPrevious";
     private static final String LOG_TAG = "RadioPlayback";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -80,6 +82,13 @@ public class NativeAudioPlugin extends Plugin {
     private static final long FADE_WATCHDOG_MS = 20_000;
     /** Last forwarded stream title (dedupes the metadata firehose). */
     private String lastTrack;
+    /**
+     * Station name of the play in flight — the artist line that replaces it
+     * when a stream title takes over the session title (published via
+     * {@link RadioPlaybackService#publishTrackTitle}). Written and read on
+     * main only (set inside the play op, read in {@link #metadataListener}).
+     */
+    private String stationTitle = "Radio";
     /** Last user level (play/setVolume) — restores the session volume when a
      * pause kills a mid-blend ramp part-way down. */
     private float lastVolume = 0.9f;
@@ -118,13 +127,52 @@ public class NativeAudioPlugin extends Plugin {
                     // (the browser can never read these — CORS — but the
                     // service parses them for free). Forward changes only.
                     String title = extractTrackTitle(metadata);
-                    if (title != null && !title.equals(lastTrack)) {
-                        lastTrack = title;
-                        Log.i(LOG_TAG, "track: " + title);
-                        JSObject data = new JSObject();
-                        data.put("title", title);
-                        notifyListeners(EVENT_TRACK, data, true);
+                    if (title == null || title.equals(lastTrack)) return;
+                    lastTrack = title;
+                    // The car, lock screen, Auto and the notification all read
+                    // the session metadata, which `play` freezes at the station
+                    // name — republish it so those follow the track too. Skipped
+                    // mid-handoff: until the blend swaps, the retiring item is
+                    // the one on display and its title is the outgoing
+                    // station's. Cosmetic at worst: the bridge event below still
+                    // feeds the dock either way.
+                    if (fadePlayer == null) {
+                        RadioPlaybackService.publishTrackTitle(title, stationTitle);
                     }
+                    Log.i(LOG_TAG, "track: " + title);
+                    JSObject data = new JSObject();
+                    data.put("title", title);
+                    notifyListeners(EVENT_TRACK, data, true);
+                }
+            };
+
+    @Override
+    public void load() {
+        // Session-level, not player-level: registered once per plugin, alive
+        // across crossfade swaps (which only replace the player, never the
+        // session or its callback). The static set also remembers it if the
+        // service isn't up yet — presses land whenever a session exists.
+        RadioPlaybackService.addSkipListener(skipListener);
+    }
+
+    /**
+     * Steering-wheel / headset / shade skip presses, forwarded from the
+     * session callback (the playlist holds one live item, so the service has
+     * no next item to seek to — the web layer steps through Saved favourites
+     * and plays the target). Same lifetime as the metadata listener above.
+     */
+    private final RadioPlaybackService.SkipListener skipListener =
+            new RadioPlaybackService.SkipListener() {
+                @Override
+                public void onSkipNext() {
+                    Log.i(LOG_TAG, "skip next");
+                    notifyListeners(EVENT_SKIP_NEXT, new JSObject(), true);
+                }
+
+                @Override
+                public void onSkipPrevious() {
+                    Log.i(LOG_TAG, "skip previous");
+                    notifyListeners(EVENT_SKIP_PREVIOUS, new JSObject(), true);
                 }
             };
 
@@ -247,6 +295,8 @@ public class NativeAudioPlugin extends Plugin {
                     Log.i(LOG_TAG, "controller connected");
                     controller.addListener(listener);
                     // Titles ride the session player directly (see above).
+                    // Skip needs no registration here: it is session-level, not
+                    // player-level, so `load()` owns it and swaps can't drop it.
                     RadioPlaybackService.addMetadataListener(metadataListener);
                     try {
                         op.run(controller);
@@ -338,11 +388,19 @@ public class NativeAudioPlugin extends Plugin {
         boolean muted = call.getBoolean("muted", false);
         levelingEnabled = call.getBoolean("leveling", false);
         lastStatus = "";
-        // New station, new title — the old StreamTitle must not linger into
-        // the tune (the web snapshot clears its copy in parallel).
-        lastTrack = null;
         withController(
                 (mediaController) -> {
+                    // Per-play state lands here, on main, in op-execution order —
+                    // not at tap time on the bridge thread. Queued ops run FIFO,
+                    // so a rapid A-then-B switch publishes under A while A's item
+                    // is current and under B after; writing outside would let B's
+                    // tap clobber A's window before A's op even runs, and a
+                    // trailing ICY frame from the old station in that gap would
+                    // dedupe-miss (lastTrack already cleared) and publish under
+                    // the new station's name. The web snapshot clears its copy
+                    // at tap time in parallel — this is the native half.
+                    lastTrack = null;
+                    stationTitle = title;
                     MediaMetadata.Builder metadata =
                             new MediaMetadata.Builder()
                                     .setTitle(title)
@@ -778,6 +836,7 @@ public class NativeAudioPlugin extends Plugin {
             }
         }
         RadioPlaybackService.removeMetadataListener(metadataListener);
+        RadioPlaybackService.removeSkipListener(skipListener);
         if (controllerFuture != null) {
             MediaController.releaseFuture(controllerFuture);
             controllerFuture = null;

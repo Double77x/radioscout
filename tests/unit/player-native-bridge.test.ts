@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
 import {
   INSECURE_HTTP_MESSAGE,
+  favouriteLoopTarget,
   nativeTrackArtist,
   parkWebAudioElement,
   updateMediaSession,
@@ -10,6 +11,21 @@ import {
 
 function FakeMediaMetadata(this: Record<string, unknown>, init: Record<string, unknown>): void {
   Object.assign(this, init);
+}
+
+/** Shared void implementation so handler mocks satisfy `() => void`. */
+function nothing(): void {
+  return undefined;
+}
+
+function handlers() {
+  return {
+    onPlay: vi.fn(nothing),
+    onPause: vi.fn(nothing),
+    onStop: vi.fn(nothing),
+    onNext: vi.fn(nothing),
+    onPrevious: vi.fn(nothing),
+  };
 }
 
 function station(overrides: Partial<Station> = {}): Station {
@@ -80,16 +96,11 @@ describe("updateMediaSession", () => {
     globalHolder.MediaMetadata = savedMetadata;
   });
 
-  it("is a no-op without a session (never breaks playback)", () => {
-    navigatorHolder.mediaSession = undefined;
-    const handlers = { onPlay: vi.fn(), onPause: vi.fn(), onStop: vi.fn() };
-    expect(() => {
-      updateMediaSession(station({ name: "No Session FM" }), handlers);
-    }).not.toThrow();
-    expect(handlers.onPlay).not.toHaveBeenCalled();
-  });
-
-  it("publishes metadata and wires transport actions", () => {
+  /** Published metadata fields plus the wired transport actions. */
+  function installSession(): {
+    seen: { title?: string; artist?: string; album?: string; artwork?: unknown[] };
+    actions: Map<string, () => void>;
+  } {
     const actions = new Map<string, () => void>();
     const seen: { title?: string; artist?: string; album?: string; artwork?: unknown[] } = {};
     const holder: { current?: Record<string, unknown> } = {};
@@ -107,10 +118,24 @@ describe("updateMediaSession", () => {
       setActionHandler: (action: string, handler: () => void) => void actions.set(action, handler),
     };
     globalHolder.MediaMetadata = FakeMediaMetadata;
-    const handlers = { onPlay: vi.fn(), onPause: vi.fn(), onStop: vi.fn() };
+    return { seen, actions };
+  }
+
+  it("is a no-op without a session (never breaks playback)", () => {
+    navigatorHolder.mediaSession = undefined;
+    const itemHandlers = handlers();
+    expect(() => {
+      updateMediaSession(station({ name: "No Session FM" }), itemHandlers);
+    }).not.toThrow();
+    expect(itemHandlers.onPlay).not.toHaveBeenCalled();
+  });
+
+  it("publishes metadata and wires transport actions", () => {
+    const { seen, actions } = installSession();
+    const itemHandlers = handlers();
     const item = station({ name: "Session FM", tags: "rock", favicon: "" });
     expect(() => {
-      updateMediaSession(item, handlers);
+      updateMediaSession(item, itemHandlers);
     }).not.toThrow();
     expect(seen.title).toBe("Session FM");
     expect(seen.artist).toBe("Rock");
@@ -119,8 +144,49 @@ describe("updateMediaSession", () => {
     actions.get("play")?.();
     actions.get("pause")?.();
     actions.get("stop")?.();
-    expect(handlers.onPlay).toHaveBeenCalledTimes(1);
-    expect(handlers.onPause).toHaveBeenCalledTimes(1);
-    expect(handlers.onStop).toHaveBeenCalledTimes(1);
+    actions.get("nexttrack")?.();
+    actions.get("previoustrack")?.();
+    expect(itemHandlers.onPlay).toHaveBeenCalledTimes(1);
+    expect(itemHandlers.onPause).toHaveBeenCalledTimes(1);
+    expect(itemHandlers.onStop).toHaveBeenCalledTimes(1);
+    expect(itemHandlers.onNext).toHaveBeenCalledTimes(1);
+    expect(itemHandlers.onPrevious).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives the song the title slot and the station the artist slot", () => {
+    // What a car, lock screen or Android Auto renders: the station alone
+    // would show the same line twice and never name the track.
+    const { seen, actions } = installSession();
+    const itemHandlers = handlers();
+    const item = station({ name: "Session FM", tags: "rock", favicon: "" });
+    updateMediaSession(item, itemHandlers, "Wanderer - Song Two");
+    expect(seen.title).toBe("Wanderer - Song Two");
+    expect(seen.artist).toBe("Session FM");
+    expect(seen.album).toBe("RadioScout");
+    // Transport survives a title republish — the dock and the car share one.
+    actions.get("pause")?.();
+    expect(itemHandlers.onPause).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("favouriteLoopTarget", () => {
+  const uuids = ["a", "b", "c"];
+
+  it("steps forward and back through Saved order, wrapping both ends", () => {
+    expect(favouriteLoopTarget("a", uuids, 1)).toBe("b");
+    expect(favouriteLoopTarget("c", uuids, 1)).toBe("a");
+    expect(favouriteLoopTarget("a", uuids, -1)).toBe("c");
+    expect(favouriteLoopTarget("c", uuids, -1)).toBe("b");
+  });
+
+  it("stays silent with fewer than two saved", () => {
+    expect(favouriteLoopTarget("a", ["a"], 1)).toBeNull();
+    expect(favouriteLoopTarget(null, [], 1)).toBeNull();
+  });
+
+  it("starts at the head from idle or from outside Saved", () => {
+    expect(favouriteLoopTarget(null, uuids, 1)).toBe("a");
+    expect(favouriteLoopTarget(null, uuids, -1)).toBe("a");
+    expect(favouriteLoopTarget("elsewhere", uuids, 1)).toBe("a");
   });
 });
