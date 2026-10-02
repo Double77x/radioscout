@@ -8,6 +8,22 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.8 - Car titles and skip buttons</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Live titles reach the car too: the Android media session republishes on every track change (song as title,
+              station as artist), so Bluetooth, Android Auto and the lock screen follow the song instead of repeating
+              the station name.
+            </li>
+            <li>
+              Steering-wheel and headset skip buttons step through Saved favourites in list order, wrapping both
+              directions. Skipping from idle starts the first saved station; with fewer than two saved the press stays
+              silent.
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.7 - Live song titles, ticker subtitles, Xtra Hot</h2>
           <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
