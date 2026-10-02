@@ -119,24 +119,11 @@ public class NativeAudioPlugin extends Plugin {
                     // Unlike timed metadata, item transitions DO cross the
                     // controller boundary — this is how the web snapshot
                     // follows native playlist seeks (car buttons executing on
-                    // the service loop with the WebView possibly dead). A
-                    // fresh item carries its station name until its titles
-                    // arrive, so re-anchor the artist line and drop the old
-                    // title lock; the engine ignores ids it already shows
-                    // (own plays, swap echoes) and looks up the rest.
+                    // the service loop with the WebView possibly dead). The
+                    // engine ignores ids it already shows (own plays, swap
+                    // echoes) and looks up the rest.
                     if (mediaItem == null || mediaItem.mediaId == null) return;
-                    try {
-                        CharSequence name =
-                                mediaItem.mediaMetadata == null
-                                        ? null
-                                        : mediaItem.mediaMetadata.title;
-                        if (name != null && !name.toString().isEmpty()) {
-                            stationTitle = name.toString();
-                        }
-                    } catch (Exception ignored) {
-                        // Artist line stays — cosmetic either way.
-                    }
-                    lastTrack = null;
+                    resetIncomingMetadata(mediaItem);
                     JSObject data = new JSObject();
                     data.put("stationuuid", mediaItem.mediaId);
                     notifyListeners(EVENT_STATION_CHANGE, data, true);
@@ -146,6 +133,57 @@ public class NativeAudioPlugin extends Plugin {
                 // the session protocol), so a controller listener is deaf to
                 // ICY by framework design — see metadataListener below.
             };
+
+    /**
+     * Re-anchor a freshly entered item. Loop items are built once at play
+     * carrying their station name in `subtitle` (see buildPlaylistItem) and
+     * their title slot is rewritten with song titles by publishTrackTitle —
+     * which touches only the CURRENT item, so by the time the loop comes back
+     * around this item's title can still be a song from a station played
+     * minutes ago. Without this reset the car names that stale song over the
+     * new station until its first ICY title lands. Restore the stashed station
+     * name into the title slot and drop the title dedupe lock. No-op when the
+     * title already is the station name (the common case). Never throws — a
+     * stale display line beats a dead service.
+     */
+    private void resetIncomingMetadata(MediaItem mediaItem) {
+        try {
+            MediaMetadata metadata = mediaItem.mediaMetadata;
+            if (metadata == null) return;
+            // Station name comes from the `subtitle` stash the loop builder
+            // writes (see buildPlaylistItem), NOT from the title slot — that
+            // one holds the PREVIOUS station's song once publishTrackTitle
+            // has been here, which is exactly what must not survive. Legacy
+            // single items (old OTA shell) have no subtitle and were never
+            // swapped, so the incoming title is still their station name.
+            CharSequence stashed = metadata.subtitle;
+            CharSequence shown = metadata.title;
+            String stashText = stashed == null ? "" : stashed.toString();
+            lastTrack = null;
+            if (stashText.isEmpty()) return;
+            stationTitle = stashText;
+            // Title already IS the station name (a loop item nobody has played
+            // yet, or a legacy single item) — nothing to undo.
+            if (stashText.equals(shown == null ? "" : shown.toString())) return;
+            MediaController connected = controller;
+            if (connected == null || !connected.isConnected()) return;
+            int index = connected.getCurrentMediaItemIndex();
+            if (index < 0 || index >= connected.getMediaItemCount()) return;
+            // Artist takes the station name too: publishTrackTitle always
+            // overwrote it alongside the song, so the built-time tags are
+            // long gone by the time this runs. Station/station until the
+            // first ICY title lands (usually a second or two).
+            connected.replaceMediaItem(
+                    index,
+                    mediaItem.buildUpon()
+                            .setMediaMetadata(
+                                    metadata.buildUpon().setTitle(stationTitle).setArtist(stationTitle).build())
+                            .build());
+        } catch (Exception e) {
+            // Cosmetic reset — the incoming ICY titles still land normally.
+            Log.i(LOG_TAG, "incoming metadata not reset: " + e.getMessage());
+        }
+    }
 
     /**
      * Stream-title listener for the session ExoPlayer itself (NOT the
@@ -186,9 +224,14 @@ public class NativeAudioPlugin extends Plugin {
      */
     private static MediaItem buildPlaylistItem(
             String mediaId, String url, String title, String artist, String artwork) {
+        // `subtitle` carries the station name as a private stash: the title
+        // slot is rewritten with song titles as they arrive (the song must
+        // lead on every surface), so the station line needs somewhere to
+        // come back from. No car/lock-screen surface renders it.
         MediaMetadata.Builder metadata =
                 new MediaMetadata.Builder()
                         .setTitle(title)
+                        .setSubtitle(title)
                         .setArtist(artist)
                         .setAlbumTitle("RadioScout");
         if (artwork != null && !artwork.isEmpty()) {

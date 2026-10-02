@@ -173,12 +173,13 @@ function syncEngineToStation(stationuuid: string): void {
     .then((rows) => {
       const row = rows.find((candidate) => candidate.stationuuid === stationuuid);
       if (!row || row.stationuuid === snapshot.station?.stationuuid) return;
-      emit({
-        station: row.snapshot,
-        status: snapshot.status === "idle" ? "playing" : snapshot.status,
-        error: null,
-        track: null,
-      });
+      // An idle snapshot means the WebView was restarted or missed the play
+      // (lock/doze) while the service kept going — adopt as playing, and
+      // clear any stale error verdict the same way the play path does.
+      // `paused` deliberately survives: a paused dock must not silently
+      // resume audible, and the next service status event corrects it.
+      const status = snapshot.status === "idle" || snapshot.status === "error" ? "playing" : snapshot.status;
+      emit({ station: row.snapshot, status, error: null, track: null });
       publishSessionTrack(null);
       logPlay(row.snapshot);
       writeLastStation(row.snapshot);
@@ -837,11 +838,14 @@ function ensureNativeListener(): void {
   });
   // Native playlist steps drive the snapshot (same lifetime — the service
   // seeks its own favourites loop, so the engine adopts instead of playing).
-  // Kept gated on `usingNative`: transitions can only happen while the
-  // service owns output (a stop clears its items, so there is nothing to
-  // step through afterwards).
+  // NOT gated on `usingNative`, unlike status/track above: the press may
+  // land while the engine is paused/loading on a handoff (still the right
+  // station to show), or even when it thinks it is idle because a locked
+  // WebView never saw the play at all — the service is the truth, and
+  // `syncEngineToStation` re-reads status and ignores ids we already show.
+  // The only way this fires spuriously is a `stop()`, which clears the
+  // items and so transitions to null (filtered in the plugin).
   void onNativeStationChange((event) => {
-    if (!usingNative) return;
     syncEngineToStation(event.stationuuid);
   }).catch(() => {
     nativeListenerReady = false;

@@ -4,6 +4,7 @@ import android.util.Log;
 import androidx.media3.common.AudioAttributes;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
+import androidx.media3.common.MediaMetadata;
 import androidx.media3.common.Player;
 import androidx.media3.exoplayer.ExoPlayer;
 import androidx.media3.session.MediaSession;
@@ -145,7 +146,8 @@ public class RadioPlaybackService extends MediaSessionService {
             // `replaceMediaItems` addresses the playlist, not the current item.
             int windows = player.getCurrentTimeline().getWindowCount();
             if (current == null || current.mediaMetadata == null || index < 0 || index >= windows) return;
-            CharSequence shown = current.mediaMetadata.title;
+            MediaMetadata metadata = current.mediaMetadata;
+            CharSequence shown = metadata.title;
             if (title.equals(shown == null ? null : shown.toString())) return;
             player.replaceMediaItems(
                     index,
@@ -153,7 +155,7 @@ public class RadioPlaybackService extends MediaSessionService {
                     Collections.singletonList(
                             current.buildUpon()
                                     .setMediaMetadata(
-                                            current.mediaMetadata.buildUpon()
+                                            metadata.buildUpon()
                                                     .setTitle(title)
                                                     .setArtist(station)
                                                     .build())
