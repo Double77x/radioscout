@@ -86,6 +86,10 @@ a minute.
 - **APK:** `adb logcat | grep 'track:'` shows titles as ExoPlayer forwards
   them; `'session title:'` shows each one that also reached the media session
   (no line between the two means the car is showing the station name).
+  Two failure lines to watch for: `'session title not published (<Class>):'`
+  means the in-place update threw on-device (the class names the cause);
+  `'session title MISMATCH:'` means the write went through but a read-back
+  disagrees — the session and its surfaces have diverged.
   Nothing at all means the stream sends no usable frames (test an MP3 ICY
   station like Capital Xtra, not HLS), or the APK predates the v0.3.5 bridge
   fix — rebuild with `pnpm build:android:apk`.

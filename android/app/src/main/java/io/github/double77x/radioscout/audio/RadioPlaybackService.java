@@ -160,9 +160,24 @@ public class RadioPlaybackService extends MediaSessionService {
                                                     .setArtist(station)
                                                     .build())
                                     .build()));
-            Log.i(LOG_TAG, "session title: " + title);
+            // Read-back: the in-place path updates the masking timeline
+            // synchronously on this thread, so the current item must already
+            // carry the song. If it doesn't, the session (and every surface
+            // reading it) is showing something else — say so loudly instead
+            // of logging a success that never landed.
+            MediaItem applied = player.getCurrentMediaItem();
+            CharSequence landed =
+                    applied == null || applied.mediaMetadata == null ? null : applied.mediaMetadata.title;
+            if (title.equals(landed == null ? null : landed.toString())) {
+                Log.i(LOG_TAG, "session title: " + title);
+            } else {
+                Log.i(LOG_TAG, "session title MISMATCH: want=" + title + " got=" + landed);
+            }
         } catch (Exception e) {
-            Log.i(LOG_TAG, "session title not published: " + e.getMessage());
+            // Class name included: a bare message is often null, which tells
+            // nobody whether this was a guardrail (IllegalArgument), a dead
+            // session (IllegalState) or something new entirely.
+            Log.i(LOG_TAG, "session title not published (" + e.getClass().getSimpleName() + "): " + e.getMessage());
         }
     }
 
