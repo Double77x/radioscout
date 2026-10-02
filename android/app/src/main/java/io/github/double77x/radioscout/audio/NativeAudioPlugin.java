@@ -94,6 +94,14 @@ public class NativeAudioPlugin extends Plugin {
      * main only (set inside the play op, read in {@link #metadataListener}).
      */
     private String stationTitle = "Radio";
+    /**
+     * Item the last transition moved to. Same-id echoes (our own metadata
+     * replaces, playlist surgery, swap re-syncs) skip the reset and the
+     * bridge event — without this, every song publish re-transitioned and
+     * the reset undid it, pinning the car on station/station while the dock
+     * showed the song. Null until the first play.
+     */
+    private String lastTransitionMediaId;
     /** Last user level (play/setVolume) — restores the session volume when a
      * pause kills a mid-blend ramp part-way down. */
     private float lastVolume = 0.9f;
@@ -120,9 +128,20 @@ public class NativeAudioPlugin extends Plugin {
                     // controller boundary — this is how the web snapshot
                     // follows native playlist seeks (car buttons executing on
                     // the service loop with the WebView possibly dead). The
-                    // engine ignores ids it already shows (own plays, swap
-                    // echoes) and looks up the rest.
+                    // engine ignores ids it already shows (own plays) and
+                    // looks up the rest.
                     if (mediaItem == null || mediaItem.mediaId == null) return;
+                    // Same-item echoes must NOT reset: our own metadata
+                    // replaces, playlist surgery and swap re-syncs all report
+                    // transitions for the item already playing (verified in
+                    // ExoPlayerImpl: equal window UIDs plus a changed timeline
+                    // still yields PLAYLIST_CHANGED). Resetting there undid
+                    // live publishes — each ICY repeat re-published (clearing
+                    // the dedupe lock), each publish re-transitioned, each
+                    // transition reset, and the car sat on station/station
+                    // while the dock showed the song.
+                    if (mediaItem.mediaId.equals(lastTransitionMediaId)) return;
+                    lastTransitionMediaId = mediaItem.mediaId;
                     resetIncomingMetadata(mediaItem);
                     JSObject data = new JSObject();
                     data.put("stationuuid", mediaItem.mediaId);
