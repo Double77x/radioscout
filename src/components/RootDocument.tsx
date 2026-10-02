@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Outlet, HeadContent, Scripts } from "@tanstack/react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster as Sonner } from "@/components/ui/sonner";
-import { ThemeProvider } from "next-themes";
+import { ThemeProvider } from "@/components/theme";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { CommandPalette } from "@/components/CommandPalette";
@@ -27,7 +27,7 @@ export function RootDocument({ children }: Readonly<{ children: ReactNode }>) {
 export function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider attribute='class' defaultTheme='system' enableSystem>
+      <ThemeProvider>
         <TooltipProvider>
           <HotkeysProvider>
             <Outlet />

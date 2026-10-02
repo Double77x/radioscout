@@ -4,7 +4,7 @@ import { App } from "@capacitor/app";
 import { CapacitorUpdater } from "@capgo/capacitor-updater";
 import { SplashScreen } from "@capacitor/splash-screen";
 import { StatusBar, Style } from "@capacitor/status-bar";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/lib/theme";
 import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
 import { isFdroidDistribution } from "@/lib/distribution";

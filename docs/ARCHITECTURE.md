@@ -39,7 +39,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
 
 - **Local User Data:** Favourites, history, player prefs and votes live exclusively in on-device IndexedDB (Dexie `RadioDB`: `favourites`, `history`). No backend server exists.
 - **Radio backup:** Settings → Data exports the versioned envelope as JSON (`src/lib/radio/backup.ts:1`) — share sheet on native, file download on web; import restores favourites/history/prefs.
-- **Theme State:** Managed via `next-themes` and synchronized with `localStorage` and `matchMedia("(prefers-color-scheme: dark)")`.
+- **Theme State:** Managed via the local provider (`src/components/theme.tsx:1`, `src/lib/theme.ts:1`) and synchronized with `localStorage` and `matchMedia("(prefers-color-scheme: dark)")`.
 
 ## 4. Design System & Component Infrastructure
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { version as appVersion } from "../../../package.json";
 import { Download, Monitor, Moon, Settings as SettingsIcon, Sun, Upload } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/lib/theme";
 import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
@@ -213,7 +213,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
           />
           <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
             {theme === "system"
-              ? `Following your device (currently ${resolvedTheme ?? "light"})`
+              ? `Following your device (currently ${resolvedTheme})`
               : `Locked to ${theme} mode`}
           </p>
         </section>
