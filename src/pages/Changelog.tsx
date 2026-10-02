@@ -8,6 +8,20 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.9 - Skip that survives lock and doze</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Car skip buttons run a service-side favourites loop, so next and previous stay on every station and keep
+              working with the phone locked. The app follows along and catches up on unlock.
+            </li>
+            <li>
+              Loop items re-anchor their station name as the favourites turn, so the car never shows a stale song over
+              the new station.
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.8 - Car titles and skip buttons</h2>
           <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>

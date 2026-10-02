@@ -1,0 +1,1 @@
+Car skip buttons now run a service-side favourites loop, so they stay on every station and keep working with the phone locked. Items re-anchor their station name as the loop turns.
