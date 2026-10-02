@@ -1,0 +1,1 @@
+Fixes song titles on the lock screen and car display: every title update echoed back as a station change and wiped the song. Titles now stick until the next song arrives.

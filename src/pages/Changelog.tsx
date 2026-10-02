@@ -8,6 +8,16 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.10 - Lock-screen song titles stick</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Fixes song titles on the lock screen and car display: every title update echoed back as a station change
+              and wiped the song, pinning both on the station name. Titles now stick until the next song arrives.
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.9 - Skip that survives lock and doze</h2>
           <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
