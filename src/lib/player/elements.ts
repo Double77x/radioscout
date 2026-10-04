@@ -4,6 +4,8 @@
  * element lifecycle and the handoff staging path.
  */
 
+import { destroyHls } from "@/lib/player/hls";
+
 /** Lowercased hostname of a URL, null when unparseable. Never throws. */
 export function hostOf(url: string): string | null {
   try {
@@ -22,6 +24,9 @@ export interface RetiredOutput {
 
 /** Park a retired element: detach, silence, clear, close graph. Idempotent. */
 export function parkRecord(record: RetiredOutput): void {
+  // An hls.js bridge keeps fetching until it is destroyed — drop it before
+  // the element is silenced so no playlist pulls outlive the retirement.
+  destroyHls(record.element);
   try {
     record.abort?.abort();
   } catch {

@@ -12,11 +12,14 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
    `capacitor.config.ts:16-22`; no `usesCleartextTraffic` in
    `AndroidManifest.xml`). Do NOT fix with `cleartext: true` — Play policy and
    security downgrade for the whole app.
-2. **HLS (`.m3u8`) streams.** Chrome/Android WebView cannot play them in
-   `<audio>` — the web path gates these behind `needsNative` and the APK
-   takeover lives in `playViaNative` (`lib/player/engine.ts`), which hands
-   the resolved URL to the Media3 service; WebView-alone still cannot play
-   them, so they need the native player everywhere.
+2. **HLS (`.m3u8`) streams.** The web path prefers native handling —
+   `playViaNative` (`lib/player/engine.ts`) hands the resolved URL to the
+   Media3 service. Browsers without a native HLS demuxer no longer dead-end:
+   `lib/player/hls.ts` bridges them through `hls.js` + MediaSource (the
+   Firefox case), and only when neither route exists (no `MediaSource` at
+   all) does the UI flag `needsNative` with the APK message. WebView-alone
+   therefore plays HLS only through that JS bridge, so the native player
+   remains the path to use for background/lockscreen playback.
 3. **Background playback.** When the WebView dies, audio dies. Radio needs a
    foreground service + MediaSession to survive.
 
