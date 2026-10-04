@@ -8,6 +8,24 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.11 - BBC song names and Firefox HLS playback</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              BBC stations show live song and show names: HLS streams carry no broadcast titles, so the app reads the
+              BBC&apos;s own now-playing feeds — tracks while music plays, the on-air programme otherwise
+            </li>
+            <li>
+              Station details gain a Tracks row for BBC stations linking to the live page with schedule and track
+              history
+            </li>
+            <li>
+              Firefox plays BBC and other HLS stations directly instead of asking for the Android app, and polls smarter
+              so show changes land within seconds
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.10 - Lock-screen song titles stick</h2>
           <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>
