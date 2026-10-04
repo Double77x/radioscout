@@ -1,5 +1,6 @@
 package io.github.double77x.radioscout.audio;
 
+import android.util.Log;
 import androidx.media3.common.C;
 import androidx.media3.common.audio.AudioProcessor;
 import androidx.media3.common.audio.BaseAudioProcessor;
@@ -24,7 +25,9 @@ import java.nio.ByteOrder;
  *
  * <p>PCM-16 only; anything else passes through untouched (throwing in
  * {@code onConfigure} would fail playback instead of skipping leveling).
- * Disabled by default; when off the sink bypasses it with zero overhead.
+ * Disabled by default; when off each buffer passes through with a straight
+ * copy (see {@link #isActive} for why the processor stays in the chain
+ * rather than letting the sink bypass it).
  * Runs on the playback thread — two linear passes over 16-bit samples, no
  * allocation. Volume-safe by construction: ExoPlayer applies user volume
  * downstream at the AudioTrack, so the measurement never fights the slider.
@@ -43,6 +46,9 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     private static final long ADAPT_INTERVAL_NS = 250_000_000L;
     /** Fast-settle window after tune-in: kill the jump, then hold. */
     private static final long SETTLE_NS = 8_000_000_000L;
+
+    /** Shared with the rest of the audio package so logcat filtering stays one tag. */
+    private static final String LOG_TAG = "RadioPlayback";
 
     private volatile boolean levelingEnabled;
     private volatile float gain = 1f;
@@ -119,9 +125,30 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         return inputAudioFormat;
     }
 
+    /**
+     * Always active, deliberately.
+     *
+     * <p>{@code AudioProcessingPipeline.flush()} builds its working list from
+     * {@code isActive()} at the moment it flushes (verified in media3-common
+     * 1.9.0: {@code flush} walks {@code audioProcessors} and adds only the
+     * active ones to {@code activeAudioProcessors}, which is the list
+     * {@code processData} feeds). {@code DefaultAudioSink} only calls flush on
+     * a rebuffer, discontinuity or parameter change — never because a toggle
+     * flipped. So gating this on {@code levelingEnabled} meant a toggle ON
+     * mid-station sat in the pipeline with {@code queueInput} never called:
+     * leveling engaged only when the stream happened to rebuffer, which is
+     * exactly the "it works sometimes" symptom. Reporting active keeps the
+     * processor in the chain so the flag is honoured on the very next buffer;
+     * {@link #queueInput} still passes through untouched while off.
+     *
+     * <p>The cost of that choice is one buffer copy per buffer while the
+     * feature is off (~176 KB/s for 44.1 kHz stereo 16-bit — a memcpy the
+     * playback thread does a hundred times over elsewhere), paid in exchange
+     * for the toggle taking effect immediately instead of on the next rebuffer.
+     */
     @Override
     public boolean isActive() {
-        return levelingEnabled;
+        return true;
     }
 
     @Override
@@ -156,9 +183,14 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
             rmsAccum = 0;
             rmsFrames = 0;
             lastAdaptNanos = now;
-            float stepped =
-                    now < settleDeadlineNanos ? adaptGain(gain, rms) : adaptGainSteady(gain, rms);
-            gain = stepped;
+            float before = gain;
+            gain = now < settleDeadlineNanos ? adaptGain(gain, rms) : adaptGainSteady(gain, rms);
+            // One line per real move, and only in the settle phase: the steady
+            // crawl would log every 250ms forever. Its absence is the signal
+            // that leveling is not reaching the audio path at all.
+            if (now < settleDeadlineNanos) {
+                Log.i(LOG_TAG, "leveling rms=" + rms + " gain=" + gain + " (was " + before + ")");
+            }
         }
         float applied = gain;
         ByteBuffer output = replaceOutputBuffer(bytes);

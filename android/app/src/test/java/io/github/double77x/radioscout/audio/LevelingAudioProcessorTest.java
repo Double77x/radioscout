@@ -112,4 +112,21 @@ public class LevelingAudioProcessorTest {
         assertEquals(1.7f, LevelingAudioProcessor.adaptGain(1.7f, 0f), 0f);
         assertEquals(1.7f, LevelingAudioProcessor.adaptGain(1.7f, Float.NaN), 0f);
     }
+
+    /**
+     * The toggle must be honoured on the next buffer, not on the next rebuffer:
+     * {@code AudioProcessingPipeline} only re-reads {@code isActive()} when it
+     * flushes, so gating activity on the flag left a mid-station toggle ON
+     * sitting in the pipeline with {@code queueInput} never called.
+     */
+    @Test
+    public void isActiveSoTheToggleLandsWithoutAFlush() {
+        LevelingAudioProcessor processor = new LevelingAudioProcessor();
+        processor.setLevelingEnabled(false);
+        org.junit.Assert.assertTrue(
+                "stays in the pipeline while off so the toggle lands without a flush",
+                processor.isActive());
+        processor.setLevelingEnabled(true);
+        org.junit.Assert.assertTrue(processor.isActive());
+    }
 }
