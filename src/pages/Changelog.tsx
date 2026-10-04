@@ -8,6 +8,32 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.13 - Artwork that respects your privacy</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Station logos now load through a privacy proxy rather than straight from each broadcaster&apos;s website.
+              Scrolling the station lists used to leave those sites free to read and store their own cookies — including
+              location guesses and ad IDs on roughly half the stations. Nothing is stored now, so the cookie policy is
+              accurate as written.
+            </li>
+            <li>
+              Cover art stops breaking when a proxy declines to serve an image: rows that used to sit on a blank
+              placeholder, or fall back to a generic tile, now show the real logo.
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.3.12 - BBC song names on the Android app</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              BBC song and show names reach the dock, notification, lock screen and car on the Android app too, with no
+              settings switch to turn on.
+            </li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.11 - BBC song names and Firefox HLS playback</h2>
           <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>

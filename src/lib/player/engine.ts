@@ -18,7 +18,7 @@ import {
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
 import { bbcNextPollDelayMs, bbcServiceIdForStation } from "@/lib/radio/bbc";
-import { fetchIcyTitles } from "@/lib/radio/icy";
+import { directIcyRoute, fetchIcyTitles } from "@/lib/radio/icy";
 import { readTitlesEnabled } from "@/lib/radio/titles";
 import { envString, isRecord } from "@/lib/utils";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
@@ -68,6 +68,7 @@ import {
   upgradeInsecureUrl,
   type Station,
 } from "@/lib/radio/types";
+import { wsrvArtworkUrl } from "@/lib/radio/artwork";
 
 /**
  * Playback singleton — the player state machine. On the APK the Media3
@@ -99,12 +100,32 @@ let icyPollTimer: ReturnType<typeof globalThis.setInterval> | null = null;
  * the rest of the probe state.
  */
 let bbcPollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-/** Fresh titles are polled this often; the edge function caches for 60s. */
-const ICY_TITLE_POLL_MS = 45_000;
+/**
+ * Fresh titles are polled this often; the edge function caches for the same
+ * window, so a poll almost always finds an expired entry rather than
+ * re-reading a verdict it already has.
+ */
+const ICY_TITLE_POLL_MS = 20_000;
+/**
+ * Ceiling for a direct read, kept under the poll interval so a slow station
+ * plus the edge fallback still fit inside one tick.
+ */
+const ICY_DIRECT_TIMEOUT_MS = 10_000;
+/**
+ * Stream URLs this browser could not read directly. A refused `icy-metadata`
+ * preflight surfaces as a `TypeError`, indistinguishable from a network
+ * error, and the browser logs it un-catchably — so we memoise the URL and go
+ * straight to the edge function. Session-scoped on purpose: a stale "no"
+ * only costs the Cloudflare hop, never the titles.
+ */
+const directIcyUnsupported = new Set<string>();
+/** Guards against a slow refresh overlapping the next interval tick. */
+let icyProbeBusy = false;
 
 function clearIcyProbe(): void {
   icyProbeController?.abort();
   icyProbeController = null;
+  icyProbeBusy = false;
   if (icyPollTimer !== null) {
     globalThis.clearInterval(icyPollTimer);
     icyPollTimer = null;
@@ -253,7 +274,7 @@ function publishSessionTrack(track: string | null): void {
  * Track the live StreamTitle for the player subtitle. Probes once
  * immediately (fast first paint, even while loading) then re-polls while
  * playing so track changes replace the subtitle instead of going stale.
- * Endpoint-first (dev middleware, edge function) with direct-fetch fallback;
+ * Direct in-page read first with edge-function fallback on web;
  * silent everywhere metadata is unavailable.
  */
 function armIcyProbe(station: Station, url: string): void {
@@ -347,67 +368,89 @@ function armIcyProbe(station: Station, url: string): void {
     }, bbcNextPollDelayMs(verdict));
   };
   const refreshOnce = (): void => {
+    // A direct read plus an edge fallback can outlast the interval; skip the
+    // tick rather than run two probes on one controller.
+    if (icyProbeBusy) return;
+    icyProbeBusy = true;
     void (async () => {
-      // BBC feeds carry no ICY blocks and RMS sends browsers no CORS
-      // headers, so BBC stations probe the RMS-backed endpoint instead
-      // (dev middleware, edge function). No direct-fetch fallback: it can
-      // only fail loudly in the console. Every other station keeps the
-      // ICY chain below.
-      if (bbcService !== null) {
-        scheduleBbcNext(await refreshBbcTitle(bbcService));
-        return;
-      }
-      // Dev probes server-side through the vite-only /__icy endpoint (no
-      // CORS limits, follows redirects); prod web and APK call the
-      // edge-cached /api/icy-title function (absolute URL on native, where
-      // relative would hit the local shell); direct fetch is the last
-      // resort everywhere.
-      const probePath = `/api/icy-title?url=${encodeURIComponent(url)}&titles=1`;
-      let endpoint: string | null = null;
-      if (import.meta.env.DEV) {
-        endpoint = `/__icy/probe?url=${encodeURIComponent(url)}&titles=1`;
-      } else {
-        // Dynamic import: @capacitor/core must never load at module scope
-        // (node/unit-test contexts have no native bridge).
-        const { isNative } = await import("@/lib/capacitor");
-        if (isNative()) {
-          const canonical = envString("VITE_CANONICAL_URL");
-          endpoint =
-            canonical === undefined
-              ? null
-              : `${canonical.replace(/\/+$/, "")}/api/icy-title?url=${encodeURIComponent(url)}`;
-        } else {
-          endpoint = probePath;
+      try {
+        // BBC feeds carry no ICY blocks and RMS sends browsers no CORS
+        // headers, so BBC stations probe the RMS-backed endpoint instead
+        // (dev middleware, edge function). No direct-fetch fallback: it can
+        // only fail loudly in the console. Every other station keeps the
+        // ICY chain below.
+        if (bbcService !== null) {
+          scheduleBbcNext(await refreshBbcTitle(bbcService));
+          return;
         }
-      }
-      if (endpoint !== null) {
-        try {
-          const response = await fetch(endpoint, { signal: probeController.signal });
-          if (response.ok) {
-            const data: unknown = await response.json();
-            if (isRecord(data) && Array.isArray(data.titles)) {
-              const first: unknown = data.titles[0];
-              if (isRecord(first) && typeof first.title === "string" && first.title.trim() !== "") {
-                applyProbedTitle(first.title);
-              }
-            }
-            // The endpoint gave its verdict (titles or not): a direct
-            // fetch cannot know more and only adds console noise (CORS
-            // preflights fail loudly in the console and can't be caught).
+        // Read the stream in the page first. Measured: 6 of 12 sampled
+        // stations hand the browser a readable body and clear the
+        // `icy-metadata` preflight, and for those this is realtime with no
+        // Cloudflare hop and no shared cache in the way. The rest fall
+        // through to the edge function below.
+        //
+        // Native keeps the endpoint-first order: ExoPlayer already reports
+        // titles over the bridge, so this chain is not what titles depend
+        // on there and the WebView's CORS posture is not worth gambling.
+        if (!usingNative && !directIcyUnsupported.has(url)) {
+          const direct = await fetchIcyTitles(url, {
+            maxTitles: 1,
+            signal: probeController.signal,
+            timeoutMs: ICY_DIRECT_TIMEOUT_MS,
+          });
+          const route = directIcyRoute(direct.outcome, direct.titles);
+          if (route.kind === "apply") {
+            applyProbedTitle(route.title);
             return;
           }
-        } catch {
-          // No endpoint here (or aborted) — fall through to direct fetch.
+          if (route.kind === "stop") return;
+          if (route.memo) directIcyUnsupported.add(url);
         }
+        // Fallback: dev probes server-side through the vite-only /__icy
+        // endpoint (no CORS limits, follows redirects); prod web and APK
+        // call the edge-cached /api/icy-title function (absolute URL on
+        // native, where relative would hit the local shell).
+        const probePath = `/api/icy-title?url=${encodeURIComponent(url)}&titles=1`;
+        let endpoint: string | null = null;
+        if (import.meta.env.DEV) {
+          endpoint = `/__icy/probe?url=${encodeURIComponent(url)}&titles=1`;
+        } else {
+          // Dynamic import: @capacitor/core must never load at module scope
+          // (node/unit-test contexts have no native bridge).
+          const { isNative } = await import("@/lib/capacitor");
+          if (isNative()) {
+            const canonical = envString("VITE_CANONICAL_URL");
+            endpoint =
+              canonical === undefined
+                ? null
+                : `${canonical.replace(/\/+$/, "")}/api/icy-title?url=${encodeURIComponent(url)}`;
+          } else {
+            endpoint = probePath;
+          }
+        }
+        if (endpoint === null) return;
+        try {
+          const response = await fetch(endpoint, { signal: probeController.signal });
+          if (!response.ok) return;
+          const data: unknown = await response.json();
+          if (isRecord(data) && Array.isArray(data.titles)) {
+            const first: unknown = data.titles[0];
+            if (isRecord(first) && typeof first.title === "string" && first.title.trim() !== "") {
+              applyProbedTitle(first.title);
+            }
+          }
+        } catch {
+          // Endpoint unreachable or aborted — the next poll retries.
+        }
+      } finally {
+        icyProbeBusy = false;
       }
-      const { titles } = await fetchIcyTitles(url, { maxTitles: 1, signal: probeController.signal });
-      if (titles.length > 0) applyProbedTitle(titles[0].title);
     })();
   };
   // The service id is fixed for this arming: the hoisted `bbcService`
-  // above keeps the branch in agreement. ICY stations ride a fixed 45s
-  // interval; BBC stations chain adaptive timeouts off each verdict
-  // (scheduleBbcNext), so there is no interval to start for them — the
+  // above keeps the branch in agreement. ICY stations ride a fixed
+  // ICY_TITLE_POLL_MS interval; BBC stations chain adaptive timeouts off each
+  // verdict (scheduleBbcNext), so there is no interval to start for them — the
   // initial refreshOnce below arms the chain.
   refreshOnce();
   if (bbcService === null) {
@@ -1017,7 +1060,7 @@ async function playViaNative(
       url,
       title: station.name,
       artist: nativeTrackArtist(station),
-      artwork: station.favicon,
+      artwork: wsrvArtworkUrl(station.favicon),
       volume: handoff ? snapshot.volume : 0,
       muted: handoff ? snapshot.muted : false,
       leveling: normalizeOn,

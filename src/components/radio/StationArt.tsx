@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type SyntheticEvent } from "react";
 import { Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { upgradeInsecureUrl } from "@/lib/radio/types";
+import { ddgArtworkUrl, isDdgPlaceholder, wsrvArtworkUrl } from "@/lib/radio/artwork";
 
 interface StationArtProps {
   src: string;
@@ -22,15 +22,47 @@ interface StationArtProps {
  * lazy-loaded art never shifts layout. Non-square art must not use this.
  */
 export function StationArt({ src, className, fallbackClassName, iconClassName }: StationArtProps) {
-  const [failed, setFailed] = useState(false);
-  // Secure pages auto-upgrade (or block) `http://` artwork with a console
-  // warning per image — upgrade at the source instead. `no-referrer` keeps
-  // the page URL out of favicon requests and dodges hotlink blocks that key
-  // on `Referer`. Dead origins (e.g. a suspended host) still fail, and the
-  // fallback tile below covers them — the browser-level 4xx log for those
-  // cannot be suppressed from JS.
-  const safeSrc = upgradeInsecureUrl(src);
-  if (safeSrc === "" || failed) {
+  // Proxy chain, never direct: wsrv primary (it reports failures honestly, so
+  // a missing image logs one 404 and nothing worse), DDG fallback (it
+  // rasterises the `.ico` files wsrv cannot decode), tile when both fail.
+  // `no-referrer` still hides the page URL from the proxies. A proxy that
+  // starts setting cookies would leak silently, which is why `img-src` in
+  // `public/_headers` names exactly the two proxy hosts.
+  const [stage, setStage] = useState<0 | 1 | 2>(0);
+  const primary = wsrvArtworkUrl(src);
+  const fallback = ddgArtworkUrl(src);
+  const current = stage === 0 ? primary : fallback;
+  // 0 → DDG, 1 → wsrv, 2 → give up. Shared by every failure path below.
+  const advance = () => {
+    setStage((previous) => (previous === 0 ? 1 : 2));
+  };
+  // Only the DDG leg can hand back a decodable placeholder instead of an
+  // error (a 260x180 SVG with a 400), so it must be caught on success, not
+  // via `onError`. The test is deliberately NOT gated on `stage`: a browser
+  // HTTP-cache hit can serve the already-decoded placeholder straight to the
+  // wsrv attempt, and a stage check would let it through. wsrv never emits
+  // the placeholder, so the exact-dimension test stays safe at both stages.
+  const checkLoaded = (node: HTMLImageElement) => {
+    if (isDdgPlaceholder(node.naturalWidth, node.naturalHeight)) advance();
+  };
+  // `onLoad` hands a SyntheticEvent; the shared check wants the element.
+  const onLoad = (event: SyntheticEvent<HTMLImageElement>) => {
+    checkLoaded(event.currentTarget);
+  };
+  // Belt-and-braces for a genuine decode failure: an error that lands BEFORE
+  // React attaches `onError` fires with no listener and never repeats, so
+  // check the node at commit as well. Braced because a returned value from a
+  // ref callback is a React 19 error.
+  const catchAlreadyFailed = (node: HTMLImageElement | null) => {
+    if (node === null || !node.complete) return;
+    // `complete` at commit means the load resolved before React registered
+    // its listeners (cached instant decode), so `onLoad`/`onError` never ran
+    // for this attempt. Re-apply both verdicts here: dead if there are no
+    // pixels, placeholder if DDG refused.
+    if (node.naturalWidth === 0) advance();
+    else checkLoaded(node);
+  };
+  if (current === "" || stage === 2) {
     return (
       <span
         aria-hidden='true'
@@ -44,7 +76,8 @@ export function StationArt({ src, className, fallbackClassName, iconClassName }:
   }
   return (
     <img
-      src={safeSrc}
+      ref={catchAlreadyFailed}
+      src={current}
       alt=''
       width={48}
       height={48}
@@ -52,9 +85,8 @@ export function StationArt({ src, className, fallbackClassName, iconClassName }:
       decoding='async'
       draggable={false}
       referrerPolicy='no-referrer'
-      onError={() => {
-        setFailed(true);
-      }}
+      onLoad={onLoad}
+      onError={advance}
       className={cn("aspect-square shrink-0 object-cover", className)}
     />
   );

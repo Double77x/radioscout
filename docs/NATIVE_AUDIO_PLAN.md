@@ -66,8 +66,10 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   return true; } return false;` HLS routes here first; plain HTTPS streams may
   stay on `<audio>` until the service proves stable (one code path eventually).
 - **Metadata/artwork:** pass `station.name`, tags/country subtitle
-  (`format.ts` helpers), `station.favicon` for the notification + existing
-  `updateMediaSession` stays as the web fallback.
+  (`format.ts` helpers), and the **proxied** artwork URL for the notification
+  (`wsrvArtworkUrl(station.favicon)` from `lib/radio/artwork.ts` — never
+  `station.favicon` direct, which would let the station host write third-party
+  cookies). `updateMediaSession` stays as the web fallback.
 
 ## Milestones
 

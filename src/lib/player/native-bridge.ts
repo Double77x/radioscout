@@ -10,7 +10,8 @@
  * Nothing in here reads player state or emits snapshots. Never throws.
  */
 import { formatCountryName, formatTags } from "@/lib/radio/format";
-import { pickPlayableUrl, upgradeInsecureUrl, type Station } from "@/lib/radio/types";
+import { pickPlayableUrl, type Station } from "@/lib/radio/types";
+import { ddgArtworkUrl, wsrvArtworkUrl } from "@/lib/radio/artwork";
 import { destroyHls } from "@/lib/player/hls";
 
 /** Shown instead of the generic failure when the stream is HTTP-only on a secure page. */
@@ -85,7 +86,7 @@ export function playlistItems(rows: { stationuuid: string; snapshot: Station }[]
     url: pickPlayableUrl(row.snapshot),
     title: row.snapshot.name,
     artist: nativeTrackArtist(row.snapshot),
-    artwork: row.snapshot.favicon,
+    artwork: wsrvArtworkUrl(row.snapshot.favicon),
   }));
 }
 
@@ -111,7 +112,7 @@ export function buildSkipPlaylist(
     url: currentUrl,
     title: current.name,
     artist: nativeTrackArtist(current),
-    artwork: current.favicon,
+    artwork: wsrvArtworkUrl(current.favicon),
   };
   if (index !== -1) {
     items[index] = here;
@@ -146,7 +147,10 @@ export function updateMediaSession(
       artwork:
         station.favicon === ""
           ? []
-          : [{ src: upgradeInsecureUrl(station.favicon), sizes: "512x512", type: "image/png" }],
+          : [
+              { src: wsrvArtworkUrl(station.favicon), sizes: "512x512", type: "image/png" },
+              { src: ddgArtworkUrl(station.favicon), sizes: "512x512", type: "image/png" },
+            ],
     });
     mediaSession.setActionHandler("play", () => {
       handlers.onPlay();

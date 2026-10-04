@@ -1,0 +1,1 @@
+Station artwork no longer lets station websites track you: logos load through a privacy proxy instead of straight from the broadcaster, so scrolling the lists writes no third-party cookies. Cover art also stops breaking — a proxy that declines to serve an image now falls through to another instead of leaving a blank placeholder.

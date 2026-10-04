@@ -22,14 +22,25 @@ export default function CookiesPage() {
 
         <ProseH2>Why do we use cookies?</ProseH2>
         <p>
-          Some cookies are essential for the website to operate. We call these "strictly necessary" cookies. Others help
-          us understand how people use the site so we can improve it.
+          We do not use tracking cookies, and we do not build a profile of you. Your saved stations, listening history
+          and preferences are kept in your own device&apos;s storage (IndexedDB) rather than in cookies, so clearing
+          site data erases them and nothing is sent to us.
+        </p>
+
+        <ProseH2>Station artwork</ProseH2>
+        <p>
+          Each station hosts its own logo on its own website. Loading those logos directly would hand every broadcaster
+          your browser&apos;s ability to store a cookie on their site, and roughly half of them take that up. Instead,
+          every logo is requested through a third-party image proxy that fetches it on our behalf and returns only the
+          image, so no station can read or write a cookie for you. Those proxies do see that you asked for a given
+          station&apos;s artwork; their own privacy policies describe how long they keep anything.
         </p>
 
         <ProseH2>How can I control cookies?</ProseH2>
         <p>
-          You can choose to accept or reject cookies. This site uses only essential cookies needed for the website to
-          function.
+          There is nothing here to accept or reject — we set no cookies of our own, and the station artwork that used to
+          create them is proxied. If a cookie for one of our proxy providers does appear in your browser, you can remove
+          it with your browser&apos;s site-data controls.
         </p>
       </Prose>
     </LegalLayout>
