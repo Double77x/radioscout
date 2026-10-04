@@ -22,6 +22,59 @@ session, so a car, the lock screen and Android Auto show the song too.
   Each play probes once immediately, then re-polls every 45s while playing
   so track changes land instead of going stale. Probes are staleness-guarded
   (play token + station uuid) and never paint after supersede/pause/stop.
+  BBC stations probe the RMS feeds below instead of ICY (their HLS carries
+  no ICY blocks); everything else probes ICY.
+
+## BBC metadata (RMS feeds)
+
+BBC HLS streams send no in-band titles, so the player asks the BBC's Radio
+& Music Services JSON feeds — the same data behind the BBC Sounds "now
+playing" line (credit to
+[simonprickett/pico-display-pack-2-radio-whats-on](https://github.com/simonprickett/pico-display-pack-2-radio-whats-on)
+for documenting them). No station list to maintain: the RMS service id
+(`bbc_radio_two`, `bbc_6music`, …) is read out of the station row
+(homepage first, then the stream URLs), so every BBC feed — national and
+local — matches automatically. Shared lib: `src/lib/radio/bbc.ts`.
+
+Two feeds, first hit wins:
+
+1. `segments/latest` — the newest music segment (`Artist - Track`), taken
+   only while flagged now-playing or ended under a minute ago. Anything
+   older is stale (a news bulletin after music would otherwise pin a
+   20-minute-old track), so the programme feed takes over instead.
+2. `broadcasts/latest` — the on-air programme (`Show - Episode`) for
+   speech stations (Radio 4, 5 Live) and music gaps with nothing recent.
+
+RMS sends browsers no CORS headers, so there is no direct-fetch fallback:
+web and APK both go through the edge function
+`GET /api/bbc-title?service=<id>` (or `?url=<stream>`, resolved
+server-side; `functions/api/bbc-title.ts`), cached 30s via the Cache API
+(tracks turn over every few minutes, so half the ICY TTL — upstream still
+sees ~2 pulls per station per minute globally). Dev uses the vite-only
+`/__bbc/probe?service=<id>` middleware (`scripts/icy-probe-plugin.ts`).
+
+Poll timing (`engine.ts` — one adaptive timeout chain per play, no fixed
+interval, rescheduled from every verdict via `bbcNextPollDelayMs`):
+
+- **Tracks** (or nothing yet): hot 30s loop. Segment `offset` numbers are
+  seconds since the programme's actual on-air start, but each broadcast
+  carries minutes of junction slop (verified live: ~4 min on a Radio 2
+  show), so exact track-change times are unknowable — interval polling
+  owns track freshness.
+- **Programmes**: back off to the broadcast-`end` one-shot (+10s rollover
+  buffer) when it lands sooner, else a 3-minute safety net for music
+  starting mid-show. A 3-hour speech show costs ~60 polls instead of ~360,
+  and the show change still lands within seconds of the boundary. Pause,
+  stop and supersede clear the chain with the rest of the probe state.
+
+Two feed-shape facts worth knowing (both verified live):
+
+- `broadcasts/latest` pages ascending at 30/page, so one page often ends
+  hours before now (Radio 4's window runs to 134 entries). The function
+  pulls `limit=200` and pages the remainder (capped at 3), and programme
+  selection falls back to the entry nearest to now — never the oldest row.
+- The `on_air` flags lag behind reality, so time-range matching does the
+  real work; the flag is only a preference.
 
 ## Web probe tiers (first hit wins, silent otherwise)
 
@@ -120,7 +173,9 @@ a minute.
 ## Debugging
 
 - **Web/dev:** open `/__icy`, probe the station URL, read `trace`. The
-  engine also logs `[icy-probe] subtitle:` in dev on every paint.
+  engine also logs `[icy-probe] subtitle:` in dev on every paint. BBC
+  stations log `[bbc-probe] subtitle:` instead; probe them at
+  `/__bbc/probe?service=bbc_radio_two`.
 - **APK:** `adb shell dumpsys media_session` is the ground truth — it prints
   the platform metadata every Bluetooth stereo reads. If the title moves
   there, the app published and anything stale is downstream. `adb logcat |

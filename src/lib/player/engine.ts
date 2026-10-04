@@ -16,6 +16,7 @@ import {
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
+import { bbcNextPollDelayMs, bbcServiceIdForStation } from "@/lib/radio/bbc";
 import { fetchIcyTitles } from "@/lib/radio/icy";
 import { readTitlesEnabled } from "@/lib/radio/titles";
 import { envString, isRecord } from "@/lib/utils";
@@ -82,6 +83,12 @@ let playToken = 0;
 let icyProbeController: AbortController | null = null;
 /** Re-probes the live title while playing; cleared on stop/pause/supersede. */
 let icyPollTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+/**
+ * Adaptive BBC poll chain (timeout, rescheduled from every verdict —
+ * tracks poll hot, programmes back off to their boundary). Cleared with
+ * the rest of the probe state.
+ */
+let bbcPollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 /** Fresh titles are polled this often; the edge function caches for 60s. */
 const ICY_TITLE_POLL_MS = 45_000;
 
@@ -91,6 +98,10 @@ function clearIcyProbe(): void {
   if (icyPollTimer !== null) {
     globalThis.clearInterval(icyPollTimer);
     icyPollTimer = null;
+  }
+  if (bbcPollTimer !== null) {
+    globalThis.clearTimeout(bbcPollTimer);
+    bbcPollTimer = null;
   }
 }
 
@@ -251,8 +262,73 @@ function armIcyProbe(station: Station, url: string): void {
     }
     if (import.meta.env.DEV) console.log("[icy-probe] subtitle:", title);
   };
+  const bbcService = bbcServiceIdForStation(station);
+  const refreshBbcTitle = async (service: string): Promise<Record<string, unknown> | null> => {
+    // Same endpoint shape as the ICY chain (dev middleware, edge function,
+    // absolute URL on native) but RMS-backed. A non-ok verdict means "no
+    // data right now" — the subtitle keeps its fallback until the next poll.
+    // Returns the verdict so the caller can schedule a programme-boundary
+    // re-probe from its `end`.
+    const query = `service=${encodeURIComponent(service)}`;
+    let endpoint: string | null = null;
+    if (import.meta.env.DEV) {
+      endpoint = `/__bbc/probe?${query}`;
+    } else {
+      // Dynamic import: @capacitor/core must never load at module scope
+      // (node/unit-test contexts have no native bridge).
+      const { isNative } = await import("@/lib/capacitor");
+      if (isNative()) {
+        const canonical = envString("VITE_CANONICAL_URL");
+        endpoint = canonical === undefined ? null : `${canonical.replace(/\/+$/, "")}/api/bbc-title?${query}`;
+      } else {
+        endpoint = `/api/bbc-title?${query}`;
+      }
+    }
+    if (endpoint === null) return null;
+    try {
+      const response = await fetch(endpoint, { signal: probeController.signal });
+      if (!response.ok) return null;
+      const data: unknown = await response.json();
+      if (isRecord(data) && typeof data.title === "string" && data.title.trim() !== "") {
+        applyProbedTitle(data.title);
+        if (import.meta.env.DEV) console.log("[bbc-probe] subtitle:", data.title);
+        return data;
+      }
+      return null;
+    } catch {
+      // Aborted or endpoint unreachable — next poll retries.
+      return null;
+    }
+  };
+  /**
+   * Next BBC poll from the verdict just applied: tracks (or nothing yet)
+   * stay on the hot loop, programmes back off to their boundary one-shot
+   * (or the 3-minute net when the window gives no usable end). One timer
+   * does both jobs — no separate interval. Cleared on supersede/pause/
+   * stop with the rest of the probe state.
+   */
+  const scheduleBbcNext = (verdict: Record<string, unknown> | null): void => {
+    if (bbcPollTimer !== null) {
+      globalThis.clearTimeout(bbcPollTimer);
+      bbcPollTimer = null;
+    }
+    bbcPollTimer = globalThis.setTimeout(() => {
+      bbcPollTimer = null;
+      if (!isCurrent() || snapshot.status !== "playing") return;
+      refreshOnce();
+    }, bbcNextPollDelayMs(verdict));
+  };
   const refreshOnce = (): void => {
     void (async () => {
+      // BBC feeds carry no ICY blocks and RMS sends browsers no CORS
+      // headers, so BBC stations probe the RMS-backed endpoint instead
+      // (dev middleware, edge function). No direct-fetch fallback: it can
+      // only fail loudly in the console. Every other station keeps the
+      // ICY chain below.
+      if (bbcService !== null) {
+        scheduleBbcNext(await refreshBbcTitle(bbcService));
+        return;
+      }
       // Dev probes server-side through the vite-only /__icy endpoint (no
       // CORS limits, follows redirects); prod web and APK call the
       // edge-cached /api/icy-title function (absolute URL on native, where
@@ -300,11 +376,18 @@ function armIcyProbe(station: Station, url: string): void {
       if (titles.length > 0) applyProbedTitle(titles[0].title);
     })();
   };
+  // The service id is fixed for this arming: the hoisted `bbcService`
+  // above keeps the branch in agreement. ICY stations ride a fixed 45s
+  // interval; BBC stations chain adaptive timeouts off each verdict
+  // (scheduleBbcNext), so there is no interval to start for them — the
+  // initial refreshOnce below arms the chain.
   refreshOnce();
-  icyPollTimer = globalThis.setInterval(() => {
-    if (!isCurrent() || snapshot.status !== "playing") return;
-    refreshOnce();
-  }, ICY_TITLE_POLL_MS);
+  if (bbcService === null) {
+    icyPollTimer = globalThis.setInterval(() => {
+      if (!isCurrent() || snapshot.status !== "playing") return;
+      refreshOnce();
+    }, ICY_TITLE_POLL_MS);
+  }
 }
 
 /**

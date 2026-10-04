@@ -1,4 +1,5 @@
 import type { Plugin } from "vite";
+import { fetchBbcNowPlaying } from "../src/lib/radio/bbc";
 import { fetchIcyTitles } from "../src/lib/radio/icy";
 import type { IcyStreamInfo, IcyTitle } from "../src/lib/radio/icy";
 
@@ -121,6 +122,55 @@ export function icyProbe(): Plugin {
       server.middlewares.use("/__icy", (_req, res) => {
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.end(testPage());
+      });
+    },
+  };
+}
+
+/**
+ * Dev-only BBC metadata probe (same RMS feeds the `/api/bbc-title` edge
+ * function reads in production). The player calls it for BBC stations in
+ * dev; browsers get no CORS headers from RMS, so there is no direct-fetch
+ * fallback for BBC feeds.
+ *
+ * - GET /__bbc/probe?service=<bbc id> -> JSON, RMS fetched server-side.
+ */
+export function bbcProbe(): Plugin {
+  return {
+    name: "radioscout:bbc-probe",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use("/__bbc/probe", (req, res) => {
+        void (async () => {
+          try {
+            const params = new URL(req.url ?? "", "http://localhost").searchParams;
+            const service = (params.get("service") ?? "").trim().toLowerCase();
+            if (!/^bbc_[a-z0-9_]+$/.test(service)) {
+              res.statusCode = 400;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ok: false, reason: "unknown-bbc-service", title: null }));
+              return;
+            }
+            console.log(`[bbc-probe] GET ${service}`);
+            const nowPlaying = await fetchBbcNowPlaying(service, {
+              timeoutMs: TIMEOUT_MS,
+              userAgent: "RadioScoutBbcProbe/0.3 (+dev)",
+            });
+            if (nowPlaying === null) {
+              console.log(`[bbc-probe] no data for ${service}`);
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ok: false, reason: "no-data", service, title: null }));
+              return;
+            }
+            console.log(`[bbc-probe] ${nowPlaying.kind}: ${nowPlaying.title}`);
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: true, service, ...nowPlaying }));
+          } catch {
+            res.statusCode = 500;
+            res.setHeader("Content-Type", "application/json");
+            res.end(JSON.stringify({ ok: false, reason: "probe-crashed", title: null }));
+          }
+        })();
       });
     },
   };

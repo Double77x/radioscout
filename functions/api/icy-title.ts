@@ -1,6 +1,6 @@
 // Pages Functions file-based routing: referenced by URL path, not by import.
 import { fetchIcyTitles } from "../../src/lib/radio/icy";
-import { isRecord } from "../../src/lib/utils";
+import { edgeCache, jsonResponse, type PagesContext } from "../../src/lib/edge-cache";
 
 /**
  * Server-side ICY title probe (`GET /api/icy-title?url=<stream>`).
@@ -13,42 +13,6 @@ import { isRecord } from "../../src/lib/utils";
  * served without waking the probe or touching the station. Errors are
  * never cached.
  */
-
-interface PagesContext {
-  request: Request;
-}
-
-type CacheMatch = (key: string) => Promise<Response | undefined>;
-type CachePut = (key: string, response: Response) => Promise<void>;
-
-/** Narrowed Workers Cache API surface (CacheStorage.default). */
-interface EdgeCache {
-  match: CacheMatch;
-  put: CachePut;
-}
-
-function isEdgeCache(value: unknown): value is EdgeCache {
-  if (!isRecord(value)) return false;
-  return typeof value.match === "function" && typeof value.put === "function";
-}
-
-/** Edge cache when present (production); null in dev middleware and tests. */
-function edgeCache(): EdgeCache | null {
-  // oxlint-disable-next-line unicorn/no-typeof-undefined -- DOM lib declares caches as always present but it is absent outside the edge runtime; typeof keeps tsc from flagging an always-false comparison
-  if (typeof globalThis.caches === "undefined") return null;
-  const storage: unknown = globalThis.caches;
-  if (!isRecord(storage)) return null;
-  const candidate: unknown = storage.default;
-  if (!isEdgeCache(candidate)) return null;
-  return candidate;
-}
-
-function jsonResponse(body: unknown, init?: ResponseInit, cacheable = false): Response {
-  const headers = new Headers(init?.headers);
-  headers.set("Content-Type", "application/json");
-  headers.set("Cache-Control", cacheable ? "public, max-age=60" : "no-store");
-  return Response.json(body, { ...init, headers });
-}
 
 export async function onRequestGet({ request }: PagesContext): Promise<Response> {
   const target = new URL(request.url).searchParams.get("url") ?? "";

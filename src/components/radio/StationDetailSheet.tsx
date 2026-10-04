@@ -10,6 +10,7 @@ import { play, stop, usePlayer } from "@/hooks/use-player";
 import { useFavourites, useToggleFavourite } from "@/hooks/use-radio";
 import { useDetailStation } from "@/hooks/use-station-detail";
 import { hasVoted, markVoted } from "@/lib/radio/votes";
+import { bbcServiceIdForStation, bbcSoundsUrl } from "@/lib/radio/bbc";
 import { shareStation } from "@/lib/radio/share";
 import { cn } from "@/lib/utils";
 import { formatCount } from "@/lib/format";
@@ -53,6 +54,7 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
   const playing = live !== null && player.station?.stationuuid === live.stationuuid && player.status === "playing";
   const favourited = live !== null && favourites.some((row) => row.stationuuid === live.stationuuid);
   const alreadyVoted = live !== null && (voted || hasVoted(live.stationuuid));
+  const bbcSounds = live ? bbcSoundsUrl(bbcServiceIdForStation(live)) : null;
 
   const vote = () => {
     if (!live || alreadyVoted) return;
@@ -188,6 +190,20 @@ export function StationDetailSheet({ onClose }: StationDetailSheetProps) {
                         rel='noreferrer'
                         className='inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline'>
                         Visit homepage <ExternalLink className='size-3.5' />
+                      </a>
+                    </dd>
+                  </div>
+                ) : null}
+                {bbcSounds ? (
+                  <div className='flex gap-2'>
+                    <dt className='w-20 shrink-0 font-semibold'>Tracks</dt>
+                    <dd className='min-w-0 flex-1'>
+                      <a
+                        href={bbcSounds}
+                        target='_blank'
+                        rel='noreferrer'
+                        className='inline-flex items-center gap-1 text-primary underline-offset-4 hover:underline'>
+                        Live, schedule &amp; track history <ExternalLink className='size-3.5' />
                       </a>
                     </dd>
                   </div>

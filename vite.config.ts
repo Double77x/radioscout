@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { visualizer } from "rollup-plugin-visualizer";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
-import { icyProbe } from "./scripts/icy-probe-plugin";
+import { bbcProbe, icyProbe } from "./scripts/icy-probe-plugin";
 import toolchain from "./toolchain.config";
 
 export default defineConfig(({ mode }) => {
@@ -77,8 +77,9 @@ export default defineConfig(({ mode }) => {
       // React Compiler via the plugin's Oxc transform. No options, see AGENTS.md.
       react({ compiler: true }),
       tailwindcss(),
-      // Dev-only stream probe (apply serve inside), never shipped.
+      // Dev-only stream probes (apply serve inside), never shipped.
       icyProbe(),
+      bbcProbe(),
       {
         ...visualizer({
           filename: "bundle-analysis-client.html",
