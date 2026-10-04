@@ -133,7 +133,10 @@ test.describe("RadioScout home", () => {
     const plays = page.getByRole("button", { name: /Play Test (?<station>Jazz|Rock) FM/ });
     await expect(plays.nth(0)).toHaveAttribute("aria-label", "Play Test Jazz FM");
     // Let the save toasts clear — their dismiss shifts the list mid-drag.
-    await expect(page.getByText("Saved to favourites")).toHaveCount(0);
+    // Both saves must have toasted first: under parallel-suite load the
+    // second toast can arrive late, and waiting for zero too early races it.
+    await expect(page.getByText("Saved to favourites")).toHaveCount(2);
+    await expect(page.getByText("Saved to favourites")).toHaveCount(0, { timeout: 15_000 });
 
     await page.getByRole("button", { name: "Reorder Test Jazz FM" }).hover();
     await page.mouse.down();
