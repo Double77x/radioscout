@@ -73,6 +73,40 @@ public class RadioPlaybackService extends MediaSessionService {
     }
 
     /**
+     * Car-display refresh workaround, opt-in (Settings → Audio). Older
+     * Bluetooth stereos — AVRCP 1.3-era head units especially — never re-read
+     * the now-playing attributes on a metadata-only change: they refresh when
+     * playback state changes, and a live stream legitimately has no track
+     * boundary to announce, so the first title they receive is the title they
+     * keep (upstream androidx/media#430, reproduced with the stock Media3 demo
+     * on a car console; Media3 has no `MediaSession.setMetadata`, the API the
+     * old ExoPlayer connector used to force the push).
+     *
+     * <p>A re-seek is the one silent trigger available inside Media3: it raises
+     * `onPositionDiscontinuity`, and media3-session 1.9.0 turns that into a
+     * fresh platform `PlaybackState` (`MediaSessionLegacyStub
+     * .updateLegacySessionPlaybackState` → `MediaSessionCompat
+     * .setPlaybackState`) — a play-status change, which every 1.3-era sink
+     * answers by re-reading the title. `onVolumeChanged` is not wired to that
+     * push, so a volume nudge cannot do this.
+     *
+     * <p>Cost: a seek can rebuffer for a moment, hence off by default with the
+     * warning in the settings copy. {@code Player.setMetadata} does not exist
+     * in 1.9.0, so there is no metadata-only alternative.
+     */
+    private static volatile boolean carTitleRefresh = false;
+
+    /** Minimum gap between nudges — a station can flap titles in bursts. */
+    private static final long CAR_REFRESH_MIN_GAP_MS = 5_000;
+
+    private static long lastCarRefreshAt = 0;
+
+    /** Flip the car-display refresh workaround. Safe from any thread. */
+    public static void setCarTitleRefresh(boolean enabled) {
+        carTitleRefresh = enabled;
+    }
+
+    /**
      * Car / headset / shade skip buttons. The session now holds a genuine
      * multi-item favourites loop (one entry per Saved station, repeat-all),
      * so `hasNext` / `hasPrevious` stay true at every position and every
@@ -173,11 +207,41 @@ public class RadioPlaybackService extends MediaSessionService {
             } else {
                 Log.i(LOG_TAG, "session title MISMATCH: want=" + title + " got=" + landed);
             }
+            nudgeCarDisplay(player);
         } catch (Exception e) {
             // Class name included: a bare message is often null, which tells
             // nobody whether this was a guardrail (IllegalArgument), a dead
             // session (IllegalState) or something new entirely.
             Log.i(LOG_TAG, "session title not published (" + e.getClass().getSimpleName() + "): " + e.getMessage());
+        }
+    }
+
+    /**
+     * Re-push the platform playback state so a stale car display re-reads the
+     * title just published (see {@link #carTitleRefresh} for why that is the
+     * only lever). A seek to the current position is silent in itself — it only
+     * raises {@code onPositionDiscontinuity} — but it can cost a short rebuffer,
+     * so it stays off until the user opts in.
+     *
+     * <p>Skipped unless really playing, never twice inside
+     * {@link #CAR_REFRESH_MIN_GAP_MS}, and never fatal: this is cosmetic and
+     * must never cost the stream. Call on main.
+     */
+    private static void nudgeCarDisplay(Player player) {
+        try {
+            if (!carTitleRefresh) return;
+            if (!player.getPlayWhenReady() || player.getPlaybackState() != Player.STATE_READY) return;
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastCarRefreshAt < CAR_REFRESH_MIN_GAP_MS) return;
+            long position = player.getCurrentPosition();
+            // Negative means the live window has no position yet — nothing to
+            // seek to, so skip rather than clamp (which would jump the stream).
+            if (position < 0) return;
+            lastCarRefreshAt = now;
+            player.seekTo(position);
+            Log.i(LOG_TAG, "car display nudge at " + position);
+        } catch (Exception e) {
+            Log.i(LOG_TAG, "car display nudge skipped (" + e.getClass().getSimpleName() + "): " + e.getMessage());
         }
     }
 

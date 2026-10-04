@@ -12,6 +12,11 @@ export interface NativePlayOptions {
   /** Loudness leveling for the service-side processor (APK only). */
   leveling: boolean;
   /**
+   * Car-display refresh workaround for Bluetooth stereos that freeze on the
+   * first title (APK only, off by default) — see `RadioPlaybackService`.
+   */
+  carTitleRefresh: boolean;
+  /**
    * Gapless handoff: the service is mid-station, so enqueue behind the live
    * item and advance when buffered instead of cutting over. Ignored unless
    * the player holds exactly one playing/buffering item.
@@ -50,6 +55,8 @@ interface NativeAudioApi {
   stop: () => Promise<void>;
   setVolume: (options: { volume: number; muted: boolean }) => Promise<void>;
   setLeveling: (options: { enabled: boolean }) => Promise<void>;
+  /** Car-display refresh workaround — nudge playback so old stereos re-read the title. */
+  setCarTitleRefresh: (options: { enabled: boolean }) => Promise<void>;
   /** Native sleep-timer arm in seconds (`0` clears); survives WebView throttle. */
   setSleepTimer: (options: { seconds: number }) => Promise<void>;
   /**
@@ -103,6 +110,16 @@ export function nativeSetVolume(volume: number, muted: boolean): Promise<void> {
 export function nativeSetLeveling(enabled: boolean): Promise<void> {
   if (!isNative()) return Promise.resolve();
   return NativeAudio.setLeveling({ enabled });
+}
+
+/**
+ * Flip the car-display refresh workaround (APK only — no-op on web). Some
+ * Bluetooth stereos only re-read the now-playing title when playback state
+ * changes, so the service re-seeks on each song change to nudge them.
+ */
+export function nativeSetCarTitleRefresh(enabled: boolean): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  return NativeAudio.setCarTitleRefresh({ enabled });
 }
 
 /**

@@ -61,6 +61,13 @@ public class NativeAudioPlugin extends Plugin {
     private ListenableFuture<MediaController> controllerFuture;
     private String lastStatus = "";
     private boolean levelingEnabled = false;
+    /**
+     * Car-display refresh workaround (Settings → Audio, native only). Mirrored
+     * into the service on every play and connect, so a service that restarts
+     * mid-session picks the persisted preference back up — the static lives in
+     * the service, which dies with the process.
+     */
+    private boolean carTitleRefreshEnabled = false;
 
     /**
      * True overlapping station crossfade. A second ExoPlayer buffers the next
@@ -435,6 +442,7 @@ public class NativeAudioPlugin extends Plugin {
                     // Skip needs no registration here: it is session-level, not
                     // player-level, so `load()` owns it and swaps can't drop it.
                     RadioPlaybackService.addMetadataListener(metadataListener);
+                    RadioPlaybackService.setCarTitleRefresh(carTitleRefreshEnabled);
                     try {
                         op.run(controller);
                     } catch (Exception e) {
@@ -524,6 +532,8 @@ public class NativeAudioPlugin extends Plugin {
         float volume = clamp01(call.getDouble("volume", 0.9));
         boolean muted = call.getBoolean("muted", false);
         levelingEnabled = call.getBoolean("leveling", false);
+        carTitleRefreshEnabled = call.getBoolean("carTitleRefresh", carTitleRefreshEnabled);
+        RadioPlaybackService.setCarTitleRefresh(carTitleRefreshEnabled);
         lastStatus = "";
         withController(
                 (mediaController) -> {
@@ -816,6 +826,18 @@ public class NativeAudioPlugin extends Plugin {
     public void setLeveling(PluginCall call) {
         levelingEnabled = call.getBoolean("enabled", false);
         applyLeveling();
+        call.resolve();
+    }
+
+    /**
+     * Flip the car-display refresh workaround. The flag is a static in the
+     * service, so it is mirrored on every play and connect as well — this call
+     * only makes a toggle take effect without waiting for the next play.
+     */
+    @PluginMethod
+    public void setCarTitleRefresh(PluginCall call) {
+        carTitleRefreshEnabled = call.getBoolean("enabled", false);
+        RadioPlaybackService.setCarTitleRefresh(carTitleRefreshEnabled);
         call.resolve();
     }
 

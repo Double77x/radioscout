@@ -30,6 +30,7 @@ export {
   pause,
   play,
   resume,
+  setCarTitleRefresh,
   setIcyProbing,
   setNormalization,
   setSleepTimer,

@@ -5,6 +5,7 @@ import {
   nativePause,
   nativePlay,
   nativeResume,
+  nativeSetCarTitleRefresh,
   nativeSetLeveling,
   nativeSetVolume,
   nativeStop,
@@ -46,6 +47,7 @@ import { SLEEP_FADE_MS } from "@/lib/radio/sleep";
 import { writeLastStation } from "@/lib/radio/last-played";
 import { emit, snapshot } from "@/lib/player/store";
 import { readNormalizeEnabled, writeNormalizeEnabled } from "@/lib/radio/normalize";
+import { readCarRefreshEnabled, writeCarRefreshEnabled } from "@/lib/radio/car-refresh";
 import {
   canonicalStreamUrl,
   isHlsUrl,
@@ -362,6 +364,8 @@ export function applyPlayerPrefs(prefs: PlayerPrefs): void {
 let warnedFallback = false;
 /** Leveling toggle (module-owned; synced by `setNormalization`). */
 let normalizeOn = readNormalizeEnabled();
+/** Car-display refresh toggle (module-owned; synced by `setCarTitleRefresh`). */
+let carRefreshOn = readCarRefreshEnabled();
 /** Web Audio graph for the live element (null while playing direct). */
 let audioCtx: AudioContext | null = null;
 let normGain: GainNode | null = null;
@@ -671,6 +675,19 @@ function killIncoming(): void {
  */
 
 /**
+ * Flip the car-display refresh toggle live (APK only — web has no Bluetooth
+ * stereo). The service holds the real work: it re-seeks on each published
+ * title so an AVRCP 1.3-era head unit re-reads the now-playing line. Persisted
+ * and passed on the next play, so a service that restarts picks it back up.
+ */
+export function setCarTitleRefresh(enabled: boolean): void {
+  writeCarRefreshEnabled(enabled);
+  carRefreshOn = enabled;
+  if (!canUseNativeAudio()) return;
+  void nativeSetCarTitleRefresh(enabled).catch(() => {});
+}
+
+/**
  * Flip the leveling toggle live. On the APK the Media3 service owns audio,
  * so the flag goes straight to its processor and the web graph stays out of
  * it. On web, enabling rebuilds a direct element so the next load routes
@@ -888,6 +905,7 @@ async function playViaNative(
       volume: handoff ? snapshot.volume : 0,
       muted: handoff ? snapshot.muted : false,
       leveling: normalizeOn,
+      carTitleRefresh: carRefreshOn,
       handoff,
       playlist: playlist.items,
       index: playlist.index,

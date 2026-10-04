@@ -8,6 +8,7 @@ import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
 import { LocationPicker } from "@/components/radio/LocationPicker";
 import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
+import { CarRefreshSwitch } from "@/components/radio/CarRefreshSwitch";
 import { TitlesSwitch } from "@/components/radio/TitlesSwitch";
 import { QualityPicker } from "@/components/radio/QualityPicker";
 import { SleepTimerPicker } from "@/components/radio/SleepTimerPicker";
@@ -178,14 +179,25 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
               <div className='rounded-2xl border border-border bg-card p-3'>
                 <NormalizeSwitch />
               </div>
-              {isNative() ? null : (
-                <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
-                  <TitlesSwitch />
-                </div>
+              {isNative() ? (
+                <>
+                  <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                    <CarRefreshSwitch />
+                  </div>
+                  <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                    <SleepTimerPicker />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                    <TitlesSwitch />
+                  </div>
+                  <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                    <SleepTimerPicker />
+                  </div>
+                </>
               )}
-              <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
-                <SleepTimerPicker />
-              </div>
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -212,9 +224,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
             optionClassName='min-h-11 flex-col gap-0.5'
           />
           <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
-            {theme === "system"
-              ? `Following your device (currently ${resolvedTheme})`
-              : `Locked to ${theme} mode`}
+            {theme === "system" ? `Following your device (currently ${resolvedTheme})` : `Locked to ${theme} mode`}
           </p>
         </section>
 

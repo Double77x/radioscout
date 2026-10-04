@@ -57,6 +57,44 @@ line.
   `lib/player/native-bridge`, republished from `engine.ts` whenever a probe
   title lands. Needs *Show song titles* on, since that is what feeds it.
 
+## Bluetooth car displays
+
+The title reaches the platform media session — verified on device with
+`adb shell dumpsys media_session`, where `metadata: size=11,
+description=<song>, <station>, RadioScout` tracks the song. That is the
+value Bluetooth/AVRCP reads, so the app side is done.
+
+Some stereos never re-render it. Older head units (AVRCP 1.3-era cars
+especially) refresh on a play-status change, not on a metadata update, and
+a live stream has no track boundary to announce — so they keep the first
+title they received. Reproduced upstream with the stock Media3 demo
+([androidx/media#430](https://github.com/androidx/media/issues/430)); the
+same thread notes the old ExoPlayer session could force it, and Media3's
+`MediaSession` has no `setMetadata` to do it with. Newer head units and
+Android Auto read the session directly and are unaffected.
+
+Settings → Audio → *Refresh car display* (APK only, off by default) works
+around it: on each published title the service re-seeks to the current
+position, which re-pushes the platform `PlaybackState`
+(`onPositionDiscontinuity` → `MediaSessionLegacyStub
+.updateLegacySessionPlaybackState` → `MediaSessionCompat
+.setPlaybackState`, verified in media3-session 1.9.0) — a play-status
+change every 1.3-era sink answers by re-reading the title. A volume nudge
+cannot do it: `onVolumeChanged` is not wired to that push. The seek can
+cost a brief rebuffer, which is why it is opt-in with the warning in the
+switch copy. Logcat: `car display nudge at <ms>`.
+
+Two things worth knowing when a car shows nothing at all:
+
+- Check the negotiated AVRCP version. The phone advertises one (Developer
+  options → Bluetooth AVRCP version on some builds, 1.3–1.6) and the car
+  takes the lower of the two. A car that only does 1.3 gets no benefit from
+  a newer phone setting, and version behaviour is not monotonic — one
+  report has 1.6/1.4/1.3 working and 1.5 not.
+- A station switch is a real item transition, so the next title *should*
+  appear after one. If it does not, the head unit is ignoring even track
+  transitions and no app-side nudge will help.
+
 ## Edge caching (Cache API)
 
 Ok responses carry `Cache-Control: public, max-age=60`; errors
@@ -83,8 +121,11 @@ a minute.
 
 - **Web/dev:** open `/__icy`, probe the station URL, read `trace`. The
   engine also logs `[icy-probe] subtitle:` in dev on every paint.
-- **APK:** `adb logcat | grep 'track:'` shows titles as ExoPlayer forwards
-  them; `'session title:'` shows each one that also reached the media session
+- **APK:** `adb shell dumpsys media_session` is the ground truth — it prints
+  the platform metadata every Bluetooth stereo reads. If the title moves
+  there, the app published and anything stale is downstream. `adb logcat |
+  grep 'track:'` shows titles as ExoPlayer forwards them; `'session
+  title:'` shows each one that also reached the media session
   (no line between the two means the car is showing the station name).
   Two failure lines to watch for: `'session title not published (<Class>):'`
   means the in-place update threw on-device (the class names the cause);
