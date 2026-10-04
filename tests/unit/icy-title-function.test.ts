@@ -99,4 +99,12 @@ describe("icy-title function cache", () => {
     expect(titleOf(body)).toBe("Cached Song");
     expect(count).toBe(1);
   });
+
+  it("caches for the client's poll interval", async () => {
+    vi.stubGlobal("fetch", () => icyResponse());
+    const { caches } = fakeCaches();
+    vi.stubGlobal("caches", caches);
+    const response = await onRequestGet({ request: probeRequest() });
+    expect(response.headers.get("cache-control")).toBe("public, max-age=20");
+  });
 });

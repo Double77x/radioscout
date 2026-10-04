@@ -22,11 +22,13 @@ session, so a car, the lock screen and Android Auto show the song too.
   protocol (verified against `MediaControllerStub`), so a controller
   listener is deaf to ICY by framework design.
 - **Web (opt-in):** Settings → Audio → *Show song titles* (off by default).
-  Each play probes once immediately, then re-polls every 45s while playing
+  Each play probes once immediately, then re-polls every 20s while playing
   so track changes land instead of going stale. Probes are staleness-guarded
   (play token + station uuid) and never paint after supersede/pause/stop.
-  BBC stations probe the RMS feeds below instead of ICY (their HLS carries
-  no ICY blocks); everything else probes ICY.
+  The chain per tick is a shared Radiolise lookup, an in-page read, then the
+  edge fallback, with a push subscription over their WebSocket standing the
+  loop down while healthy. BBC stations probe the RMS feeds below instead of
+  ICY (their HLS carries no ICY blocks); everything else probes ICY.
 
 ## BBC metadata (RMS feeds)
 
@@ -52,8 +54,8 @@ RMS sends browsers no CORS headers, so there is no direct-fetch fallback:
 web and APK both go through the edge function
 `GET /api/bbc-title?service=<id>` (or `?url=<stream>`, resolved
 server-side; `functions/api/bbc-title.ts`), cached 30s via the Cache API
-(tracks turn over every few minutes, so half the ICY TTL — upstream still
-sees ~2 pulls per station per minute globally). Dev uses the vite-only
+(tracks turn over every few minutes — upstream still sees ~2 pulls per
+station per minute globally). Dev uses the vite-only
 `/__bbc/probe?service=<id>` middleware (`scripts/icy-probe-plugin.ts`).
 
 Poll timing (`engine.ts` — one adaptive timeout chain per play, no fixed
@@ -79,17 +81,60 @@ Two feed-shape facts worth knowing (both verified live):
 - The `on_air` flags lag behind reality, so time-range matching does the
   real work; the flag is only a preference.
 
-## Web probe tiers (first hit wins, silent otherwise)
+## Web title sources (first hit wins, silent otherwise)
 
-1. **Dev:** vite-only `/__icy` middleware (full trace, `meta=0` toggle).
-2. **Prod web / APK:** edge function `GET /api/icy-title?url=<stream>`
-   (`functions/api/icy-title.ts`; absolute canonical URL on native).
-3. **Last resort:** direct browser fetch (CORS-permitting direct streams
-   only — redirects and non-CORS hosts fail here by design).
+1. **Push subscription:** one WebSocket per play against
+   `wss://backend.radiolise.com/api/data-service` (`subscribe` on open,
+   `unsubscribe` on supersede/stop; `src/lib/radio/radiolise-socket.ts`).
+   Their docs prefer this over REST polling, and polling with the URL in the
+   query string lands in their server logs, so the one-shot below uses POST.
+   While the socket is open the poll loop stands down; drops reconnect at
+   2s/5s/10s/30s with direct/edge covering the gap; station errors close the
+   socket and leave polling to carry it.
+2. **Shared lookup:** one-shot `POST /api/v1/metadata` at play and first in
+   each fallback tick (5s cap; `src/lib/radio/radiolise.ts`). Their server
+   holds upstream ICY connections open across callers, so a warm station
+   answers in <1s with no audio pulled by anyone (measured 0.3–0.6s for
+   Xtra Hot and Gold). Cold stations hang until their first title (measured
+   60s+ on one Capital XTRA mountpoint), hence the cap and unconditional
+   fall-through.
+3. **In-page read:** `fetchIcyTitles` against the stream itself (10s cap).
+   Measured 6 of 12 sampled stations hand the browser a readable body and
+   clear the `icy-metadata` preflight; refused preflights memoise the URL
+   for the session so the failure (and its console noise) happens once.
+4. **Edge fallback:** `GET /api/icy-title?url=<stream>`
+   (`functions/api/icy-title.ts`), 20s Cache API TTL matched to the poll.
+   Dev goes through the vite-only `/__icy/probe` middleware instead (full
+   trace, `meta=0` toggle; `scripts/icy-probe-plugin.ts`).
 
 Shared decoder: `src/lib/radio/icy.ts` (`parseIcyBlock`,
-`fetchIcyTitles`). Display: `TrackTicker` (scrolls only on compact
-viewports when overflowing, static otherwise).
+`fetchIcyTitles`). Probe timeouts map both `AbortError` and `TimeoutError`
+(what Node throws for `AbortSignal.timeout()` — a `DOMException` is not an
+`Error` in every runtime, so the check reads `.name` without `instanceof`).
+Display: `TrackTicker` (scrolls only on compact viewports when
+overflowing, static otherwise).
+
+## Title normalisation
+
+ICY delimits fields with single quotes, so automation systems that pack
+double-quoted `key="value"` pairs put the lot inside one `StreamTitle`
+value. Measured on every US station served by `stream.revma.ihrhls.com`,
+in two shapes for the same data:
+
+  Bruno Mars - text="Risk It All" song_spot="M" MediaBaseId="3206087" …
+  title="Shoop",artist="SALT-N-PEPA",url="song_spot="F" MediaBaseId="0" …
+
+`normalizeStreamTitle` keeps the song (plus the artist where given) and
+drops the tracking tail; anything else passes through untouched. Ad-break
+markers (`Spot Block End`, bare `Spot Block`, zero `length="00:00:00"`)
+return `""` so the last song stands. Applied at the one extraction point,
+so the edge function, the direct read, and both Radiolise paths share it.
+Native titles do not pass through here (ExoPlayer decodes ICY itself).
+
+Two honest limits: ad copy and station imaging with plausible artists
+still display, and a feed that stops sending metadata (measured 329/329
+empty blocks over 150s on one Capital XTRA mountpoint while its sibling
+stayed chatty) leaves nothing for any tier to find.
 
 ## Session metadata (car, lock screen, Android Auto)
 
@@ -153,14 +198,13 @@ Two things worth knowing when a car shows nothing at all:
 
 ## Edge caching (Cache API)
 
-Ok responses carry `Cache-Control: public, max-age=60`; errors
+Ok responses carry `Cache-Control: public, max-age=20`; errors
 `no-store`. The header alone does not get Pages Function responses
 edge-cached (verified live: repeats re-probed upstream with no
 `cf-cache-status`), so the function also stores verdicts explicitly via
 `caches.default.put` keyed on the full request URL. Repeats inside the
-TTL are served without waking the probe or touching the station —
-roughly one short upstream pull per station per minute globally,
-however many are listening. Errors bypass the cache entirely.
+TTL are served without waking the probe or touching the station.
+Errors bypass the cache entirely.
 
 Verification:
 
@@ -170,15 +214,20 @@ curl -s 'https://<preview>.pages.dev/api/icy-title?url=<stream>'  # cached
 ```
 
 The two bodies must be byte-identical (same embedded probe timing).
-Client polling (45s) vs TTL (60s) keeps worst-case staleness around
-a minute.
+Client polling (20s) matches the TTL (20s), so a poll almost always finds
+an expired entry instead of re-reading a verdict it already has. (An older
+45s poll against the 60s TTL guaranteed alternating cache hits and ~90s
+effective freshness.)
 
 ## Debugging
 
 - **Web/dev:** open `/__icy`, probe the station URL, read `trace`. The
-  engine also logs `[icy-probe] subtitle:` in dev on every paint. BBC
-  stations log `[bbc-probe] subtitle:` instead; probe them at
-  `/__bbc/probe?service=bbc_radio_two`.
+  engine also logs `[icy-probe] subtitle:` in dev on every paint, and
+  `[icy-probe] push station error:` when the push socket reports a
+  per-station verdict. BBC stations log `[bbc-probe] subtitle:` instead;
+  probe them at `/__bbc/probe?service=bbc_radio_two`. Test the push socket
+  by hand against `wss://backend.radiolise.com/api/data-service` with
+  `{"action":"subscribe","data":{"url":"<stream>"}}`.
 - **APK:** `adb shell dumpsys media_session` is the ground truth — it prints
   the platform metadata every Bluetooth stereo reads. If the title moves
   there, the app published and anything stale is downstream. `adb logcat |

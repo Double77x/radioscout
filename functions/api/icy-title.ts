@@ -12,6 +12,11 @@ import { edgeCache, jsonResponse, type PagesContext } from "../../src/lib/edge-c
  * through the Cache API explicitly: repeats (same full request URL) are
  * served without waking the probe or touching the station. Errors are
  * never cached.
+ *
+ * The TTL matches the client's ICY poll interval, so a poll almost always
+ * finds an expired entry rather than re-reading a verdict it already has.
+ * This is the fallback path only — the page reads the stream itself where
+ * the browser allows it, and arrives here for the stations that do not.
  */
 
 export async function onRequestGet({ request }: PagesContext): Promise<Response> {
@@ -30,7 +35,7 @@ export async function onRequestGet({ request }: PagesContext): Promise<Response>
     userAgent: "RadioScout/0.3 (+https://radioscout.pages.dev)",
   });
   if (outcome === "complete" || (outcome === "timeout" && titles.length > 0)) {
-    const response = jsonResponse({ ok: true, titles, info }, { status: 200 }, true);
+    const response = jsonResponse({ ok: true, titles, info }, { status: 200 }, true, 20);
     if (cache !== null) {
       try {
         await cache.put(request.url, response.clone());
