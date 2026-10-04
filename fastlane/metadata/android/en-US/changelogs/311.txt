@@ -1,0 +1,1 @@
+BBC stations now show live song and show names: HLS streams carry no titles, so the app reads the BBC's own now-playing feeds. Firefox plays BBC stations directly instead of asking for the APK.
