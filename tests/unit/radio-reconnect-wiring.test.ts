@@ -206,4 +206,33 @@ describe("drop reconnect", () => {
     // Only the new station's own staged incoming exists — no retry replay.
     expect(FakeAudio.created).toHaveLength(count);
   });
+
+  // Cellular drops are the case this exists for: the wait is armed, the radio
+  // finds signal again, and the replay should not have to sit out the delay.
+  it("an online event replays an armed wait without advancing timers", async () => {
+    const { staged } = await startPlaying();
+    const base = FakeAudio.created.length;
+    staged.fire("waiting");
+    staged.fire("error");
+    await settle();
+    expect(FakeAudio.created).toHaveLength(base);
+    globalThis.dispatchEvent(new Event("online"));
+    await settle();
+    // Staged immediately — no RECONNECT_DELAYS_MS[0] advanced.
+    expect(FakeAudio.created).toHaveLength(base + 1);
+  });
+
+  // The listener is wired for the app's lifetime, so it fires constantly with
+  // nothing pending. It must not start a sequence or disturb the snapshot.
+  it("an online event with no wait in flight changes nothing", async () => {
+    const { staged } = await startPlaying();
+    staged.fire("playing");
+    await settle();
+    const count = FakeAudio.created.length;
+    globalThis.dispatchEvent(new Event("online"));
+    await settle();
+    expect(FakeAudio.created).toHaveLength(count);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(FakeAudio.created).toHaveLength(count);
+  });
 });

@@ -68,4 +68,51 @@ describe("ReconnectTimer", () => {
     vi.advanceTimersByTime(60_000);
     expect(onRetry).not.toHaveBeenCalled();
   });
+
+  describe("fireNow", () => {
+    it("runs an armed wait without advancing the clock", () => {
+      const timer = new ReconnectTimer();
+      const onRetry = vi.fn<() => void>();
+      timer.schedule(3, onRetry);
+      expect(timer.fireNow()).toBe(true);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+      // The wait is spent — the cancelled timer must not replay it later.
+      expect(timer.pending).toBe(false);
+      vi.advanceTimersByTime(RECONNECT_DELAYS_MS[2]);
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    // The `online` listener fires with no drop in flight constantly, so this
+    // has to stay a silent no-op rather than throwing or arming anything.
+    it("does nothing when no wait is armed", () => {
+      const timer = new ReconnectTimer();
+      expect(timer.fireNow()).toBe(false);
+      vi.advanceTimersByTime(300_000);
+      expect(timer.pending).toBe(false);
+    });
+
+    it("does nothing after a cancel took the wait away", () => {
+      const timer = new ReconnectTimer();
+      const onRetry = vi.fn<() => void>();
+      timer.schedule(2, onRetry);
+      timer.cancel();
+      expect(timer.fireNow()).toBe(false);
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+
+    // A retry re-arms as it runs; a stale copy would let one `online` replay a
+    // spent attempt and skip the backoff the table asked for.
+    it("does not replay the attempt the callback already replaced", () => {
+      const timer = new ReconnectTimer();
+      const second = vi.fn<() => void>();
+      timer.schedule(1, () => {
+        timer.schedule(2, second);
+      });
+      expect(timer.fireNow()).toBe(true);
+      expect(second).not.toHaveBeenCalled();
+      expect(timer.pending).toBe(true);
+      vi.advanceTimersByTime(RECONNECT_DELAYS_MS[1]);
+      expect(second).toHaveBeenCalledTimes(1);
+    });
+  });
 });

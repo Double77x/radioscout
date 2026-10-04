@@ -815,6 +815,7 @@ function fadeOutAndPause(): void {
 function ensureNativeListener(): void {
   if (nativeListenerReady || !canUseNativeAudio()) return;
   nativeListenerReady = true;
+  ensureReconnectFastPath();
   void onNativePlaybackStatus((event: NativePlaybackEvent) => {
     if (!usingNative) return;
     if (event.status === "playing") {
@@ -1236,8 +1237,41 @@ function cancelReconnect(): void {
   reconnectTimer.cancel();
 }
 
+/** The `online` fast path is wired once, on the first reconnect-capable play. */
+let reconnectFastPathReady = false;
+
+/**
+ * Fire an armed retry wait the moment the network reports it is back.
+ *
+ * <p>Worth having on cellular, where a drop usually means the radio left
+ * coverage: the long backoff waits are then mostly spent on a socket that
+ * cannot recover, so a 60s wait can outlast the drive back into signal by
+ * minutes. This only fires a wait that is already armed — it never starts a
+ * sequence, and with nothing pending it is a no-op — so the subscription is
+ * harmless when the app has no drop in flight.
+ *
+ * <p>Registered alongside the other module-owned global subscriptions rather
+ * than in a component effect: the retry loop lives here, not in the tree, and
+ * the engine outlives every component that could host the effect.
+ */
+function ensureReconnectFastPath(): void {
+  if (reconnectFastPathReady) return;
+  const target = globalThis.addEventListener;
+  if (typeof target !== "function") return;
+  try {
+    target.call(globalThis, "online", () => {
+      reconnectTimer.fireNow();
+    });
+  } catch {
+    // No listener, no fast path — the backoff table still covers the drop.
+    return;
+  }
+  reconnectFastPathReady = true;
+}
+
 /** First drop: quiet toast, `loading` dock, first wait armed. */
 function beginReconnect(station: Station): void {
+  ensureReconnectFastPath();
   retryingReconnect = true;
   reconnectAttempt = 1;
   toast("Connection lost", { description: "Retrying the stream…" });
