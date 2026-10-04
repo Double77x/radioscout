@@ -27,8 +27,8 @@ export function TitlesSwitch() {
         <div className='min-w-0 flex-1'>
           <p className='text-sm font-medium'>Show song titles</p>
           <p className='mt-0.5 text-xs text-muted-foreground'>
-            Replace the subtitle with the live track — the StreamTitle where the station sends one, BBC data for BBC
-            stations.
+            Replace the subtitle with the live track — the StreamTitle where the station sends one. BBC stations always
+            show titles, on the web and in the app.
           </p>
         </div>
         <button

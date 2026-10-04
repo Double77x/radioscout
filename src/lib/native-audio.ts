@@ -67,6 +67,12 @@ interface NativeAudioApi {
   syncPlaylist: (options: { playlist: NativePlaylistItem[] }) => Promise<void>;
   /** Audible station id (`""` when none); drives the foreground resync. */
   currentStation: () => Promise<{ stationuuid?: string }>;
+  /**
+   * Publish a probed title (BBC RMS — HLS carries no in-band metadata for
+   * the service to decode) into the session. Best-effort; the service
+   * dedupes and no-ops when nothing is audible.
+   */
+  updateTrack: (options: { title: string }) => Promise<void>;
   addListener: {
     (event: "playbackStatus", callback: (event: NativePlaybackEvent) => void): Promise<PluginListenerHandle>;
     (event: "trackUpdate", callback: (event: NativeTrackEvent) => void): Promise<PluginListenerHandle>;
@@ -181,4 +187,15 @@ export function nativeSyncPlaylist(playlist: NativePlaylistItem[]): Promise<void
 export function nativeCurrentStation(): Promise<string | null> {
   if (!isNative()) return Promise.resolve(null);
   return NativeAudio.currentStation().then((result) => result.stationuuid ?? null);
+}
+
+/**
+ * Publish a web-probed title into the native session (APK only — no-op on
+ * web). BBC HLS streams carry no ICY/ID3 frames for the service to decode,
+ * so the RMS probe result rides this bridge instead; the service reuses its
+ * in-place metadata path (no rebuffer) and dedupes repeats. Fire-and-forget.
+ */
+export function nativePublishTrackTitle(title: string): Promise<void> {
+  if (!isNative()) return Promise.resolve();
+  return NativeAudio.updateTrack({ title });
 }

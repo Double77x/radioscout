@@ -11,8 +11,11 @@ session, so a car, the lock screen and Android Auto show the song too.
   (`IcyInfo`), ID3 `TIT2` and Vorbis `TITLE` frames and forwards them over
   the `trackUpdate` bridge event (`NativeAudioPlugin.java` →
   `onNativeTrackUpdate` → `snapshot.track`). No switch, no network beyond
-  the stream itself. HLS carries no ICY blocks, so BBC-style HLS stations
-  show nothing — expected, not a bug. Implementation note: the listener
+  the stream itself. BBC HLS carries no such frames, so the RMS probe
+  result rides back over a dedicated `updateTrack` bridge method into the
+  same `publishTrackTitle` session path (shared `lastTrack` dedupe, same
+  mid-handoff skip) — dock, notification, lock screen, car and Auto all
+  follow BBC titles with zero ExoPlayer changes. Implementation note: the listener
   attaches to the session ExoPlayer itself (via
   `RadioPlaybackService.addMetadataListener`, which follows crossfade
   swaps) — timed `onMetadata` has no binder path in the Media3 1.9 session

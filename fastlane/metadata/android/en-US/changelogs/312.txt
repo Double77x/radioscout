@@ -1,0 +1,1 @@
+BBC song and show names reach the Android app: titles now follow on the dock, notification, lock screen and car. BBC probing no longer needs the web titles switch.

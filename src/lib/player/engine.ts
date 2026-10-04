@@ -4,6 +4,7 @@ import {
   nativeCurrentStation,
   nativePause,
   nativePlay,
+  nativePublishTrackTitle,
   nativeResume,
   nativeSetCarTitleRefresh,
   nativeSetLeveling,
@@ -257,25 +258,32 @@ function publishSessionTrack(track: string | null): void {
  */
 function armIcyProbe(station: Station, url: string): void {
   clearIcyProbe();
-  if (!readTitlesEnabled()) return;
+  // BBC RMS probing is always on (web + native): the 30s edge verdict is
+  // globally cached, so one listener costs nothing extra. Raw ICY probing
+  // stays opt-in on web (each pull hits the station) and bridge-driven on
+  // native (ExoPlayer decodes it for free).
+  const bbcService = bbcServiceIdForStation(station);
+  if (bbcService === null && !readTitlesEnabled()) return;
   // HLS playlists carry no ICY StreamTitle (and a bridged element's own
   // `src` is a `blob:` MediaSource) — probing either just burns a request
   // per play and per poll for a title that can't be there. BBC HLS feeds
   // are exempt: they run their own RMS-backed chain below.
-  const bbcService = bbcServiceIdForStation(station);
   if (bbcService === null && (!/^https?:/i.test(url) || isHlsUrl(url))) return;
   const probeController = new AbortController();
   icyProbeController = probeController;
   const probeToken = playToken;
   const isCurrent = (): boolean => probeToken === playToken && snapshot.station?.stationuuid === station.stationuuid;
-  const applyProbedTitle = (raw: string): void => {
-    if (!isCurrent()) return;
+  const applyProbedTitle = (raw: string): string | null => {
+    if (!isCurrent()) return null;
     const title = raw.trim() === "" ? null : raw;
-    if (title !== snapshot.track) {
-      emit({ track: title });
-      publishSessionTrack(title);
+    if (title === snapshot.track) {
+      if (import.meta.env.DEV) console.log("[icy-probe] subtitle (unchanged):", title);
+      return null;
     }
+    emit({ track: title });
+    publishSessionTrack(title);
     if (import.meta.env.DEV) console.log("[icy-probe] subtitle:", title);
+    return title;
   };
   const refreshBbcTitle = async (service: string): Promise<Record<string, unknown> | null> => {
     // Same endpoint shape as the ICY chain (dev middleware, edge function,
@@ -304,8 +312,14 @@ function armIcyProbe(station: Station, url: string): void {
       if (!response.ok) return null;
       const data: unknown = await response.json();
       if (isRecord(data) && typeof data.title === "string" && data.title.trim() !== "") {
-        applyProbedTitle(data.title);
+        const applied = applyProbedTitle(data.title);
         if (import.meta.env.DEV) console.log("[bbc-probe] subtitle:", data.title);
+        // Native owns audio on the APK but decodes no titles from BBC HLS —
+        // hand the probed one to the session (notification, lock, car) down
+        // the same in-place path the metadata listener uses. Deduped here
+        // (changed titles only) and again service-side; the web MediaSession
+        // above already covers the browser.
+        if (applied !== null && usingNative) void nativePublishTrackTitle(applied).catch(() => {});
         return data;
       }
       return null;

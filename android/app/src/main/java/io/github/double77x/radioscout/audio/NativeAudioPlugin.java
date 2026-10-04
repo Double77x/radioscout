@@ -694,6 +694,30 @@ public class NativeAudioPlugin extends Plugin {
     }
 
     /**
+     * Web-probed title (BBC RMS — HLS carries no in-band metadata for the
+     * service to decode itself). Same destination as the metadata listener
+     * above, sharing its `lastTrack` dedupe: repeats and races converge
+     * instead of double-publishing. Best-effort by design — resolves even
+     * when nothing is audible, since publishTrackTitle no-ops safely there.
+     */
+    @PluginMethod
+    public void updateTrack(PluginCall call) {
+        String title = call.getString("title", "");
+        if (title == null || title.isEmpty() || title.equals(lastTrack)) {
+            call.resolve();
+            return;
+        }
+        lastTrack = title;
+        // Same mid-handoff rule as the listener: until the blend swaps, the
+        // retiring item is the one on display and its title is the outgoing
+        // station's — publishing there would brand it with the new song.
+        if (fadePlayer == null) {
+            RadioPlaybackService.publishTrackTitle(title, stationTitle);
+        }
+        call.resolve();
+    }
+
+    /**
      * Refresh the service loop to the latest Saved order without disturbing
      * the audible item: drop the gone, move the audible item home, insert
      * the new — all gapless while they avoid the current period. Rejects
