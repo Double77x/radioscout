@@ -19,6 +19,7 @@ import { useIsClient } from "@/hooks/use-is-client";
 import { usePersistentString, usePersistentStrings } from "@/hooks/use-persistent-state";
 import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
+import { isNative } from "@/lib/capacitor";
 import { formatListeningTime, formatTags } from "@/lib/radio/format";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
@@ -28,6 +29,7 @@ import {
   useClearHistory,
   useFavourites,
   useHistory,
+  useLatestTracks,
   useListeningStats,
   useServerStats,
   useStationSearch,
@@ -106,6 +108,16 @@ export default function HomePage() {
 
   const favouriteIds = useMemo(() => new Set(favourites.data.map((row) => row.stationuuid)), [favourites.data]);
 
+  // Song line on Recently-played rows: desktop web only. Phones and the APK
+  // never load it (one indexed read saved, no extra row height), and the
+  // title rides the meta line after the vote count instead of wrapping.
+  const showTrackLines = !isNative() && (globalThis.matchMedia?.("(min-width: 1024px)").matches ?? false);
+  const historyUuids = useMemo(
+    () => (showTrackLines ? history.data.map((row) => row.stationuuid) : []),
+    [history.data, showTrackLines],
+  );
+  const latestTracks = useLatestTracks(historyUuids);
+
   // Cross-component signal from the command palette (`open-home-section`):
   // expand the section, then scroll it into view once the accordion paints.
   // A window event (not props) because the palette lives outside Home.
@@ -127,12 +139,13 @@ export default function HomePage() {
     };
   }, [openSections, setOpenSections]);
 
-  const renderRow = (station: Station, key?: string) => (
+  const renderRow = (station: Station, key?: string, trackTitle?: string) => (
     <StationCard
       key={key ?? station.stationuuid}
       station={station}
       playing={player.station?.stationuuid === station.stationuuid && player.status === "playing"}
       favourited={favouriteIds.has(station.stationuuid)}
+      trackTitle={trackTitle}
       onPlay={togglePlay}
       onToggleFavourite={(item) => {
         toggleFavourite.mutate(item);
@@ -249,7 +262,15 @@ export default function HomePage() {
                   </AccordionTrigger>
                   <AccordionContent>
                     <ul className='flex flex-col gap-2'>
-                      {history.data.slice(0, 10).map((row) => renderRow(row.snapshot, `${row.id}-${row.played_at}`))}
+                      {history.data
+                        .slice(0, 10)
+                        .map((row) =>
+                          renderRow(
+                            row.snapshot,
+                            `${row.id}-${row.played_at}`,
+                            latestTracks.data?.get(row.stationuuid)?.title,
+                          ),
+                        )}
                     </ul>
                     <div className='mt-4 flex justify-center'>
                       <Button
@@ -268,7 +289,7 @@ export default function HomePage() {
                       open={confirmClearHistory}
                       onOpenChange={setConfirmClearHistory}
                       title='Clear history?'
-                      description='This erases your recently played list. Saved stations and listening stats stay put.'
+                      description='This erases your recently played list and song history. Saved stations and listening stats stay put.'
                       confirmLabel='Clear'
                       pending={clearHistory.isPending}
                       onConfirm={() => {

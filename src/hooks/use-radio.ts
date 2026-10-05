@@ -11,6 +11,7 @@ import { readLanguages } from "@/lib/radio/languages";
 import { readMinBitrate } from "@/lib/radio/quality";
 import { pickSurpriseStation } from "@/lib/radio/surprise";
 import type { DayBucket, DaypartBucket, ListeningSummary } from "@/lib/radio/store";
+import { TRACKS_KEY } from "@/lib/radio/store";
 import type { Station } from "@/lib/radio/types";
 
 const RADIO_KEY = ["radio"] as const;
@@ -44,6 +45,14 @@ const loadSurpriseFallback = (languages: string[], minBitrate: number, countries
 const loadFavourites = () => import("@/lib/radio/store").then((store) => store.listFavourites());
 const loadHistory = () => import("@/lib/radio/store").then((store) => store.listHistory());
 const loadListening = () => import("@/lib/radio/store").then((store) => store.summarizeListening());
+const loadStationListening = (stationuuid: string) => () =>
+  import("@/lib/radio/store").then((store) => store.summarizeListening(undefined, undefined, stationuuid));
+const loadRecentTracks = (stationuuid: string, limit: number) => () =>
+  import("@/lib/radio/store").then((store) => store.listRecentTracks(stationuuid, limit));
+const loadLatestTracks = (stationuuids: string[]) => () =>
+  import("@/lib/radio/store").then((store) => store.listLatestTracks(stationuuids));
+const wipeStationTracks = (stationuuid: string) =>
+  import("@/lib/radio/store").then((store) => store.clearStationTracks(stationuuid));
 const saveFavourite = (station: Station) => import("@/lib/radio/store").then((store) => store.toggleFavourite(station));
 const wipeHistory = () => import("@/lib/radio/store").then((store) => store.clearHistory());
 const wipeListening = () => import("@/lib/radio/store").then((store) => store.clearListening());
@@ -130,11 +139,39 @@ export function useHistory() {
   });
 }
 
+/**
+ * Latest heard title per station, backing the song line under
+ * Recently-played rows. One query for the whole section; the engine's
+ * tracks-key invalidation covers it alongside the per-station lists.
+ */
+export function useLatestTracks(stationuuids: string[]) {
+  const isClient = useIsClient();
+  return useQuery({
+    queryKey: [...TRACKS_KEY, "latest", ...stationuuids],
+    queryFn: loadLatestTracks(stationuuids),
+    enabled: isClient && stationuuids.length > 0,
+    staleTime: 0,
+    placeholderData: keepPreviousData,
+  });
+}
+
+export function useClearStationTracks() {
+  return useMutation({
+    mutationFn: wipeStationTracks,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: TRACKS_KEY });
+      toast("Song history cleared");
+    },
+  });
+}
+
 export function useClearHistory() {
   return useMutation({
     mutationFn: wipeHistory,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: HISTORY_KEY });
+      // Song history clears with the recently played list.
+      void queryClient.invalidateQueries({ queryKey: TRACKS_KEY });
       toast("History cleared");
     },
   });
@@ -186,6 +223,38 @@ export function useClearListening() {
       void queryClient.invalidateQueries({ queryKey: LISTENING_KEY });
       toast("Listening stats cleared");
     },
+  });
+}
+
+/**
+ * Heard song/programme titles for one station, newest first. Local-first,
+ * instant — the engine banks titles while playing and invalidates this
+ * query, so the detail sheet follows the song.
+ */
+export function useRecentTracks(stationuuid: string | null, limit = 8) {
+  const isClient = useIsClient();
+  return useQuery({
+    queryKey: [...TRACKS_KEY, stationuuid ?? "", limit],
+    queryFn: loadRecentTracks(stationuuid ?? "", limit),
+    enabled: isClient && stationuuid !== null,
+    staleTime: 0,
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * Listening summary for one station (total, daily rhythm, trends) backing
+ * the detail sheet's stats tab. Banked sessions invalidate the shared
+ * listening key, which covers this per-station key too.
+ */
+export function useStationListeningStats(stationuuid: string | null) {
+  const isClient = useIsClient();
+  return useQuery({
+    queryKey: [...LISTENING_KEY, stationuuid ?? ""],
+    queryFn: loadStationListening(stationuuid ?? ""),
+    enabled: isClient && stationuuid !== null,
+    staleTime: 0,
+    placeholderData: keepPreviousData,
   });
 }
 

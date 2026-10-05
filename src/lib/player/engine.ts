@@ -17,12 +17,13 @@ import {
   type NativePlaybackEvent,
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
+import type { TrackKind } from "@/lib/radio/store";
 import { bbcNextPollDelayMs, bbcServiceIdForStation } from "@/lib/radio/bbc";
 import { directIcyRoute, fetchIcyTitles, type IcyOutcome, type IcyTitle } from "@/lib/radio/icy";
 import { loadDirectUnsupported, recordDirectUnsupported } from "@/lib/radio/direct-support";
 import { fetchRadioliseTitle } from "@/lib/radio/radiolise";
 import { subscribeRadioliseTitle, type RadioliseSubscription } from "@/lib/radio/radiolise-socket";
-import { readTitlesEnabled } from "@/lib/radio/titles";
+import { normaliseTrackTitle, readTitlesEnabled } from "@/lib/radio/titles";
 import { siteConfig } from "@/lib/site";
 import { envString, isRecord } from "@/lib/utils";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
@@ -330,15 +331,21 @@ function armIcyProbe(station: Station, url: string): void {
   icyProbeController = probeController;
   const probeToken = playToken;
   const isCurrent = (): boolean => probeToken === playToken && snapshot.station?.stationuuid === station.stationuuid;
-  const applyProbedTitle = (raw: string): string | null => {
+  const applyProbedTitle = (raw: string, kind: TrackKind = "icy"): string | null => {
     if (!isCurrent()) return null;
-    const title = raw.trim() === "" ? null : raw;
+    // Normalised before comparing: stations re-send the same title with
+    // varying padding, and the raw strings never match (see titles.ts).
+    const normalised = normaliseTrackTitle(raw);
+    const title = normalised === "" ? null : normalised;
     if (title === snapshot.track) {
       if (import.meta.env.DEV) console.log("[icy-probe] subtitle (unchanged):", title);
       return null;
     }
     emit({ track: title });
     publishSessionTrack(title);
+    // Song history for the detail sheet: changed titles only (this return
+    // is the single funnel for every probe tier, so repeats never bank).
+    if (title !== null) bankTrackTitle(station.stationuuid, title, kind);
     if (import.meta.env.DEV) console.log("[icy-probe] subtitle:", title);
     return title;
   };
@@ -425,7 +432,8 @@ function armIcyProbe(station: Station, url: string): void {
       if (!response.ok) return null;
       const data: unknown = await response.json();
       if (isRecord(data) && typeof data.title === "string" && data.title.trim() !== "") {
-        const applied = applyProbedTitle(data.title);
+        const kind: TrackKind = data.kind === "programme" ? "programme" : "track";
+        const applied = applyProbedTitle(data.title, kind);
         if (import.meta.env.DEV) console.log("[bbc-probe] subtitle:", data.title);
         // Native owns audio on the APK but decodes no titles from BBC HLS —
         // hand the probed one to the session (notification, lock, car) down
@@ -1125,10 +1133,17 @@ function ensureNativeListener(): void {
   // subscription per session alongside the status listener above).
   void onNativeTrackUpdate((event) => {
     if (!usingNative) return;
-    const title = event.title.trim() === "" ? null : event.title.trim();
+    // Same normalisation as the probe funnel above — bridge frames pad too.
+    const normalised = normaliseTrackTitle(event.title);
+    const title = normalised === "" ? null : normalised;
     if (title === snapshot.track) return;
     emit({ track: title });
     publishSessionTrack(title);
+    // Same song-history banking as the probe funnel above (APK ICY frames).
+    if (title !== null) {
+      const uuid = snapshot.station?.stationuuid;
+      if (uuid) bankTrackTitle(uuid, title, "icy");
+    }
   }).catch(() => {
     nativeListenerReady = false;
   });
@@ -1206,6 +1221,30 @@ async function playViaNative(
 function logPlay(station: Station): void {
   // Dynamic import keeps Dexie out of this chunk until the first play.
   void import("@/lib/radio/store").then((store) => store.logPlay(station)).catch(() => {});
+}
+
+/**
+ * Bank a heard title for the detail sheet's song history. Fire-and-forget
+ * enrichment: Dexie and the query client stay out of this chunk until the
+ * first title lands, and a failed write must never disturb playback.
+ * Invalidates the whole tracks key so per-station lists and the
+ * Recently-played rollup refetch together (all local reads).
+ */
+function bankTrackTitle(stationuuid: string, title: string, kind: TrackKind): void {
+  void import("@/lib/radio/store")
+    .then((store) =>
+      store
+        .logTrack({ stationuuid, title, kind })
+        .catch(() => {})
+        .then(() =>
+          import("@/lib/query-client")
+            .then(({ queryClient }) => {
+              void queryClient.invalidateQueries({ queryKey: store.TRACKS_KEY });
+            })
+            .catch(() => {}),
+        ),
+    )
+    .catch(() => {});
 }
 
 async function resolveUrl(station: Station): Promise<string> {

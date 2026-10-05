@@ -7,12 +7,21 @@ import { LANGUAGES_KEY, normalizeLanguages, readLanguages, writeLanguages } from
 import { COUNTRIES_KEY, normalizeCountries, readCountries, writeCountries } from "@/lib/radio/countries";
 import { normalizeMinBitrate, QUALITY_KEY, readMinBitrate, writeMinBitrate } from "@/lib/radio/quality";
 import { readNormalizeEnabled, writeNormalizeEnabled, NORMALIZE_KEY } from "@/lib/radio/normalize";
-import { radioDb, type FavouriteRow, type HistoryRow, type ListeningRow, type RadioDB } from "@/lib/radio/store";
+import {
+  radioDb,
+  type FavouriteRow,
+  type HistoryRow,
+  type ListeningRow,
+  type RadioDB,
+  type TrackRow,
+} from "@/lib/radio/store";
 import { stationSchema } from "@/lib/radio/types";
+import { FLAVORS, FLAVOR_STORAGE_KEY, readStoredFlavor, writeStoredFlavor, type Flavor } from "@/lib/theme";
 import { readVotedIds, writeVotedIds } from "@/lib/radio/votes";
 
-/** v6 adds the station-country filter (`countries`, worldwide by default). */
-export const RADIO_BACKUP_VERSION = 6 as const;
+/** v6 adds the station-country filter; v7 adds song history (`tracks`). */
+/** v8 adds the colour flavour (`flavor`, default by default). */
+export const RADIO_BACKUP_VERSION = 8 as const;
 
 /**
  * Versioned envelope for everything RadioScout keeps locally. New feature
@@ -41,6 +50,14 @@ const listeningRowSchema = z.object({
   seconds: z.number(),
 });
 
+const trackRowSchema = z.object({
+  id: z.number().optional(),
+  stationuuid: z.string().min(1),
+  title: z.string().min(1),
+  kind: z.enum(["track", "programme", "icy"]),
+  played_at: z.string(),
+});
+
 const prefsSchema = z.object({
   volume: z.number().min(0).max(1),
   muted: z.boolean(),
@@ -64,6 +81,10 @@ const radioBackupSchema = z.object({
   listening: listeningRowSchema.array().optional().default([]),
   // Absent before v5 — leveling off by default, never a restore failure.
   normalize: z.boolean().optional().default(false),
+  // Absent before v7 — no song history banked, never a restore failure.
+  tracks: trackRowSchema.array().optional().default([]),
+  // Absent before v8 — default flavour, never a restore failure.
+  flavor: z.enum(FLAVORS).optional().default("default"),
 });
 
 export type RadioBackupPayload = {
@@ -79,6 +100,8 @@ export type RadioBackupPayload = {
   quality: number;
   listening: ListeningRow[];
   normalize: boolean;
+  tracks: TrackRow[];
+  flavor: Flavor;
 };
 
 export function radioBackupFilename(now: Date = new Date()): string {
@@ -87,10 +110,11 @@ export function radioBackupFilename(now: Date = new Date()): string {
 
 /** Snapshot everything worth keeping into a portable payload. */
 export async function collectRadioBackup(database: RadioDB = radioDb): Promise<RadioBackupPayload> {
-  const [favourites, history, listening] = await Promise.all([
+  const [favourites, history, listening, tracks] = await Promise.all([
     database.favourites.toArray(),
     database.history.orderBy("id").toArray(),
     database.listening.orderBy("id").toArray(),
+    database.tracks.orderBy("id").toArray(),
   ]);
   return {
     app: "radioscout",
@@ -105,6 +129,8 @@ export async function collectRadioBackup(database: RadioDB = radioDb): Promise<R
     quality: readMinBitrate(),
     listening,
     normalize: readNormalizeEnabled(),
+    tracks,
+    flavor: readStoredFlavor(),
   };
 }
 
@@ -134,23 +160,35 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   if (parsed.data.version > RADIO_BACKUP_VERSION) {
     throw new Error("That backup needs a newer RadioScout — update first, then restore.");
   }
-  const { favourites, history, prefs, voted, languages, countries, quality, listening, normalize } = parsed.data;
-  await database.transaction("rw", [database.favourites, database.history, database.listening], async () => {
-    await database.favourites.clear();
-    await database.history.clear();
-    await database.listening.clear();
-    await database.favourites.bulkPut(favourites);
-    const withoutIds = history.map(({ id: _dropped, ...row }) => row);
-    await database.history.bulkPut(withoutIds);
-    const sessionsWithoutIds = listening.map(({ id: _dropped, ...row }) => row);
-    await database.listening.bulkPut(sessionsWithoutIds);
-  });
+  const { favourites, history, prefs, voted, languages, countries, quality, listening, normalize, tracks, flavor } =
+    parsed.data;
+  await database.transaction(
+    "rw",
+    [database.favourites, database.history, database.listening, database.tracks],
+    async () => {
+      await database.favourites.clear();
+      await database.history.clear();
+      await database.listening.clear();
+      await database.tracks.clear();
+      await database.favourites.bulkPut(favourites);
+      const withoutIds = history.map(({ id: _dropped, ...row }) => row);
+      await database.history.bulkPut(withoutIds);
+      const sessionsWithoutIds = listening.map(({ id: _dropped, ...row }) => row);
+      await database.listening.bulkPut(sessionsWithoutIds);
+      const tracksWithoutIds = tracks.map(({ id: _dropped, ...row }) => row);
+      await database.tracks.bulkPut(tracksWithoutIds);
+    },
+  );
   writeVotedIds(voted);
   writeLanguages(normalizeLanguages(languages));
   writeCountries(normalizeCountries(countries));
   writeMinBitrate(normalizeMinBitrate(quality));
   writeNormalizeEnabled(normalize);
   setNormalization(normalize);
+  // Flavour applies through the provider's storage subscription (same
+  // channel as the filter keys below) — no reload needed.
+  writeStoredFlavor(flavor);
+  notifyRestoredFilter(FLAVOR_STORAGE_KEY);
   notifyRestoredFilter(LANGUAGES_KEY);
   notifyRestoredFilter(COUNTRIES_KEY);
   notifyRestoredFilter(QUALITY_KEY);

@@ -40,6 +40,10 @@
 
   --color-glow: var(--glow);
 
+  /* Logo tile: always dark (the silver mark needs the field), harmonised
+     per flavour via `--logo-tile` so it shifts with the theme switcher. */
+  --color-logo-tile: var(--logo-tile);
+
   /* Scout brand + pastel space tints (light/dark aware via :root) */
   --color-scout-ink: var(--scout-ink);
   --color-scout-moss: var(--scout-moss);
@@ -71,6 +75,7 @@
   --animate-fade-in-right: fade-in-right 0.6s ease-out both;
   --animate-pulse-glow: pulseGlow 2s infinite;
   --animate-scout-enter: scout-enter 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-scout-pop: scout-pop 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
   --animate-dropdown-in: dropdown-in 0.25s cubic-bezier(0.87, 0, 0.13, 1) both;
   --animate-ticker: ticker linear infinite;
   --animate-draw-circle: draw-stroke 0.3s ease-out both;
@@ -127,6 +132,23 @@
       transform: translateY(0) scale(1);
     }
   }
+  /* State-change twirl for transport and toggle icons (save, vote, play —
+     remount on a state key replays it). Transform and opacity only, so it
+     stays on the compositor. */
+  @keyframes scout-pop {
+    0% {
+      opacity: 0;
+      transform: rotate(-120deg) scale(0.6);
+    }
+    60% {
+      opacity: 1;
+      transform: rotate(10deg) scale(1.15);
+    }
+    100% {
+      opacity: 1;
+      transform: rotate(0deg) scale(1);
+    }
+  }
   @keyframes dropdown-in {
     0% {
       opacity: 0;
@@ -173,6 +195,9 @@
   --border: #d5dcd1;
   --input: #d5dcd1;
   --ring: #1e5b38;
+
+  /* Logo tile (the silver mark needs a dark field in every scheme). */
+  --logo-tile: #171717;
 
   /* Scrollbar thumb (decorative, kept visible on app surfaces) */
   --scroll-thumb: #bcc7bd;
@@ -248,6 +273,9 @@
   --input: #333333;
   --ring: #8adca6; /* moss light */
 
+  /* Logo tile (the silver mark needs a dark field in every scheme). */
+  --logo-tile: #171717;
+
   /* Scrollbar thumb (decorative, kept visible on app surfaces) */
   --scroll-thumb: #4a4a4a;
   --scroll-thumb-hover: #8a8a8a;
@@ -281,6 +309,243 @@
   /* Grid guide + corner marker colours (very faint, Vercel zone aesthetic) */
   --grid-guide: rgba(205, 214, 244, 0.05);
   --grid-plus: var(--border-strong);
+}
+
+/* Scout flavour palettes — SHADCN tokens only (brand tints stay put).
+ * `<html data-flavor="…">` picks the palette, `.dark` picks the scheme;
+ * both selectors outrank the base above, so a switch is one attribute
+ * write with no component cost. `default` has no block (it IS the base). */
+
+/* Gruvbox — warm retro: dark #282828/#ebdbb2, light #fbf1c7/#3c3836. */
+:root[data-flavor="gruvbox"] {
+  --background: #fbf1c7;
+  --foreground: #3c3836;
+  --card: #f9f5d7;
+  --card-foreground: #3c3836;
+  --popover: #f9f5d7;
+  --popover-foreground: #3c3836;
+  --primary: #79740e;
+  --primary-foreground: #fbf1c7;
+  --secondary: #ebdbb2;
+  --secondary-foreground: #3c3836;
+  --muted: #ebdbb2;
+  --muted-foreground: #7c6f64;
+  --accent: #ebdbb2;
+  --accent-foreground: #3c3836;
+  --destructive: #cc241d;
+  --destructive-foreground: #fbf1c7;
+  --border: #d5c4a1;
+  --input: #d5c4a1;
+  --ring: #79740e;
+  --logo-tile: #282828;
+  --scroll-thumb: #d5c4a1;
+  --scroll-thumb-hover: #a89984;
+  --glow: rgba(121, 116, 14, 0.25);
+  --surface-1: #f9f5d7;
+  --surface-2: #ebdbb2;
+  --surface-3: #d5c4a1;
+}
+.dark[data-flavor="gruvbox"] {
+  --background: #282828;
+  --foreground: #ebdbb2;
+  --card: #3c3836;
+  --card-foreground: #ebdbb2;
+  --popover: #3c3836;
+  --popover-foreground: #ebdbb2;
+  --primary: #b8bb26;
+  --primary-foreground: #282828;
+  --secondary: #504945;
+  --secondary-foreground: #ebdbb2;
+  --muted: #3c3836;
+  --muted-foreground: #a89984;
+  --accent: #504945;
+  --accent-foreground: #ebdbb2;
+  --destructive: #fb4934;
+  --destructive-foreground: #282828;
+  --border: #504945;
+  --input: #504945;
+  --ring: #b8bb26;
+  --logo-tile: #282828;
+  --scroll-thumb: #504945;
+  --scroll-thumb-hover: #665c54;
+  --glow: rgba(184, 187, 38, 0.22);
+  --surface-1: #282828;
+  --surface-2: #3c3836;
+  --surface-3: #504945;
+}
+
+/* Nord — polar night / snow storm: dark #2e3440/#eceff4, light #eceff4/#2e3440. */
+:root[data-flavor="nord"] {
+  --background: #eceff4;
+  --foreground: #2e3440;
+  --card: #e5e9f0;
+  --card-foreground: #2e3440;
+  --popover: #e5e9f0;
+  --popover-foreground: #2e3440;
+  --primary: #5e81ac;
+  --primary-foreground: #eceff4;
+  --secondary: #d8dee9;
+  --secondary-foreground: #2e3440;
+  --muted: #d8dee9;
+  --muted-foreground: #4c566a;
+  --accent: #d8dee9;
+  --accent-foreground: #2e3440;
+  --destructive: #bf616a;
+  --destructive-foreground: #eceff4;
+  --border: #d8dee9;
+  --input: #d8dee9;
+  --ring: #5e81ac;
+  --logo-tile: #2e3440;
+  --scroll-thumb: #d8dee9;
+  --scroll-thumb-hover: #8f9bb3;
+  --glow: rgba(94, 129, 172, 0.25);
+  --surface-1: #e5e9f0;
+  --surface-2: #d8dee9;
+  --surface-3: #c3cddd;
+}
+.dark[data-flavor="nord"] {
+  --background: #2e3440;
+  --foreground: #eceff4;
+  --card: #3b4252;
+  --card-foreground: #eceff4;
+  --popover: #3b4252;
+  --popover-foreground: #eceff4;
+  --primary: #88c0d0;
+  --primary-foreground: #2e3440;
+  --secondary: #434c5e;
+  --secondary-foreground: #eceff4;
+  --muted: #434c5e;
+  --muted-foreground: #8f9bb3;
+  --accent: #434c5e;
+  --accent-foreground: #eceff4;
+  --destructive: #bf616a;
+  --destructive-foreground: #2e3440;
+  --border: #4c566a;
+  --input: #4c566a;
+  --ring: #88c0d0;
+  --logo-tile: #2e3440;
+  --scroll-thumb: #4c566a;
+  --scroll-thumb-hover: #616e88;
+  --glow: rgba(136, 192, 208, 0.22);
+  --surface-1: #2e3440;
+  --surface-2: #3b4252;
+  --surface-3: #434c5e;
+}
+
+/* Sunset Horizon — official tokens (colours only): dawn #fff9f5/#3d3436, dusk #2a2024/#f2e9e4. */
+:root[data-flavor="sunset"] {
+  --background: #fff9f5;
+  --foreground: #3d3436;
+  --card: #ffffff;
+  --card-foreground: #3d3436;
+  --popover: #ffffff;
+  --popover-foreground: #3d3436;
+  --primary: #ff7e5f;
+  --primary-foreground: #ffffff;
+  --secondary: #ffedea;
+  --secondary-foreground: #b35340;
+  --muted: #fff0eb;
+  --muted-foreground: #78716c;
+  --accent: #feb47b;
+  --accent-foreground: #3d3436;
+  --destructive: #e63946;
+  --destructive-foreground: #ffffff;
+  --border: #ffe0d6;
+  --input: #ffe0d6;
+  --ring: #ff7e5f;
+  --scroll-thumb: #ffe0d6;
+  --logo-tile: #2a2024;
+  --scroll-thumb-hover: #ce6a57;
+  --glow: rgba(255, 126, 95, 0.25);
+  --surface-1: #ffffff;
+  --surface-2: #fff0eb;
+  --surface-3: #ffedea;
+}
+.dark[data-flavor="sunset"] {
+  --background: #2a2024;
+  --foreground: #f2e9e4;
+  --card: #392f35;
+  --card-foreground: #f2e9e4;
+  --popover: #392f35;
+  --popover-foreground: #f2e9e4;
+  --primary: #ff7e5f;
+  --primary-foreground: #ffffff;
+  --secondary: #463a41;
+  --secondary-foreground: #f2e9e4;
+  --muted: #30272c;
+  --muted-foreground: #d7c6bc;
+  --accent: #feb47b;
+  --accent-foreground: #2a2024;
+  --destructive: #e63946;
+  --destructive-foreground: #ffffff;
+  --border: #463a41;
+  --input: #463a41;
+  --ring: #ff7e5f;
+  --scroll-thumb: #463a41;
+  --logo-tile: #2a2024;
+  --scroll-thumb-hover: #ce6a57;
+  --glow: rgba(255, 126, 95, 0.22);
+  --surface-1: #392f35;
+  --surface-2: #30272c;
+  --surface-3: #463a41;
+}
+
+/* Catppuccin — Latte cream / Mocha night, mauve accent. */
+:root[data-flavor="catppuccin"] {
+  --background: #eff1f5;
+  --foreground: #4c4f69;
+  --card: #e6e9ef;
+  --card-foreground: #4c4f69;
+  --popover: #e6e9ef;
+  --popover-foreground: #4c4f69;
+  --primary: #8839ef;
+  --primary-foreground: #eff1f5;
+  --secondary: #ccd0da;
+  --secondary-foreground: #4c4f69;
+  --muted: #ccd0da;
+  --muted-foreground: #6c6f85;
+  --accent: #ccd0da;
+  --accent-foreground: #4c4f69;
+  --destructive: #d20f39;
+  --destructive-foreground: #eff1f5;
+  --border: #bcc0cc;
+  --input: #bcc0cc;
+  --ring: #8839ef;
+  --logo-tile: #1e1e2e;
+  --scroll-thumb: #bcc0cc;
+  --scroll-thumb-hover: #8c8fa1;
+  --glow: rgba(136, 57, 239, 0.22);
+  --surface-1: #e6e9ef;
+  --surface-2: #ccd0da;
+  --surface-3: #bcc0cc;
+}
+.dark[data-flavor="catppuccin"] {
+  --background: #1e1e2e;
+  --foreground: #cdd6f4;
+  --card: #313244;
+  --card-foreground: #cdd6f4;
+  --popover: #313244;
+  --popover-foreground: #cdd6f4;
+  --primary: #cba6f7;
+  --primary-foreground: #1e1e2e;
+  --secondary: #45475a;
+  --secondary-foreground: #cdd6f4;
+  --muted: #45475a;
+  --muted-foreground: #9399b2;
+  --accent: #45475a;
+  --accent-foreground: #cdd6f4;
+  --destructive: #f38ba8;
+  --destructive-foreground: #1e1e2e;
+  --border: #45475a;
+  --input: #45475a;
+  --ring: #cba6f7;
+  --logo-tile: #1e1e2e;
+  --scroll-thumb: #45475a;
+  --scroll-thumb-hover: #585b70;
+  --glow: rgba(203, 166, 247, 0.22);
+  --surface-1: #1e1e2e;
+  --surface-2: #313244;
+  --surface-3: #45475a;
 }
 
 @utility container {
@@ -538,6 +803,9 @@
   /* Scout — entrance animations stay off until they run */
   @media (prefers-reduced-motion: reduce) {
     .animate-scout-enter {
+      animation: none;
+    }
+    .animate-scout-pop {
       animation: none;
     }
     .animate-ticker {

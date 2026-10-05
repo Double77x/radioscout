@@ -273,7 +273,7 @@ function otherRow(
   };
 }
 
-function DailyView({ stats }: { stats: ListeningSummary }) {
+export function DailyView({ stats }: { stats: ListeningSummary }) {
   const totalDays = stats.byDay.reduce((sum, bucket) => sum + bucket.days, 0);
   const averageDay = totalDays === 0 ? 0 : Math.round(stats.totalSeconds / totalDays);
   // Typical-week denominator: the seven daily averages sum to one average
@@ -298,7 +298,7 @@ function averageOf(bucket: DayBucket): number {
   return bucket.days === 0 ? 0 : bucket.seconds / bucket.days;
 }
 
-function TrendView({ stats }: { stats: ListeningSummary }) {
+export function TrendView({ stats, compact = false }: { stats: ListeningSummary; compact?: boolean }) {
   const recent = stats.byRecent;
   const recentSeconds = recent.reduce((sum, bucket) => sum + bucket.seconds, 0);
   const activeDays = recent.filter((bucket) => bucket.seconds > 0).length;
@@ -327,8 +327,8 @@ function TrendView({ stats }: { stats: ListeningSummary }) {
   return (
     <div className='flex flex-col gap-5'>
       <section aria-label='Streaks and records'>
-        {/* Compact layout (phones and tablets): full-width label/value rows. */}
-        <dl className='flex flex-col gap-2 lg:hidden'>
+        {/* Compact layout (phones, tablets — and narrow sheets at any viewport): full-width label/value rows. */}
+        <dl className={compact ? "flex flex-col gap-2" : "flex flex-col gap-2 lg:hidden"}>
           {records.map((record) => (
             <div
               key={record.label}
@@ -340,12 +340,14 @@ function TrendView({ stats }: { stats: ListeningSummary }) {
             </div>
           ))}
         </dl>
-        {/* Wide layout: three cards with fixed-height rows. */}
-        <div className='hidden grid-cols-3 gap-2 lg:grid'>
-          {records.map((record) => (
-            <StatCard key={record.label} label={record.label} value={record.value} sub={record.sub} />
-          ))}
-        </div>
+        {/* Wide layout: three cards with fixed-height rows. Never in compact containers. */}
+        {compact ? null : (
+          <div className='hidden grid-cols-3 gap-2 lg:grid'>
+            {records.map((record) => (
+              <StatCard key={record.label} label={record.label} value={record.value} sub={record.sub} />
+            ))}
+          </div>
+        )}
       </section>
 
       <SegmentedControl
@@ -364,7 +366,10 @@ function TrendView({ stats }: { stats: ListeningSummary }) {
             {activeDays} of {recent.length} days active
           </p>
           {/* Compact layout: 2 rows of 7 at half height — roomier ordinal labels. */}
-          <div className='mt-3 grid grid-cols-7 gap-x-0.5 gap-y-2 lg:hidden'>
+          <div
+            className={
+              compact ? "mt-3 grid grid-cols-7 gap-x-0.5 gap-y-2" : "mt-3 grid grid-cols-7 gap-x-0.5 gap-y-2 lg:hidden"
+            }>
             {recent.map((bucket, index) => (
               <TrendColumn
                 key={bucket.date}
@@ -378,21 +383,23 @@ function TrendView({ stats }: { stats: ListeningSummary }) {
               />
             ))}
           </div>
-          {/* Wide layout: single row of 14 at full height. */}
-          <div className='mt-3 hidden items-stretch gap-0.5 lg:flex'>
-            {recent.map((bucket, index) => (
-              <TrendColumn
-                key={bucket.date}
-                label={bucket.label}
-                sublabel={bucket.month}
-                title={`${bucket.weekday} ${bucket.label} — ${formatListeningTime(bucket.seconds)} across ${bucket.plays} ${bucket.plays === 1 ? "session" : "sessions"}`}
-                seconds={bucket.seconds}
-                max={recentSeconds}
-                isToday={index === recent.length - 1}
-                height={TREND_COLUMN_PX}
-              />
-            ))}
-          </div>
+          {/* Wide layout: single row of 14 at full height. Never in compact containers. */}
+          {compact ? null : (
+            <div className='mt-3 hidden items-stretch gap-0.5 lg:flex'>
+              {recent.map((bucket, index) => (
+                <TrendColumn
+                  key={bucket.date}
+                  label={bucket.label}
+                  sublabel={bucket.month}
+                  title={`${bucket.weekday} ${bucket.label} — ${formatListeningTime(bucket.seconds)} across ${bucket.plays} ${bucket.plays === 1 ? "session" : "sessions"}`}
+                  seconds={bucket.seconds}
+                  max={recentSeconds}
+                  isToday={index === recent.length - 1}
+                  height={TREND_COLUMN_PX}
+                />
+              ))}
+            </div>
+          )}
           <ul className='sr-only'>
             {recent.map((bucket) => (
               <li key={bucket.date}>
@@ -411,7 +418,10 @@ function TrendView({ stats }: { stats: ListeningSummary }) {
             {activeWeeks} of {weeks.length} weeks active
           </p>
           {/* Compact layout: 2 rows of 6 at half height. */}
-          <div className='mt-3 grid grid-cols-6 gap-x-0.5 gap-y-2 lg:hidden'>
+          <div
+            className={
+              compact ? "mt-3 grid grid-cols-6 gap-x-0.5 gap-y-2" : "mt-3 grid grid-cols-6 gap-x-0.5 gap-y-2 lg:hidden"
+            }>
             {weeks.map((bucket, index) => (
               <TrendColumn
                 key={bucket.start}
@@ -426,22 +436,24 @@ function TrendView({ stats }: { stats: ListeningSummary }) {
               />
             ))}
           </div>
-          {/* Wide layout: single row of 12 at full height. */}
-          <div className='mt-3 hidden items-stretch gap-0.5 lg:flex'>
-            {weeks.map((bucket, index) => (
-              <TrendColumn
-                key={bucket.start}
-                label={bucket.label}
-                sublabel={bucket.month}
-                title={`${bucket.range} — ${formatListeningTime(bucket.seconds)} across ${bucket.plays} ${bucket.plays === 1 ? "session" : "sessions"}`}
-                seconds={bucket.seconds}
-                max={weekSeconds}
-                isToday={index === weeks.length - 1}
-                inkBar={false}
-                height={TREND_COLUMN_PX}
-              />
-            ))}
-          </div>
+          {/* Wide layout: single row of 12 at full height. Never in compact containers. */}
+          {compact ? null : (
+            <div className='mt-3 hidden items-stretch gap-0.5 lg:flex'>
+              {weeks.map((bucket, index) => (
+                <TrendColumn
+                  key={bucket.start}
+                  label={bucket.label}
+                  sublabel={bucket.month}
+                  title={`${bucket.range} — ${formatListeningTime(bucket.seconds)} across ${bucket.plays} ${bucket.plays === 1 ? "session" : "sessions"}`}
+                  seconds={bucket.seconds}
+                  max={weekSeconds}
+                  isToday={index === weeks.length - 1}
+                  inkBar={false}
+                  height={TREND_COLUMN_PX}
+                />
+              ))}
+            </div>
+          )}
           <ul className='sr-only'>
             {weeks.map((bucket) => (
               <li key={bucket.start}>

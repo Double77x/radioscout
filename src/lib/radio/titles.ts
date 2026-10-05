@@ -24,3 +24,15 @@ export function readTitlesEnabled(): boolean {
     return false;
   }
 }
+
+/**
+ * Canonical form for comparing and banking heard titles. Stations re-send
+ * the same StreamTitle every few seconds with varying padding, and titles
+ * dedupe by string equality — so without this every repeat banks ("Song",
+ * "Song " and "Song  " render identically but never match). Trim plus an
+ * internal-whitespace collapse; row rendering collapses those runs too, so
+ * the stored form always matches what the sheet shows. Never throws.
+ */
+export function normaliseTrackTitle(raw: string): string {
+  return raw.replaceAll(/\s+/g, " ").trim();
+}

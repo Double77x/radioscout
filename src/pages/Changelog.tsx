@@ -8,6 +8,26 @@ export default function ChangelogPage() {
     <LegalLayout title={meta.title} description={meta.description} keywords={meta.keywords}>
       <Prose>
         <div className='border-l-2 border-primary pb-2 pl-6'>
+          <h2 className='text-2xl font-semibold'>v0.4.0 - Colour themes and a rebuilt station sheet</h2>
+          <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
+          <ul className='list-inside list-disc space-y-2 text-foreground'>
+            <li>
+              Four colour themes — Gruvbox, Nord, Sunset Horizon and Catppuccin — sit alongside light, dark and
+              automatic in Settings → Style, in both schemes. Your pick saves on-device and travels with backups.
+            </li>
+            <li>
+              Station sheets are rebuilt around Info, Recent and Stats tabs at a fixed height: details and links, the
+              songs you have heard with relative times, and your own listening charts for that station alone. The sheet
+              remembers which tab you left open per station.
+            </li>
+            <li>
+              Heard songs also surface on Recently played rows (desktop), with a per-station clear, and votes now count
+              instantly on the sheet and every row together.
+            </li>
+            <li>BBC titles reach the Android app reliably again, and filtered searches gain a back arrow to home.</li>
+          </ul>
+        </div>
+        <div className='border-l-2 border-primary pb-2 pl-6'>
           <h2 className='text-2xl font-semibold'>v0.3.13 - Artwork that respects your privacy</h2>
           <p className='mb-4 text-sm text-muted-foreground'>October 2026</p>
           <ul className='list-inside list-disc space-y-2 text-foreground'>

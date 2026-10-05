@@ -116,7 +116,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: History,
         tint: TINTS[2],
         title: "Recently played",
-        body: "Your recent plays, latest first and capped at ten. Clearing asks first and never touches Saved.",
+        body: "Your recent plays, latest first and capped at ten, with the last heard song on each row. Clearing asks first and never touches Saved.",
         platform: "Web + APK",
       },
       {
@@ -130,7 +130,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: Heart,
         tint: TINTS[4],
         title: "Votes + details",
-        body: "Station sheets with art, tags, a country flag, and voting with a tap. Every station gets a shareable link.",
+        body: "Station sheets with Info, Recent and Stats tabs: art, tags, votes that count instantly, your heard songs, and your listening charts for that station. Every station gets a shareable link.",
         platform: "Web + APK",
       },
     ],
@@ -165,7 +165,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: Music,
         tint: TINTS[4],
         title: "Live song titles",
-        body: "The dock subtitle follows the station's StreamTitle while it plays. Opt in under Settings → Audio on web. Always on in the APK.",
+        body: "The dock subtitle follows the station's StreamTitle while it plays — BBC stations read the BBC's own now-playing feeds. Opt in under Settings → Audio on web. Always on in the APK.",
         platform: "Web + APK",
       },
       {
@@ -207,7 +207,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: MoonStar,
         tint: TINTS[3],
         title: "System theme",
-        body: "Light, dark, or follow your device. A script in the page head sets it before first paint, so there is no flash.",
+        body: "Light, dark, or follow your device — plus Gruvbox, Nord, Sunset Horizon and Catppuccin flavours in both schemes. A script in the page head sets it before first paint, so there is no flash.",
         platform: "Web + APK",
       },
       {
@@ -221,7 +221,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: DatabaseBackup,
         tint: TINTS[2],
         title: "Radio backup",
-        body: "One JSON file holds favourites, history, stats, volume, votes and filters. Download it on web, or send it through the share sheet in the Android app.",
+        body: "One JSON file holds favourites, history, song history, stats, volume, votes, filters and theme. Download it on web, or send it through the share sheet in the Android app.",
         platform: "Web + APK",
       },
       {

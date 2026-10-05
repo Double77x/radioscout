@@ -1,0 +1,1 @@
+Colour themes arrive: Gruvbox, Nord, Sunset Horizon and Catppuccin sit alongside light, dark and automatic. Station sheets are rebuilt around Info, Recent and Stats tabs with your heard songs and per-station listening charts, votes count instantly everywhere, and BBC titles reach the app reliably again.

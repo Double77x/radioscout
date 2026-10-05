@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { version as appVersion } from "../../../package.json";
 import { Download, Monitor, Moon, Settings as SettingsIcon, Sun, Upload } from "lucide-react";
 import { useTheme } from "@/lib/theme";
+import type { Flavor } from "@/lib/theme";
 import { toast } from "sonner";
 import { Logo } from "@/components/Logo";
 import { LanguagePicker } from "@/components/radio/LanguagePicker";
@@ -21,6 +22,7 @@ import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
 import { isNative } from "@/lib/capacitor";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverDescription, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 
@@ -35,6 +37,19 @@ const THEME_OPTIONS = [
   { id: "light", label: "Light", Icon: Sun },
   { id: "dark", label: "Dark", Icon: Moon },
 ] as const;
+
+/**
+ * Flavour swatches (signature dark-mode primary per theme — illustrative,
+ * not the computed token). Five across fits the flyout; names truncate
+ * instead of wrapping on narrow screens.
+ */
+const FLAVOR_OPTIONS: readonly { id: Flavor; label: string; dot: string }[] = [
+  { id: "default", label: "Default", dot: "#8adca6" },
+  { id: "gruvbox", label: "Gruvbox", dot: "#b8bb26" },
+  { id: "nord", label: "Nord", dot: "#88c0d0" },
+  { id: "sunset", label: "Sunset", dot: "#ff7e5f" },
+  { id: "catppuccin", label: "Catppuccin", dot: "#cba6f7" },
+];
 
 /** Stable fallbacks for the persisted hooks (referential stability matters). */
 const WORLDWIDE_FALLBACK: string[] = [];
@@ -56,7 +71,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
       globalThis.removeEventListener("open-settings", onOpenSettings);
     };
   }, []);
-  const { theme, setTheme, resolvedTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme, flavor, setFlavor } = useTheme();
   // Tab variant: anchor the flyout to the whole nav bar (screen-centred) and
   // open upward — the cog sits right of centre, so trigger-anchoring skews right.
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -92,7 +107,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         aria-label='Settings'
         className={
           variant === "logo"
-            ? "group grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-neutral-900 shadow-sm transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            ? "group grid size-12 shrink-0 place-items-center rounded-2xl border border-white/10 bg-logo-tile shadow-sm transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             : "grid size-12 place-items-center rounded-full text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none data-open:bg-scout-ink data-open:text-scout-paper"
         }>
         {variant === "logo" ? (
@@ -116,8 +131,8 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
             <AccordionTrigger className='px-2 py-3 text-sm font-semibold hover:no-underline'>Data</AccordionTrigger>
             <AccordionContent className='px-2'>
               <p className='pb-2 text-xs text-muted-foreground'>
-                Saved stations, history, listening stats, volume, votes, languages, quality and audio leveling in one
-                JSON file — move it between browser and APK.
+                Saved stations, history, song history, listening stats, volume, votes, languages, quality, audio
+                leveling and theme in one JSON file — move it between browser and APK.
               </p>
               <RadioDataSection />
             </AccordionContent>
@@ -226,6 +241,38 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
           <p className='px-2 pt-1.5 text-xs text-muted-foreground'>
             {theme === "system" ? `Following your device (currently ${resolvedTheme})` : `Locked to ${theme} mode`}
           </p>
+          <fieldset className='m-0 min-w-0 border-0 p-0'>
+            <legend className='sr-only'>Colour theme</legend>
+            <div className='mt-3 grid grid-cols-5 gap-2 px-2'>
+              {FLAVOR_OPTIONS.map((option) => {
+                const active = flavor === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type='button'
+                    aria-pressed={active}
+                    aria-label={`${option.label} theme`}
+                    title={option.label}
+                    onClick={() => {
+                      setFlavor(option.id);
+                    }}
+                    className={cn(
+                      "flex min-w-0 cursor-pointer flex-col items-center gap-1.5 rounded-xl border px-1 py-2.5 transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                      active
+                        ? "border-primary bg-muted/60"
+                        : "border-border bg-card text-muted-foreground hover:text-foreground",
+                    )}>
+                    <span
+                      aria-hidden='true'
+                      className='size-6 shrink-0 rounded-full border border-border'
+                      style={{ backgroundColor: option.dot }}
+                    />
+                    <span className='w-full truncate text-center text-[11px] font-medium'>{option.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
         </section>
 
         <p className='px-2 pt-3 pb-1 text-center text-xs text-muted-foreground'>
@@ -246,7 +293,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
   );
 }
 
-/** Radio export/import: favourites, history, stats, volume, votes, languages and quality in one JSON file. */
+/** Radio export/import: favourites, history, stats, volume, votes, languages, quality and theme in one JSON file. */
 function RadioDataSection() {
   const [exportState, setExportState] = useState<"idle" | "working" | "shared" | "downloaded" | "error">("idle");
   const [importState, setImportState] = useState<"idle" | "working" | "done" | "error">("idle");
@@ -282,7 +329,9 @@ function RadioDataSection() {
       .then(({ queryClient }) => {
         void queryClient.invalidateQueries({ queryKey: ["radio"] });
         setImportState("done");
-        toast("Restore complete", { description: "Stations, history, stats, volume, filters and votes are back." });
+        toast("Restore complete", {
+          description: "Stations, history, stats, volume, filters, votes and theme are back.",
+        });
       })
       .catch((error: unknown) => {
         setImportState("error");

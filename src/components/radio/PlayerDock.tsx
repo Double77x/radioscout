@@ -281,9 +281,9 @@ export function PlayerDock() {
                 {busy ? (
                   <LoaderCircle className='size-5 animate-spin' />
                 ) : playing ? (
-                  <Pause className='size-5' fill='currentColor' />
+                  <Pause className='size-5 animate-scout-pop' fill='currentColor' />
                 ) : (
-                  <Play className='size-5 translate-x-px' fill='currentColor' />
+                  <Play className='size-5 translate-x-px animate-scout-pop' fill='currentColor' />
                 )}
               </button>
               <button

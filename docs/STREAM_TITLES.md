@@ -138,6 +138,28 @@ still display, and a feed that stops sending metadata (measured 329/329
 empty blocks over 150s on one Capital XTRA mountpoint while its sibling
 stayed chatty) leaves nothing for any tier to find.
 
+## Song history
+
+Heard titles bank per station into a Dexie `tracks` table (schema v3:
+50 per station, 1000 overall) and surface in the detail sheet as Recent
+tracks with relative times — BBC programmes carry a Show badge, music
+segments and ICY titles render plain. Banking rides the two existing
+title funnels, changed titles only: the probe chain (BBC verdict kinds,
+everything else `icy`) and the APK bridge listener. Both bank
+fire-and-forget with a tracks-query invalidation, so an open sheet
+follows the song and a failed write never disturbs playback.
+
+Coverage is what was actually heard: titles only arrive while playing,
+and web ICY stays behind the Titles switch (BBC probes always, APK ICY
+always). Clearing history clears song history with it; the backup
+envelope carries tracks from v7 (older restores default to empty).
+Titles normalise before comparing (trim plus whitespace collapse):
+stations re-send the same StreamTitle every few seconds with varying
+padding, and the raw strings never match although they render
+identically. `logTrack` also drops a repeat of the latest banked title,
+and reads collapse consecutive normalised duplicates — so rows banked
+before this landed still show as one.
+
 ## Session metadata (car, lock screen, Android Auto)
 
 The dock is not the only thing a listener looks at. Both engines publish the

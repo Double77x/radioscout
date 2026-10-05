@@ -22,6 +22,8 @@ interface StationCardProps {
   outerClassName?: string;
   /** Row press handler for drag-from-anywhere (Saved reorder). */
   onRowPointerDown?: (event: React.PointerEvent<HTMLLIElement>, uuid: string) => void;
+  /** Latest heard song, shown under the meta line (Recently played). */
+  trackTitle?: string;
   /**
    * Mount enter animation. Off for reorderable rows: DOM moves re-trigger
    * the fill animation on drop (opacity flash + translateY replay over the
@@ -44,6 +46,7 @@ export function StationCard({
   outerClassName,
   onRowPointerDown,
   animate = true,
+  trackTitle,
 }: StationCardProps) {
   const meta = [
     station.bitrate > 0 ? `${station.bitrate}k` : null,
@@ -84,9 +87,9 @@ export function StationCard({
           playing ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground",
         )}>
         {playing ? (
-          <Pause className='size-5' fill='currentColor' />
+          <Pause className='size-5 animate-scout-pop' fill='currentColor' />
         ) : (
-          <Play className='size-5 translate-x-px' fill='currentColor' />
+          <Play className='size-5 translate-x-px animate-scout-pop' fill='currentColor' />
         )}
       </Button>
       <StationArt
@@ -108,6 +111,7 @@ export function StationCard({
           <span className='truncate'>
             {meta}
             {station.votes > 0 ? ` · ★ ${formatCount(station.votes)}` : ""}
+            {trackTitle ? ` · ${trackTitle}` : ""}
           </span>
         </span>
       </button>
@@ -119,10 +123,10 @@ export function StationCard({
           onToggleFavourite(station);
         }}
         className={cn(
-          "grid size-10 shrink-0 place-items-center rounded-full transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-          favourited ? "text-amber-500" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          "grid size-10 shrink-0 place-items-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+          favourited ? "text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
         )}>
-        <Star className='size-5' fill='currentColor' />
+        <Star key={favourited ? "saved" : "save"} className='size-5 animate-scout-pop' fill='currentColor' />
       </button>
       {dragHandle}
     </li>

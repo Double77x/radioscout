@@ -69,6 +69,25 @@ describe("listening stats", () => {
     expect(summary.stations).toEqual([]);
   });
 
+  it("scopes every bucket to one station when filtered", async () => {
+    const target = freshDatabase();
+    await logListening(session("a", "Alpha", 120, "2026-09-20T10:00:00.000Z"), target);
+    await logListening(session("b", "Beta", 60, "2026-09-20T11:00:00.000Z"), target);
+    const summary = await summarizeListening(target, new Date("2026-09-21T12:00:00.000Z"), "a");
+    expect(summary.totalSeconds).toBe(120);
+    expect(summary.plays).toBe(1);
+    expect(summary.stations.map((station) => station.stationuuid)).toEqual(["a"]);
+  });
+
+  it("returns zeros for a station with no sessions", async () => {
+    const target = freshDatabase();
+    await logListening(session("a", "Alpha", 120, "2026-09-20T10:00:00.000Z"), target);
+    const summary = await summarizeListening(target, new Date("2026-09-21T12:00:00.000Z"), "missing");
+    expect(summary.totalSeconds).toBe(0);
+    expect(summary.plays).toBe(0);
+    expect(summary.stations).toEqual([]);
+  });
+
   it("buckets sessions Monday-first with per-day averages", async () => {
     // Local noon (never a midnight edge): 2026-09-21 and 2026-09-28 are
     // Mondays, 2026-09-27 a Sunday.

@@ -4,7 +4,7 @@ import indexCss from "@/styles/index.css?url";
 import { GlobalErrorComponent } from "@/components/GlobalErrorComponent";
 import { RootComponent, RootDocument } from "@/components/RootDocument";
 
-const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;if(d){r.classList.add('dark');r.style.colorScheme='dark';}else{r.classList.remove('dark');r.style.colorScheme='light';}}catch(e){}})();`;
+const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);var r=document.documentElement;var f=localStorage.getItem('radioscout:flavor')||'default';r.setAttribute('data-flavor',f);if(d){r.classList.add('dark');r.style.colorScheme='dark';}else{r.classList.remove('dark');r.style.colorScheme='light';}}catch(e){}})();`;
 
 export const Route = createRootRoute({
   head: () => ({

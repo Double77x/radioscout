@@ -3,3 +3,10 @@
 interface ImportMeta {
   readonly env: Record<string, unknown>;
 }
+
+// Raw text imports (`import css from "./index.css?raw"`) for static
+// assertions over stylesheets in unit tests.
+declare module "*?raw" {
+  const content: string;
+  export default content;
+}

@@ -114,6 +114,21 @@ export function RadioHeader({
     searchRef.current?.focus();
   };
 
+  // Filtered home (`/?q=` / `/?tag=`): show the same back arrow as
+  // secondary pages, clearing both params (an open sheet stays open).
+  // Pushed, not replaced, so the browser back button returns to the
+  // filtered view. Client-gated via shownQuery/shownGenre like the rest,
+  // so the prerender never mismatches hydration.
+  const filtering = shownQuery !== "" || shownGenre !== "all";
+  const goHome = () => {
+    pushedRef.current = "";
+    setDraft("");
+    void navigate({
+      to: "/",
+      search: (prev) => ({ station: prev.station }),
+    });
+  };
+
   return (
     <header className='px-4 pt-5'>
       <div className='flex items-center gap-3'>
@@ -131,7 +146,17 @@ export function RadioHeader({
             )}
           </p>
         </div>
-        {pathname === "/" ? null : (
+        {pathname === "/" ? (
+          filtering ? (
+            <button
+              type='button'
+              onClick={goHome}
+              aria-label='Clear search and filters'
+              className='grid size-12 shrink-0 place-items-center rounded-full border border-border bg-card text-muted-foreground transition hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
+              <ArrowLeft className='size-5' />
+            </button>
+          ) : null
+        ) : (
           <Link
             to='/'
             aria-label='Back to home'

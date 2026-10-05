@@ -1,11 +1,19 @@
 import Dexie, { type EntityTable } from "dexie";
 import { formatDayOrdinal } from "./format";
+import { normaliseTrackTitle } from "./titles";
 import { splitQualityFromName, withStationDefaults, type Station } from "./types";
 
 const HISTORY_LIMIT = 50;
 const FAVOURITE_LIMIT = 500;
 /** Completed listening sessions — enough for years of top-station charts. */
 const LISTENING_LIMIT = 1000;
+/** Heard song/programme titles overall — years of listening stay small. */
+const TRACKS_LIMIT = 1000;
+/** Heard titles kept per station (the sheet shows the latest handful). */
+const TRACKS_PER_STATION = 50;
+
+/** Query-key base for per-station song history (`[...TRACKS_KEY, uuid]`). */
+export const TRACKS_KEY = ["radio", "tracks"] as const;
 
 export interface FavouriteRow {
   stationuuid: string;
@@ -22,6 +30,21 @@ export interface HistoryRow {
   played_at: string;
 }
 
+/** Where a heard title came from: BBC music segment, BBC on-air show, or stream metadata. */
+export type TrackKind = "track" | "programme" | "icy";
+
+/**
+ * One heard title. Slim on purpose (no full snapshot — the station row
+ * already names it): the detail sheet lists these newest-first with
+ * relative times.
+ */
+export interface TrackRow {
+  id?: number;
+  stationuuid: string;
+  title: string;
+  kind: TrackKind;
+  played_at: string;
+}
 /**
  * One completed listening session. Slim on purpose (no full snapshot) —
  * names refresh from the latest session, so renamed stations relabel
@@ -178,6 +201,7 @@ export class RadioDB extends Dexie {
   favourites!: EntityTable<FavouriteRow, "stationuuid">;
   history!: EntityTable<HistoryRow, "id">;
   listening!: EntityTable<ListeningRow, "id">;
+  tracks!: EntityTable<TrackRow, "id">;
 
   constructor(name = "scout-radio") {
     super(name);
@@ -189,6 +213,12 @@ export class RadioDB extends Dexie {
       favourites: "stationuuid",
       history: "++id, stationuuid",
       listening: "++id, stationuuid, started_at",
+    });
+    this.version(3).stores({
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
+      tracks: "++id, stationuuid, played_at",
     });
   }
 }
@@ -324,7 +354,10 @@ export function listHistory(database: RadioDB = radioDb): Promise<HistoryRow[]> 
 }
 
 export async function clearHistory(database: RadioDB = radioDb): Promise<void> {
+  // Song history belongs to history, not to stats: clearing the recently
+  // played list takes the heard titles with it.
   await database.history.clear();
+  await database.tracks.clear();
 }
 
 /**
@@ -347,8 +380,12 @@ export async function logListening(row: Omit<ListeningRow, "id">, database: Radi
 export async function summarizeListening(
   database: RadioDB = radioDb,
   now: Date = new Date(),
+  onlyStation?: string,
 ): Promise<ListeningSummary> {
-  const rows = await database.listening.toArray();
+  const stored = await database.listening.toArray();
+  // Station-scoped summaries (the detail sheet) reuse every bucket below —
+  // filtering up front keeps streaks, best days and trends station-true.
+  const rows = onlyStation === undefined ? stored : stored.filter((row) => row.stationuuid === onlyStation);
   const byStation = new Map<string, { name: string; started_at: string; seconds: number; plays: number }>();
   const byDay: DayBucket[] = DAY_LABELS.map((label, day) => ({ day, label, seconds: 0, plays: 0, days: 0 }));
   const seenDates = new Map<number, Set<string>>();
@@ -509,6 +546,84 @@ export async function summarizeListening(
     bestDay,
     longestSession,
   };
+}
+
+/**
+ * Bank one heard title. Callers only pass changed titles (the engine
+ * dedupes before calling), so this just appends and caps: per-station,
+ * then globally. Never throws past the caller — the engine banks
+ * fire-and-forget.
+ */
+export async function logTrack(
+  row: Pick<TrackRow, "stationuuid" | "title" | "kind">,
+  database: RadioDB = radioDb,
+): Promise<void> {
+  // Consecutive-dupe guard: probe repeats and bridge echoes can still reach
+  // here through different paths, so the latest row gets the final say —
+  // repeats never bank twice in a row, but a returning song still banks.
+  const latest = await database.tracks.where("stationuuid").equals(row.stationuuid).last();
+  if (latest && latest.title === row.title) return;
+  await database.tracks.add({ ...row, played_at: nowIso() });
+  const stationKeys = await database.tracks.where("stationuuid").equals(row.stationuuid).primaryKeys();
+  if (stationKeys.length > TRACKS_PER_STATION) {
+    await database.tracks.bulkDelete(stationKeys.slice(0, stationKeys.length - TRACKS_PER_STATION));
+  }
+  const count = await database.tracks.count();
+  if (count > TRACKS_LIMIT) {
+    const oldest = await database.tracks
+      .orderBy("id")
+      .limit(count - TRACKS_LIMIT)
+      .primaryKeys();
+    await database.tracks.bulkDelete(oldest);
+  }
+}
+
+/** Latest heard titles for one station, newest first. Never throws. */ export function listRecentTracks(
+  stationuuid: string,
+  limit = 8,
+  database: RadioDB = radioDb,
+): Promise<TrackRow[]> {
+  // Per-station rows are capped, so an in-memory sort stays cheap (and keeps
+  // the Dexie `reverse()` the linter mistakes for `Array#reverse` away).
+  // `id` order is insertion order — unlike wall-clock stamps, it never ties.
+  // Consecutive duplicates collapse on the normalised form, so titles banked
+  // before the funnel normalisation landed still read as one row.
+  return database.tracks
+    .where("stationuuid")
+    .equals(stationuuid)
+    .toArray()
+    .then((rows) =>
+      rows
+        .toSorted((a, b) => (b.id ?? 0) - (a.id ?? 0))
+        .filter(
+          (row, index, all) =>
+            index === 0 || normaliseTrackTitle(row.title) !== normaliseTrackTitle(all[index - 1]?.title ?? ""),
+        )
+        .slice(0, limit),
+    );
+}
+
+/**
+ * Latest heard title per station (newest bank wins). One indexed pass for
+ * the whole Recently-played section — backing the song line under each row.
+ */
+export async function listLatestTracks(
+  stationuuids: string[],
+  database: RadioDB = radioDb,
+): Promise<Map<string, TrackRow>> {
+  const latest = new Map<string, TrackRow>();
+  if (stationuuids.length === 0) return latest;
+  const rows = await database.tracks.where("stationuuid").anyOf(stationuuids).toArray();
+  for (const row of rows) {
+    const current = latest.get(row.stationuuid);
+    if (!current || (row.id ?? 0) > (current.id ?? 0)) latest.set(row.stationuuid, row);
+  }
+  return latest;
+}
+
+/** Erase one station's heard titles (the Recent tab's own clear). */
+export async function clearStationTracks(stationuuid: string, database: RadioDB = radioDb): Promise<void> {
+  await database.tracks.where("stationuuid").equals(stationuuid).delete();
 }
 
 export function clearListening(database: RadioDB = radioDb): Promise<void> {
