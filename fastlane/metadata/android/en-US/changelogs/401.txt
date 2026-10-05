@@ -1,0 +1,1 @@
+The web app keeps working without a connection: shell, favourites, history and charts stay readable offline, with a one-tap reload when a new version lands. Playback still needs the internet.

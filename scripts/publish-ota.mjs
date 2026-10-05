@@ -31,6 +31,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import AdmZip from "adm-zip";
+import { stripServiceWorker } from "./strip-sw.mjs";
 
 const root = process.cwd();
 
@@ -157,10 +158,12 @@ if (!Number.isInteger(minCode) || (maxCode !== null && !Number.isInteger(maxCode
   fail("Native version codes must be integers (major*10000 + minor*100 + patch).");
 }
 
-// Fresh production build, then zip it.
+// Fresh production build, then zip it. OTA bundles ride native shells, so
+// strip the web-only service worker first (never bundled natively).
 console.log(`[ota:publish] building ${version} for channel "${channel}"…`);
 const built = spawnSync("pnpm", ["exec", "vp", "run", "build"], { cwd: root, stdio: "inherit", shell: true });
 if (built.status !== 0) fail("web build failed — not publishing.");
+stripServiceWorker(path.join(root, "dist", "client"));
 const assetName = `${version}.zip`;
 const zipPath = path.join(os.tmpdir(), `radioscout-ota-${randomUUID()}.zip`);
 const zip = new AdmZip();

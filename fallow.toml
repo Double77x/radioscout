@@ -26,6 +26,7 @@ ignoreDependencies = [
   "sharp", # only imported from scripts/** (native asset compositing) — see above
   "png-to-ico", # same — one-off icon generation output is committed
   "adm-zip", # same — OTA bundle zipping in publish-ota.mjs
+  "workbox-build", # same — service-worker generation in generate-sw.mjs
   "@capacitor/assets", # invoked via `npx @capacitor/assets` in generate-native-assets.mjs
   "@capacitor/cli", # invoked via `npx cap` scripts, never imported
   "@capacitor/android", # native platform shell (gradle side), never imported in TS

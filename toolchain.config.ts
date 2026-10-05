@@ -498,6 +498,16 @@ export default {
           "jsx-a11y/prefer-tag-over-role": "off",
         },
       },
+      {
+        // Canonical workbox SKIP_WAITING handshake: ServiceWorker.postMessage
+        // takes (message, options?), so the rule's suggested targetOrigin
+        // argument would throw at runtime — same-origin worker, no
+        // cross-origin target exists.
+        files: ["src/lib/pwa.ts"],
+        rules: {
+          "unicorn/require-post-message-target-origin": "off",
+        },
+      },
     ],
     settings: {
       react: {

@@ -6,6 +6,7 @@ import { SwipeBack } from "./SwipeBack";
 import Footer from "@/components/Footer";
 import { useCloseStationDetail } from "@/hooks/use-station-detail";
 import { useAgenticPlay } from "@/hooks/use-agentic-play";
+import { registerServiceWorker } from "@/lib/pwa";
 import { armListeningFlush, disarmListeningFlush } from "@/lib/player/store";
 
 interface AppShellProps {
@@ -32,6 +33,13 @@ export function AppShell({ children }: AppShellProps) {
     return () => {
       disarmListeningFlush();
     };
+  }, []);
+
+  // Service-worker registration (web only — the helper no-ops on native).
+  // An imperative browser API by nature: register once, never re-run.
+  // eslint-disable-next-line react-doctor/effect-needs-cleanup
+  useEffect(() => {
+    registerServiceWorker();
   }, []);
 
   return (

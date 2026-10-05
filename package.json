@@ -1,6 +1,6 @@
 {
   "name": "radioscout",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "fallow": "fallow audit",
     "preview": "wrangler pages dev --port 8788",
     "cap:sync": "npx cap sync",
-    "cap:android": "pnpm exec vp run build && npx cap sync android",
+    "cap:android": "cross-env CAPACITOR_BUILD=1 pnpm exec vp run build && node scripts/strip-sw.mjs && npx cap sync android",
     "cap:open:android": "npx cap open android",
     "cap:version": "node scripts/cap-version.js",
     "fdroid:check": "node scripts/fdroid-check.mjs",
@@ -76,6 +76,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
     "adm-zip": "^0.6.1",
+    "cross-env": "7.0.3",
     "eslint-plugin-better-tailwindcss": "^4.7.0",
     "eslint-plugin-react-doctor": "0.9.14",
     "eslint-plugin-react-hooks": "^7.1.1",
@@ -91,8 +92,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "^7.0.2",
     "vite": "catalog:",
-    "vite-plugin-pwa": "^1.3.0",
     "vite-plus": "catalog:",
+    "workbox-build": "7.4.1",
     "wrangler": "^4.142.0"
   },
   "packageManager": "pnpm@12.8.1"

@@ -228,7 +228,7 @@ const GROUPS: FeatureGroup[] = [
         Icon: Download,
         tint: TINTS[4],
         title: "Installable app",
-        body: "Add it to your home screen from the browser and open it full-screen like any other app.",
+        body: "Add it to your home screen from the browser and open it full-screen like any other app. The shell, favourites and stats keep working offline — playback still needs a connection.",
         platform: "Web + APK",
       },
     ],

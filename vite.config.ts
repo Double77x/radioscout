@@ -25,7 +25,14 @@ export default defineConfig(({ mode }) => {
           // `vp build` is the Vite build (incl. prerender) alone; tsc and the
           // postbuild scripts are separate cached stages in one chain.
           // `cap:android` consumes this task, so keep the full chain here.
-          command: "vp build && tsc -b && node scripts/generate-sitemap.js && node scripts/apply-header-policy.js",
+          // The service worker is web-only: `generate-sw.mjs` honors
+          // CAPACITOR_BUILD, but the `vp` task cache replays outputs without
+          // re-running — so native pipelines strip unconditionally via
+          // `strip-sw.mjs` right before consuming dist (see `cap:android`,
+          // `release-apk.yml`, `publish-ota.mjs`). That step is the real
+          // guarantee; the env flag just documents intent.
+          command:
+            "vp build && tsc -b && node scripts/generate-sitemap.js && node scripts/apply-header-policy.js && node scripts/generate-sw.mjs",
           cache: {
             output: ["dist/**"],
           },

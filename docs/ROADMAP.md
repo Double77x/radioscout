@@ -28,7 +28,7 @@ Tracked workstreams. Checked items are done and gated (lint, tsc, unit, e2e, bui
 
 ## Up next (agreed)
 
-- [ ] PWA offline pass (service worker, install prompt)
+- [x] PWA offline pass (web-only service worker: precached shell/routes, directory + artwork runtime caches, update/offline toasts; native shell neither bundles nor registers one)
 - [ ] Sleep timer (web-side)
 - [ ] Vote counts refresh (wiring done via sheet)
 - [ ] Separate Pages domain (canonical now `radioscout.pages.dev` — drop this once DNS is confirmed live)
