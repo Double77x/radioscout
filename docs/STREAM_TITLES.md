@@ -55,7 +55,9 @@ web and APK both go through the edge function
 `GET /api/bbc-title?service=<id>` (or `?url=<stream>`, resolved
 server-side; `functions/api/bbc-title.ts`), cached 30s via the Cache API
 (tracks turn over every few minutes — upstream still sees ~2 pulls per
-station per minute globally). Dev uses the vite-only
+station per minute globally). On the APK the call goes to the absolute
+canonical URL (hardcoded site fallback — APK builds bake no
+`VITE_CANONICAL_URL`). Dev uses the vite-only
 `/__bbc/probe?service=<id>` middleware (`scripts/icy-probe-plugin.ts`).
 
 Poll timing (`engine.ts` — one adaptive timeout chain per play, no fixed

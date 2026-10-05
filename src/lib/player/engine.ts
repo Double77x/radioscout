@@ -23,6 +23,7 @@ import { loadDirectUnsupported, recordDirectUnsupported } from "@/lib/radio/dire
 import { fetchRadioliseTitle } from "@/lib/radio/radiolise";
 import { subscribeRadioliseTitle, type RadioliseSubscription } from "@/lib/radio/radiolise-socket";
 import { readTitlesEnabled } from "@/lib/radio/titles";
+import { siteConfig } from "@/lib/site";
 import { envString, isRecord } from "@/lib/utils";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
 import {
@@ -407,8 +408,13 @@ function armIcyProbe(station: Station, url: string): void {
       // (node/unit-test contexts have no native bridge).
       const { isNative } = await import("@/lib/capacitor");
       if (isNative()) {
-        const canonical = envString("VITE_CANONICAL_URL");
-        endpoint = canonical === undefined ? null : `${canonical.replace(/\/+$/, "")}/api/bbc-title?${query}`;
+        // APK builds bake no VITE_CANONICAL_URL (CI sets no Vite env and
+        // wrangler vars never reach the client), so use the hardcoded site
+        // URL instead. Without this the endpoint stays null and BBC titles
+        // never leave the device.
+        // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- empty env var counts as unset and falls through to the hardcoded site URL
+        const canonical = envString("VITE_CANONICAL_URL") || siteConfig.url;
+        endpoint = `${canonical.replace(/\/+$/, "")}/api/bbc-title?${query}`;
       } else {
         endpoint = `/api/bbc-title?${query}`;
       }
