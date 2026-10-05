@@ -8,6 +8,12 @@ def releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_FILE")
 android {
     namespace = "io.github.double77x.radioscout"
     compileSdk = rootProject.ext.compileSdkVersion
+    // F-Droid rejects APKs with extra signing blocks, and AGP 8 embeds a
+    // "Dependency metadata" block by default — keep it out of every bundle.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
+    }
     // Artifact name: radioscout-debug.apk / radioscout-release.apk (default would be app-*.apk).
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
