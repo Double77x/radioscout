@@ -20,6 +20,16 @@ compatibility_date = "2025-09-02"
 # TanStack Start SSG output directory served by Cloudflare Pages
 pages_build_output_dir = "dist/client"
 
+# Workers Logs for Pages Functions (`/api/bbc-title`, `/api/icy-title`):
+# per-request invocation logs plus `console` output, 7-day retention, so
+# fallback triggers are visible in the dashboard after deploying.
+[observability]
+enabled = true
+
+[observability.logs]
+invocation_logs = true
+head_sampling_rate = 1
+
 [vars]
 NODE_VERSION = "26.8.2"
 PNPM_VERSION = "12.8.1"
