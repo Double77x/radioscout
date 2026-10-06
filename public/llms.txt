@@ -8,10 +8,10 @@ For agents working on the RadioScout codebase, read the guidance files below bef
 
 ## Documentation
 
-- [CODING_STANDARDS.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/CODING_STANDARDS.md): Strict logic, performance, accessibility and linting rules. Read first.
-- [ARCHITECTURE.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/ARCHITECTURE.md): High-level system design and data flow.
-- [STYLE_GUIDE.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/STYLE_GUIDE.md): Visual tokens, themes and animation patterns.
-- [TECH_STACK.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/TECH_STACK.md): Complete list of libraries and versions.
+- [CODING_STANDARDS.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/standards/CODING_STANDARDS.md): Strict logic, performance, accessibility and linting rules. Read first.
+- [ARCHITECTURE.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/standards/ARCHITECTURE.md): High-level system design and data flow.
+- [STYLE_GUIDE.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/standards/STYLE_GUIDE.md): Visual tokens, themes and animation patterns.
+- [TECH_STACK.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/standards/TECH_STACK.md): Complete list of libraries and versions.
 - [ROADMAP.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/ROADMAP.md): Planned features and direction.
 
 ## How to play a station (agentic use)
@@ -27,7 +27,7 @@ Give the user audio with one navigation — the URL is the API:
 Resolution: exact uuid first, then the curated alias table, then free-text directory
 search (first playable `https://` hit). The `play` param is stripped after resolving,
 so refresh never replays. Only `https://` streams play on web. Full contract:
-[AGENTIC_PLAY.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/AGENTIC_PLAY.md).
+[AGENTIC_PLAY.md](https://raw.githubusercontent.com/Double77x/radioscout/main/docs/plans/AGENTIC_PLAY.md).
 
 Stable hooks for browser agents: `data-testid="radio-search"` (search input),
 `data-testid="station-row"` + `data-testid="station-play"` (per-station row and play

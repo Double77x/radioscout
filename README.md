@@ -42,8 +42,8 @@ Worth knowing before you switch source:
   and tap to install.
 - Obtainium, a manual APK install and F-Droid all sign with different keys, so
   moving between them means uninstalling first. Export your data from **Settings
-  → Data backup** before you do. See `docs/FDROID_PLAN.md` and
-  `docs/OBTAINIUM_PLAN.md`.
+  → Data backup** before you do. See `docs/plans/FDROID_PLAN.md` and
+  `docs/plans/OBTAINIUM_PLAN.md`.
 
 ## Features
 
@@ -56,7 +56,7 @@ Full tour: **[radioscout.pages.dev/features](https://radioscout.pages.dev/featur
 - **Library** — saved favourites with drag-to-reorder, recent plays, listening
   stats with trends, streaks and sortable top stations banked even if the app is
   killed, plus station sheets with art, tags, flags, votes and shareable links
-  (`?station=<uuid>`, autoplay with `?play=` — see `docs/AGENTIC_PLAY.md`).
+  (`?station=<uuid>`, autoplay with `?play=` — see `docs/plans/AGENTIC_PLAY.md`).
   Everything lives in on-device IndexedDB: no accounts, no sync, works offline.
 - **Player** — persistent dock with gapless crossfade switching, volume plus
   per-station levelling, sleep timer with dock countdown, surprise shuffle, quick
@@ -107,7 +107,7 @@ crawls links to emit static HTML for every route into `dist/client`.
 
 - Node 26.8.2 (`.node-version`) and pnpm 12.8.1 (`packageManager`)
 - Android builds only: JDK 21 and the Android cmdline-tools (`ANDROID_HOME`,
-  see `docs/CAPACITOR_PLAN.md`)
+  see `docs/plans/CAPACITOR_PLAN.md`)
 
 ## Tooling
 
@@ -194,7 +194,7 @@ pnpm build:android:aab   # release bundle
 
 Release APKs come from tagging: `v*` builds a keystore-signed APK, attaches it
 to the GitHub Release, and publishes a matching OTA bundle. See
-`docs/CAPACITOR_PLAN.md` for the signing drill.
+`docs/plans/CAPACITOR_PLAN.md` for the signing drill.
 
 The Obtainium listing lives at
 `distribution/obtainium/io.github.double77x.radioscout.json` and reuses the
@@ -247,21 +247,26 @@ If you know a station that upgrades cleanly:
 
 ## For agents
 
-This repo is meant to be read top-down. Start here:
+Start at [`docs/README.md`](docs/README.md). It maps the tiers and names the
+trigger for each one. The short version:
 
-1. `docs/ARCHITECTURE.md` — system design, routing, SSG lifecycle, native shell
-2. `docs/TECH_STACK.md` — exact versions and why each piece was chosen
-3. `docs/CODING_STANDARDS.md` — state rules (Query over Dexie, Router for URL
-   state), no `useEffect` fetch, composition over inheritance
-4. `docs/STYLE_GUIDE.md` — Tailwind tokens and layout zones
-5. `src/lib/radio/store.ts` and `src/hooks/use-radio.ts` — example Query + Dexie
-   flow
-6. `src/components/radio/StationSkeleton.tsx` — geometry-matched loading
-   skeletons
-7. `src/components/scout/SwipeBack.tsx` and `src/lib/animated-back.ts` — gesture
-   and OS-back coordination
-8. `docs/AGENTIC_PLAY.md` — the agentic `?play=` URL contract, alias table, DOM
-   hooks and expansion path
+1. `docs/standards/CODING_STANDARDS.md` — the rules, and the only file required
+   on every task
+2. `docs/standards/STYLE_GUIDE.md` — if the change touches UI
+3. `docs/standards/TECH_STACK.md` — if the change touches dependencies, the build
+   or CI
+4. `docs/standards/ARCHITECTURE.md` — if the change moves a boundary between
+   subsystems
+5. A module's own file header names its contract doc, where one exists
+
+Reading the whole `docs/` folder is not the instruction. Three files in `src` are
+worth reading as worked examples:
+
+- `src/lib/radio/store.ts` and `src/hooks/use-radio.ts` — Query over Dexie, URL
+  state in the Router
+- `src/components/radio/StationSkeleton.tsx` — geometry-matched loading skeletons
+- `src/components/scout/SwipeBack.tsx` and `src/lib/animated-back.ts` — gesture
+  and OS-back coordination
 
 Gates to pass before opening a pull request:
 
@@ -279,21 +284,28 @@ pnpm test                            # playwright + axe
 `fallow.toml` holds the baseline for `dead-code`, `dupes` and `health`. Run
 `fallow dead-code --trace src/file:export` before deleting a flagged export; the
 Tailwind and oxlint plugins produce false positives. See
-`docs/CODING_STANDARDS.md#15`.
+`docs/standards/CODING_STANDARDS.md#15`.
 
 ## Docs
 
-- `docs/ARCHITECTURE.md` — routing, SSG, data flow, design system
-- `docs/AGENTIC_PLAY.md` — agentic `?play=` contract and alias maintenance
-- `docs/TECH_STACK.md` — versions and rationale
-- `docs/CODING_STANDARDS.md` — hooks, state, performance, a11y, Fallow
-- `docs/STYLE_GUIDE.md` — tokens and layout
-- `docs/ROADMAP.md` — what is planned next
-- `docs/CAPACITOR_PLAN.md` — native shell, signing, release workflow
-- `docs/NATIVE_AUDIO_PLAN.md` — the Media3 foreground-service player
-- `docs/FDROID_PLAN.md` — F-Droid recipe, reproducible builds, listing metadata
-- `docs/OBTAINIUM_PLAN.md` — Obtainium listing config and its release-layout
-  hazards
+[`docs/README.md`](docs/README.md) is the index. The folders split by _when_ you
+read them:
+
+- `docs/standards/` — **read all of it, every task.** `CODING_STANDARDS.md` (hooks,
+  state, performance, a11y, Fallow, comments and docs), `STYLE_GUIDE.md` (tokens,
+  layout, motion), `TECH_STACK.md` (versions and rationale), `ARCHITECTURE.md`
+  (system map, routing, SSG lifecycle, data flow, native shell)
+- `docs/modules/` — per-module contracts, paths mirroring `src/`
+- `docs/lineage.md` — append-only decision log: what was chosen, why, and what it
+  cost. Search this first when tracing a problem
+- `docs/plans/` — the long-form version of the nine decisions that earned one:
+  `AGENTIC_PLAY.md` (the `?play=` contract), `CAPACITOR_PLAN.md`
+  (native shell, signing, release), `NATIVE_AUDIO_PLAN.md` (the Media3
+  foreground-service player), `FDROID_PLAN.md` (reproducible builds, listing
+  metadata), `OBTAINIUM_PLAN.md` (listing config and its release-layout hazards),
+  `STREAM_TITLES.md` (ICY, BBC RMS and the edge functions), and the three
+  `REFACTOR_*.md` audits
+- `docs/ROADMAP.md` and `docs/TODO.md` — living state rather than reference
 
 ## Contributing
 
@@ -306,8 +318,8 @@ Use the bug report template and include the steps to reproduce, what you
 expected, what happened, the browser, and a short `pnpm exec vp run build` log if prerender
 failed. For features, use the feature request template and describe the use case
 first. For larger work, open an issue before you start so we do not pull in
-different directions. For questions, check `docs/ARCHITECTURE.md` and
-`docs/CODING_STANDARDS.md`, then try GitHub Discussions or `CTRL+K` →
+different directions. For questions, check `docs/standards/ARCHITECTURE.md` and
+`docs/standards/CODING_STANDARDS.md`, then try GitHub Discussions or `CTRL+K` →
 GitHub repository.
 
 ### Pull requests

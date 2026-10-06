@@ -1,6 +1,6 @@
 # Performance + useEffect Policy — player engine refactor (holds at landing 2026-09-23)
 
-`useEffect` is a last resort (see `AGENTS.md` useEffect discipline + `docs/CODING_STANDARDS.md:58-65`). This doc records the current audit and the rules every refactor slice must follow so the split makes the app faster or neutral — never slower.
+`useEffect` is a last resort (see `AGENTS.md` useEffect discipline + `docs/standards/CODING_STANDARDS.md:58-65`). This doc records the current audit and the rules every refactor slice must follow so the split makes the app faster or neutral — never slower.
 
 ## 1. Current useEffect audit (12 occurrences across 8 files, `grep useEffect src`)
 

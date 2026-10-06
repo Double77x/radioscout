@@ -136,7 +136,7 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - **Critical Errors:** Use Error Boundaries to prevent full app crashes.
   - **Logging:** Log errors to console (or monitoring service) with context.
 
-## 7. Testing Strategy
+## 9. Testing Strategy
 
 - **Tool:** **Vitest**.
 - **Focus:**
@@ -144,14 +144,14 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - **Integration Tests:** Test critical user flows (e.g., "User can upload image and generate SVG").
 - **Components:** Test for accessibility and interaction, not implementation details.
 
-## 8. Styling (Tailwind + Shadcn)
+## 10. Styling (Tailwind + Shadcn)
 
 - **Tailwind V4 Standards:** As this project uses Tailwind V4, always use **canonical equivalents** if a standard utility exists within the design system.
 - **Tokens:** Use Shadcn CSS variables (`bg-primary`, `text-muted-foreground`) for all styling to ensure theme compatibility (Light/Dark mode).
 - **Consistency:** Avoid arbitrary values (e.g., `w-[123px]`). Use standard Tailwind spacing scale and design system tokens.
 - **ClassName Merging:** Always use `cn()` utility to allow prop overrides.
 
-## 9. Responsive Design & Layout
+## 11. Responsive Design & Layout
 
 - **Mobile-First Approach:** Always start with base classes for mobile devices. Use responsive prefixes (`md:`, `lg:`, etc.) to enhance the layout for larger screens.
 - **Fluidity & Flexbox/Grid:** Favor `flex` and `grid` over fixed positioning or hardcoded widths. Use `w-full` with `max-w-` constraints to ensure components look good on ultra-wide monitors and small phones alike.
@@ -163,37 +163,55 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - If a component feels "broken" at a specific width, consider using a more granular Tailwind breakpoint or a custom fluid utility.
 - **No Horizontal Scrolling:** Ensure that content never forces a horizontal scrollbar on the main viewport. Use `overflow-x-auto` strictly for targeted elements like data tables or code blocks.
 
-## 10. Semantic Tokenization
+## 12. Semantic Tokenization
 
 - **Canonical Utilities:** Prioritize native Tailwind V4 features and theme tokens over custom utilities or magic components.
 - **Avoid Hardcoded Colors:** Never use hex codes like `#3b82f6` in Tailwind classes. Use semantic tokens like `text-primary`, `bg-muted`, or `border-border`.
-- **Token Creation:** If a specific color or pattern is reused frequently (e.g., a "Glow" effect), add a new CSS variable to `src/index.css`.
+- **Token Creation:** If a specific color or pattern is reused frequently (e.g., a "Glow" effect), add a new CSS variable to `src/styles/index.css`. A new token needs a value on `:root`, a value on `.dark`, and a pair of selectors for every flavour, or it will render with whatever the previous theme left behind. `tests/unit/theme-tokens.test.ts` names the one you missed.
 - **Utility Classes:** Prefer standard Tailwind utilities. Only create "magic" classes in `@layer components` for extremely complex patterns.
 
-## 11. Iconography
+## 13. Iconography
 
 - **Standard:** Use **Lucide React** exclusively.
 - **Consistency:** Maintain consistent stroke widths (`strokeWidth={2}`) and sizes (`w-4 h-4` for inline, `w-5 h-5` for standard buttons).
 
-## 12. Data Integrity & Validation
+## 14. Data Integrity & Validation
 
 - **Tool:** **Zod**.
 - **Rule:** Any data entering the system from an untrusted source (User Input, URL Params, File Uploads) **MUST** be validated with a Zod schema.
 
-## 13. AI Agent Protocol
+## 15. AI Agent Protocol
 
-- **Context First:** Before starting any task, read all files in the `docs/` folder.
+- **Context First:** Read every file in `docs/standards/` before any task — `CODING_STANDARDS.md` (this file), `STYLE_GUIDE.md`, `TECH_STACK.md` and `ARCHITECTURE.md`. `AGENTS.md` lists them and `scripts/check-doc-pointers.js` fails the build if a standard is added without appearing there. The rest of `docs/` is on demand: `docs/README.md` is the map, a module's own file header points at its contract, and `docs/lineage.md` answers *why* something is the way it is.
 - **Adherence:** Strictly follow the standards defined in `CODING_STANDARDS.md`.
 - **Memory:** Update `ROADMAP.md` or `ARCHITECTURE.md` if you make significant structural changes.
 
-## 14. Tool & MCP Usage
+### Standing prohibitions
+
+In force now, not history. Each exists because breaking it causes damage that is hard to notice afterwards. Every one of these was buried in a dated `AGENTS.md` entry, which is why they live here.
+
+- **Never run `git sparse-checkout` in this app checkout.** It hides tracked files behind skip-worktree while `git status` still looks clean, so the damage survives into the next command. Clone fdroidserver separately. (`docs/plans/FDROID_PLAN.md`)
+- **Never enable `includePrereleases` on the Obtainium config.** `fdroid-reference.yml` marks its reference APK `prerelease: true`, so the default `includePrereleases: false` is the only thing keeping that flavor from reaching a sideload user. (`docs/plans/OBTAINIUM_PLAN.md` §4.2, and the comment at the `--prerelease` line in `scripts/publish-ota.mjs`)
+- **Never gate the `isDdgPlaceholder` test on `stage`.** A cached instant decode resolves before React registers its listeners, and an HTTP-cache hit can serve the decoded placeholder to the wsrv attempt without any event firing, so a `stage` guard passes while the row still shows the placeholder. (`docs/lineage.md`, 2026-10-04)
+- **Do not let the native playlist read gate the web play chain.** IndexedDB stalls under the mocked timers the unit tests use, so building the playlist inline breaks the web path. (`docs/lineage.md`, 2026-10-02)
+
+### Verification traps
+
+Signals that look conclusive and are not. Each has already produced a wrong conclusion once.
+
+- **`url_resolved` cannot prove TLS.** It carries the same `http://` the browser later upgrades, so the column says nothing about whether https works. Load a candidate's https variant directly before adding its exact host to `HTTPS_UPGRADE_HOSTS`. (`docs/lineage.md`, 2026-09-23)
+- **`Cache-Control` alone does not prove an edge cache hit.** Pages Function responses are not edge-cached by that header on its own, and a deterministic error body reads the same whether it was re-probed or served from cache. Compare full bodies (identical `at` field) plus MISS/HIT timings. (`docs/lineage.md`, 2026-10-01)
+- **Regenerating icons churns the committed favicon and PNGs.** The committed assets predate `scripts/generate-icons.mjs`, so a regen produces a large unrelated diff. Run `node scripts/generate-icons.mjs`, then `pnpm cap:assets`, then revert the favicon/PNG churn. (`docs/lineage.md`, 2026-09-20)
+- **Set `npm_config_manage_package_manager_versions=false` for local pnpm invocations.** `packageManager` pins 12.8.1, which is newer than `minimumReleaseAge` (10080 minutes), so a bare `pnpm` self-installs a different version. (`docs/lineage.md`, 2026-09-30)
+
+## 16. Tool & MCP Usage
 
 - **Leverage Resources:** Actively check for and use available MCP servers and Skills (`<available_skills>`) if they can assist with the current task (e.g., retrieving documentation, linting, or checking best practices).
 - **Graceful Failure:**
   - If a tool call hangs for an extended period, **cancel it** to preserve context window and time.
   - **Timeout Policy:** If a specific tool times out or fails repeatedly, **do not use it again** for the remainder of the session. Fall back to manual methods or alternative tools.
 
-## 15. Verification & Quality Control
+## 17. Verification & Quality Control
 
 - **Small Changes (Components/Logic):**
   - Perform a targeted lint check on all modified files using `lint-files`.
@@ -205,7 +223,7 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - **Tests:** Run `pnpm run test:unit` (vitest) and `pnpm test` (playwright) as appropriate.
 - **Fail First:** If any verification step fails, the task is not considered complete until the issue is resolved.
 
-## 16. Accessibility (A11y)
+## 18. Accessibility (A11y)
 
 - **Semantic HTML:** Use correct HTML elements for their intended purpose (e.g., `<button>` for actions, `<a>` for navigation).
 - **ARIA Labels:**
@@ -217,7 +235,7 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
 - **Keyboard Navigation:** Ensure all interactive elements are focusable and have a visible focus state.
 - **Color Contrast:** Ensure text meets WCAG AA standards against its background.
 
-## 17. Dead Code, Duplication & Architecture Hygiene (Fallow)
+## 19. Dead Code, Duplication & Architecture Hygiene (Fallow)
 
 - **Standard Tool:** Use **Fallow** (`npx fallow dead-code`, `npx fallow dupes`, `npx fallow health`, `npx fallow audit --format json --quiet`) to maintain a clean codebase. Config lives in `fallow.toml` (migrated from `knip.ts`).
 - **False Positive Awareness:**
@@ -227,13 +245,13 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - **Agentic Workflow:** For AI agents and scripts, run `npx fallow audit --format json --quiet 2>/dev/null` and treat exit `0`/`1` as success (`1` = findings), `2` as real error (JSON envelope on stdout). Use `fallow` as the tidy gate before commit/PR (`fallow audit`), for refactoring prioritization (`fallow health --hotspots`), and for guard checks (`fallow guard <files>`).
   - **Regression Baseline:** CI uses embedded `regression.baseline` in `fallow.toml` (populated via `npx fallow --save-regression-baseline`). Run with `--fail-on-regression` to block count increases. Keep Fallow as part of the agentic process to keep the codebase tidy — run `audit` after each feature, and `dead-code --trace` before deleting any flagged export/file.
 
-  ## 18. Layout Abstraction
+## 20. Layout Abstraction
   - **DRY Layouts:** If multiple pages share the same structural pattern (e.g., Header + Sidebar + Content), do not rebuild the layout in each page.
   - **Master Layouts:** Build a master layout component in the `src/components/layout` folder.
   - **Implementation:** Master layouts should use React props (like `children` or specific slots) to allow pages to inject their own content while keeping the container logic centralized.
   - **Example:** Refer to `LegalLayout.tsx` for the established standard on how to abstract complex, shared UI structures in this project.
 
-## 19. Security & CSP Headers
+## 21. Security & CSP Headers
 
 - **CSP Maintenance:** Always maintain a robust Content Security Policy (CSP) to prevent XSS and data injection attacks.
 - **Balance:** Strike a balance between strict security and production stability. Avoid over-restrictive policies that break critical third-party integrations (e.g., Google Fonts, analytics, or CDN-hosted assets).
@@ -245,19 +263,54 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - Inline scripts (like the theme toggle script in `index.html`) are properly allowed via hashes or nonces.
   - `style-src` is compatible with our theme-switching mechanism and any external font CDNs.
 
-## 20. Font Self-Hosting & Preloading
+## 22. Font Self-Hosting & Preloading
 
 - **Self-Hosting Required:** All fonts used in the project **MUST** be self-hosted. Do not link to external font CDNs (like Google Fonts) in production.
 - **Benefits:** This improves LCP (Largest Contentful Paint), removes critical request chains, and ensures full GDPR compliance by not leaking user IP addresses to third-party CDNs.
 - **Directory:** Font files (WOFF2 preferred) should be stored in `public/fonts/`.
 - **Implementation:**
-  - Define `@font-face` rules in `src/fonts.css`.
-  - Import `fonts.css` at the top of `src/index.css`.
+  - `@font-face` rules live in `src/styles/fonts.css`, weights 300 to 700, each with `font-display: swap`.
+  - A metric-matched fallback follows them (`Poppins Fallback` on `local("Arial")`, `size-adjust: 98.5%`, `ascent-override: 105%`, `descent-override: 35%`, `line-gap-override: 0%`). Without those overrides the swap reflows the page.
+  - Both stylesheets are imported in `src/routes/__root.tsx` with `?url` and passed to `Route.head` as stylesheet links. A side-effect `import "@/styles/index.css"` is treated as an async client chunk rather than a render-blocking resource, which costs a flash of unstyled text.
 - **Preloading:** Critical font weights (e.g., Regular 400 and Bold 700) **MUST** be preloaded via `Route.head` `<link rel="preload">` to prevent FOUT (Flash of Unstyled Text).
 
-## 21. Import Conventions
+## 23. Import Conventions
 
 - **Path Aliases:** Always use the path aliases defined in the project configuration (`tsconfig.json` and `vite.config.ts`).
 - **Standard Alias:** Use the `@/` prefix to refer to the `src` directory (e.g., `import { Button } from "@/components/ui/button"`).
 - **Benefits:** This avoids deep relative paths (`../../../../`) and makes refactoring significantly easier.
 - **Consistency:** Use the alias for all imports that are not in the same directory.
+
+## 24. Comments and Documentation
+
+- **A comment states a constraint, not a history.** Keep it if deleting it would make a competent agent choose wrongly: an ordering requirement, an invariant, a platform split, the reason the obvious approach does not work here. Drop it if it only explains how the code arrived at its current shape.
+- **No archaeology in code.** No dates, no "before this worked", no incident write-ups, no measurements of the bug that prompted the line. Present tense only. A comment that needs a past tense belongs in a plan.
+- **One home per why.** State a verdict in exactly one place and point at it from everywhere else. Duplication is what lets documentation end up contradicting itself, which is the only failure mode worth designing against here.
+- **Long prose does not live in a docblock.** A module-level block much over ten lines is a document, so it belongs in `docs/modules/` with a pointer left in the header. A docblock that annotates no declaration is a module map in the wrong format; move it.
+- **Where each kind of writing goes:**
+  - **TSDoc on an export** is the contract for its caller. Short, present tense, and it never restates the module doc.
+  - **`docs/modules/`** holds per-module contracts in present tense. The path mirrors `src/`, so `src/lib/player/engine.ts` is documented by `modules/player/engine.md`. A module doc that starts needing a History section is telling you the content belongs in `plans/`, so link out.
+  - **`docs/plans/`** holds dated decision records. These are append-only: add entries, never edit them. That is exactly what makes them safe, because a record nobody rewrites cannot end up contradicting the code it describes.
+  - **`AGENTS.md`** is the one-line index into all of the above.
+- **Pointers must resolve.** Every path a source file names has to exist, every module doc has to be reachable from a source header or from `docs/README.md`, and every document has to be named by the index. `scripts/check-doc-pointers.js` runs all three in the build chain, so a moved doc fails the build instead of quietly rotting.
+
+### When you change code
+
+The rules above cover what to write. This covers what to update, which is the half that goes stale.
+
+| Your change | Also do this |
+| :---- | :---- |
+| Behaviour a module doc describes | Update that doc in the same change. A doc that outlives its code is worse than none |
+| A decision — a trade-off made, an approach rejected | Append a `docs/lineage.md` entry and an index line in `AGENTS.md` |
+| A constraint future work must respect | Promote it to §15. If it can damage the repo, it does not belong in history |
+| A dependency or its version | `standards/TECH_STACK.md` |
+| A design token or layout rule | `standards/STYLE_GUIDE.md` |
+| A subsystem boundary or the shape of the app | `standards/ARCHITECTURE.md` |
+| None of the above | Nothing. Most changes touch no document |
+
+- **The module doc is authoritative for current behaviour; `lineage.md` is authoritative for what was decided and when.** When they disagree, the code is right, the module doc wins, and lineage gets a correction.
+- **Never edit a lineage entry.** Append a correction that names the date it supersedes and says which part was wrong. That is the only thing that makes an append-only log worth trusting.
+- **A decision that constrains future work is a rule, not a record.** Standing prohibitions and verification traps live in §15 precisely so they cannot be lost by not opening `lineage.md`.
+- **If you find a document that is already wrong and your change did not cause it, fix it or say so.** Do not leave it for the next reader to trip over.
+
+The gates are structural: they check that pointers resolve, that documents are indexed and that sizes stay bounded. None of them can tell that prose has stopped matching the code. Accuracy here is procedural, which is the point of writing it down.

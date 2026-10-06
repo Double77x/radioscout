@@ -68,7 +68,7 @@ Base: `https://radioscout.pages.dev/`
 
 ## 4. Files
 
-- `docs/AGENTIC_PLAY.md` (this file) — contract + expansion path.
+- `docs/plans/AGENTIC_PLAY.md` (this file) — contract + expansion path.
 - `public/llms.txt` — "How to play" section for LLM discovery.
 - `src/data/station-aliases.ts` — curated alias → search-term table + normalizer.
 - `src/hooks/use-agentic-play.ts` — `?play=` / `?station=&play=1` resolver (client-only).
