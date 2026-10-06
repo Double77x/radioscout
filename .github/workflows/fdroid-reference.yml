@@ -20,8 +20,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  REFERENCE_TAG: fdroid-reference-0.4.1-401
-  REFERENCE_APK: radioscout-fdroid-0.4.1-401.apk
+  REFERENCE_TAG: fdroid-reference-0.4.3-403
+  REFERENCE_APK: radioscout-fdroid-0.4.3-403.apk
 
 jobs:
   build-reference:
@@ -137,7 +137,7 @@ jobs:
         with:
           prerelease: true
           tag_name: ${{ env.REFERENCE_TAG }}
-          name: F-Droid reproducible reference 0.4.1 (401)
+          name: F-Droid reproducible reference 0.4.3 (403)
           body: |
             This is the signed F-Droid-specific reference APK for reproducible-build verification.
 
@@ -145,8 +145,8 @@ jobs:
 
             - Source commit: `${{ github.sha }}`
             - Application ID: `io.github.double77x.radioscout`
-            - Version: `0.4.1`
-            - Version code: `401`
+            - Version: `0.4.3`
+            - Version code: `403`
             - Asset: `${{ env.REFERENCE_APK }}`
           files: ${{ env.REFERENCE_APK }}
           fail_on_unmatched_files: true
