@@ -81,22 +81,32 @@ describe("chart over-fetch", () => {
     expect(seen[0]).toContain("limit=100");
   });
 
-  it("over-fetches the topvote endpoint and slices to the limit", async () => {
-    const rows = Array.from({ length: 150 }, (_, i) => row(`uuid-${i}`, i % 3 !== 0));
+  it("pages the unfiltered topvote chart until full (HTTP-heavy top rows)", async () => {
+    // Live shape: most top-voted rows are HTTP-only, so a fixed over-fetch
+    // starves (108 of top-150 dropped -> 42 shown). First page yields 30
+    // playable, second page fills to 50.
+    const rows = Array.from({ length: 400 }, (_, i) =>
+      i < 200 ? row(`uuid-${i}`, i % 7 === 0) : row(`uuid-${i}`, true),
+    );
     const seen: string[] = [];
-    stubFetch(rows, seen);
+    stubPaged(rows, seen);
     const stations = await topVotedStations(50);
     expect(stations).toHaveLength(50);
-    expect(seen[0]).toContain("/json/stations/topvote/150");
+    expect(seen.map((url) => offsetOf(url))).toEqual([0, 200]);
+    expect(seen[0]).toContain("/json/stations/search?");
+    expect(seen[0]).toContain("order=votes");
   });
 
-  it("over-fetches the topclick endpoint and slices to the limit", async () => {
-    const rows = Array.from({ length: 150 }, (_, i) => row(`uuid-${i}`, true));
+  it("pages the unfiltered topclick chart until full", async () => {
+    const rows = Array.from({ length: 250 }, (_, i) =>
+      i < 200 ? row(`uuid-${i}`, i % 7 === 0) : row(`uuid-${i}`, true),
+    );
     const seen: string[] = [];
-    stubFetch(rows, seen);
+    stubPaged(rows, seen);
     const stations = await topClickedStations(50);
     expect(stations).toHaveLength(50);
-    expect(seen[0]).toContain("/json/stations/topclick/150");
+    expect(seen.map((url) => offsetOf(url))).toEqual([0, 200]);
+    expect(seen[0]).toContain("order=clickcount");
   });
 
   it("applies the quality minimum behind a language filter and fetches deeper", async () => {

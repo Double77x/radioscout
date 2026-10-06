@@ -86,13 +86,6 @@ function dedupeStations(stations: Station[]): Station[] {
 const CHART_PAGE_SIZE = 200;
 const CHART_MAX_PAGES = 4;
 
-/** Single unfiltered chart fetch still over-fetches: HTTP rows drop after fetch. */
-const MAX_SERVER_LIMIT = 300;
-
-function chartFetchCount(limit: number): number {
-  return Math.min(MAX_SERVER_LIMIT, Math.max(limit, limit * 3));
-}
-
 /** Minimum-bitrate predicate over parsed bitrates (API value + title parse). */
 function filterByMinBitrate(stations: Station[], minBitrate: number): Station[] {
   if (minBitrate <= 0) return stations;
@@ -254,15 +247,17 @@ export async function searchStationsIlike(
 }
 
 /** Most-voted stations — the default landing list (unplayable rows filtered). */
-export async function topVotedStations(
+export function topVotedStations(
   limit = 50,
   languages: string[] = [],
   minBitrate = 0,
   countries: string[] = [],
 ): Promise<Station[]> {
   if (languages.length === 0 && countries.length === 0 && minBitrate <= 0) {
-    const count = chartFetchCount(limit);
-    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topvote/${count}`))).slice(0, limit);
+    // Unfiltered worldwide chart pages until full, like the filtered path — a
+    // fixed over-fetch starves whenever most top rows are HTTP-only
+    // (measured live: 108 of top-150 by votes → 42 playable, not 50).
+    return searchPaged({ order: "votes", minBitrate: 0, want: limit });
   }
   // `topvote` ignores `?language=`, and filtered charts page until full —
   // rank through the search endpoint instead.
@@ -270,15 +265,15 @@ export async function topVotedStations(
 }
 
 /** Most-clicked stations (unplayable rows filtered). */
-export async function topClickedStations(
+export function topClickedStations(
   limit = 50,
   languages: string[] = [],
   minBitrate = 0,
   countries: string[] = [],
 ): Promise<Station[]> {
   if (languages.length === 0 && countries.length === 0 && minBitrate <= 0) {
-    const count = chartFetchCount(limit);
-    return filterPlayableStations(parseStations(await fetchJson(`/json/stations/topclick/${count}`))).slice(0, limit);
+    // Same paging-until-full as above (top-click skews HTTP-heavy too).
+    return searchPaged({ order: "clickcount", minBitrate: 0, want: limit });
   }
   return rankedTopStations("clickcount", limit, languages, countries, minBitrate);
 }
