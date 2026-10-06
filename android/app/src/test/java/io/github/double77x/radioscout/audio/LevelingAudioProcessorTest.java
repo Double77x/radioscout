@@ -42,8 +42,17 @@ public class LevelingAudioProcessorTest {
     }
 
     @Test
-    public void adaptGainRidesUpSlowWhenQuieter() {
-        assertEquals(1 + (2 - 1) * 0.05f, LevelingAudioProcessor.adaptGain(1f, TARGET_RMS / 2), 1e-5f);
+    public void adaptGainRidesUpWhenQuieter() {
+        assertEquals(1 + (2 - 1) * 0.15f, LevelingAudioProcessor.adaptGain(1f, TARGET_RMS / 2), 1e-5f);
+    }
+
+    @Test
+    public void settleConvergesQuietAsFastAsLoud() {
+        // Regression parity with the web loop: RELEASE 0.05 against ATTACK 0.3
+        // left boosted stations ~145s from target while ducked ones landed in
+        // ~2s. Both directions must now land inside the 8s settle window.
+        assertSettlesWithin(Float.valueOf(TARGET_RMS * 2), 8f);
+        assertSettlesWithin(Float.valueOf(TARGET_RMS / 2), 8f);
     }
 
     @Test
@@ -55,9 +64,9 @@ public class LevelingAudioProcessorTest {
     }
 
     @Test
-    public void adaptGainSteadyClampsToPlusMinusSixDb() {
-        org.junit.Assert.assertTrue(LevelingAudioProcessor.adaptGainSteady(1f, 1e-4f) <= 2f);
-        org.junit.Assert.assertTrue(LevelingAudioProcessor.adaptGainSteady(2f, TARGET_RMS * 100) >= 0.5f);
+    public void adaptGainSteadyClampsToMinusNinePlusNineDb() {
+        org.junit.Assert.assertTrue(LevelingAudioProcessor.adaptGainSteady(1f, 1e-4f) <= 2.8f);
+        org.junit.Assert.assertTrue(LevelingAudioProcessor.adaptGainSteady(2.8f, TARGET_RMS * 100) >= 0.35f);
     }
 
     @Test
@@ -111,6 +120,73 @@ public class LevelingAudioProcessorTest {
     public void adaptGainFreezesBelowTheFloor() {
         assertEquals(1.7f, LevelingAudioProcessor.adaptGain(1.7f, 0f), 0f);
         assertEquals(1.7f, LevelingAudioProcessor.adaptGain(1.7f, Float.NaN), 0f);
+    }
+
+    @Test
+    public void kFilterBlocksDcAndPassesMidband() {
+        LevelingAudioProcessor processor = new LevelingAudioProcessor();
+        float dc = 0f;
+        for (int i = 0; i < 2000; i++) dc = processor.kFilterSample(1f);
+        assertEquals(0f, dc, 0.01f);
+        float peak = 0f;
+        for (int i = 0; i < 4800; i++) {
+            float value = processor.kFilterSample((float) Math.sin(2 * Math.PI * 1000 * i / 48_000));
+            if (i > 2400) peak = Math.max(peak, Math.abs(value));
+        }
+        org.junit.Assert.assertTrue("peak " + peak, peak > 0.9f && peak < 1.25f);
+        assertEquals(0f, processor.kFilterSample(Float.NaN), 0f);
+    }
+
+    @Test
+    public void trimLinearClampsAuthority() {
+        assertEquals(1f, LevelingAudioProcessor.trimLinear(0f), 0f);
+        assertEquals(1f, LevelingAudioProcessor.trimLinear(Float.NaN), 0f);
+        assertEquals((float) Math.pow(10, 3.0 / 20), LevelingAudioProcessor.trimLinear(30f), 1e-5f);
+        assertEquals((float) Math.pow(10, -3.0 / 20), LevelingAudioProcessor.trimLinear(-30f), 1e-5f);
+    }
+
+    @Test
+    public void evaluateTrimServosOutputOntoTarget() {
+        // Output 3 LU under target trims up; 3 LU over trims down.
+        float up = LevelingAudioProcessor.evaluateTrim(0f, -14f, -17f);
+        org.junit.Assert.assertTrue(up > 0f && up <= 3f);
+        float down = LevelingAudioProcessor.evaluateTrim(0f, -14f, -11f);
+        org.junit.Assert.assertTrue(down < 0f && down >= -3f);
+        // Relative-gated blocks and garbage hold the trim.
+        assertEquals(1f, LevelingAudioProcessor.evaluateTrim(1f, -14f, -30f), 0f);
+        assertEquals(1f, LevelingAudioProcessor.evaluateTrim(1f, Float.NaN, -14f), 0f);
+        assertEquals(1f, LevelingAudioProcessor.evaluateTrim(1f, -14f, Float.NaN), 0f);
+    }
+
+    @Test
+    public void updateAnchorSeedsAndTracks() {
+        assertEquals(-14f, LevelingAudioProcessor.updateAnchor(Float.NaN, -14f), 0f);
+        assertEquals(-20f, LevelingAudioProcessor.updateAnchor(-20f, -30f), 0.5f);
+        org.junit.Assert.assertTrue(LevelingAudioProcessor.updateAnchor(-20f, -30f) < -20f);
+        assertEquals(-20f, LevelingAudioProcessor.updateAnchor(-20f, Float.NaN), 0f);
+    }
+
+    @Test
+    public void windowLuReadsSilenceAsMinusInfinity() {
+        assertEquals(Float.NEGATIVE_INFINITY, LevelingAudioProcessor.windowLu(0, 0), 0f);
+        float fullScale = LevelingAudioProcessor.windowLu(1.0, 1);
+        assertEquals(-0.691f, fullScale, 0.01f);
+    }
+
+    /** Seconds of settle ticking until a constant source sits within 0.5 dB of target. */
+    private static void assertSettlesWithin(Float rms, float maxSeconds) {
+        float wanted = Math.min(2.8f, Math.max(0.35f, TARGET_RMS / rms));
+        float gain = 1f;
+        int ticks = 0;
+        for (int tick = 0; tick < 32 * 4; tick++) {
+            gain = LevelingAudioProcessor.adaptGain(gain, rms);
+            ticks = tick;
+            if (Math.abs(20 * (float) Math.log10(wanted / gain)) < 0.5f) {
+                break;
+            }
+        }
+        org.junit.Assert.assertTrue(
+                "rms " + rms + " took " + (ticks / 4f) + "s", ticks / 4f <= maxSeconds);
     }
 
     /**

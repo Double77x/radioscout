@@ -1,10 +1,11 @@
 import { describe, expect, it, vi } from "vite-plus/test";
 import { EMPTY_STATION, type Station } from "@/lib/radio/types";
-import { SETTLE_TICKS } from "@/lib/radio/normalize";
+import { initTrimState, SETTLE_TICKS } from "@/lib/radio/normalize";
 import {
   canRouteLeveling,
   freezeLevelingGain,
   levelingTick,
+  type LevelingTick,
   resetLevelingGain,
   resumeLevelingContext,
   routeLevelingAudio,
@@ -51,6 +52,21 @@ function stubGain(value = 1): GainNode & { targetCalls: [number, number, number]
 function stubElement(volume = 1): HTMLAudioElement {
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   return { volume } as unknown as HTMLAudioElement;
+}
+
+/** Full tick with quiet defaults (no trim tap unless the test opts in). */
+function tick(overrides: Partial<LevelingTick> = {}): LevelingTick {
+  return {
+    analyser: stubAnalyser([0.5]),
+    gain: stubGain(1),
+    element: stubElement(1),
+    buffer: null,
+    kAnalyser: null,
+    kBuffer: null,
+    trim: null,
+    settleTicksLeft: 8,
+    ...overrides,
+  };
 }
 
 describe("canRouteLeveling", () => {
@@ -163,72 +179,124 @@ describe("levelingTick", () => {
   it("returns null when any live part is missing (never allocates)", () => {
     const analyser = stubAnalyser([0.5]);
     const gain = stubGain();
-    expect(levelingTick({ analyser: null, gain, element: stubElement(), buffer: null, settleTicksLeft: 8 })).toBeNull();
-    expect(levelingTick({ analyser, gain: null, element: stubElement(), buffer: null, settleTicksLeft: 8 })).toBeNull();
-    expect(levelingTick({ analyser, gain, element: null, buffer: null, settleTicksLeft: 8 })).toBeNull();
+    expect(levelingTick(tick({ analyser: null, gain }))).toBeNull();
+    expect(levelingTick(tick({ analyser, gain: null }))).toBeNull();
+    expect(levelingTick(tick({ analyser, gain, element: null }))).toBeNull();
     expect(analyser.calls).toBe(0);
   });
 
   it("settles fast after tune-in, then crawls once steady", () => {
-    const loud = stubAnalyser([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]);
+    const loud = stubAnalyser([0.28, 0.28, 0.28, 0.28, 0.28, 0.28, 0.28, 0.28]);
     const settlingGain = stubGain(1);
-    const settling = levelingTick({
-      analyser: loud,
-      gain: settlingGain,
-      element: stubElement(1),
-      buffer: null,
-      settleTicksLeft: 8,
-    });
+    const settling = levelingTick(tick({ analyser: loud, gain: settlingGain }));
     expect(settling?.settleTicksLeft).toBe(7);
     expect(settling?.buffer.length).toBe(8);
     const steadyGain = stubGain(1);
-    const steady = levelingTick({
-      analyser: loud,
-      gain: steadyGain,
-      element: stubElement(1),
-      buffer: new Float32Array(8),
-      settleTicksLeft: 0,
-    });
+    const steady = levelingTick(
+      tick({ analyser: loud, gain: steadyGain, buffer: new Float32Array(8), settleTicksLeft: 0 }),
+    );
     expect(steady?.settleTicksLeft).toBe(0);
     // Same reading: settle bites (0.85), steady crawls (0.999).
-    expect(settlingGain.gain.value).toBeCloseTo(0.85, 10);
-    expect(steadyGain.gain.value).toBeCloseTo(0.999, 10);
+    expect(settlingGain.gain.value).toBeCloseTo(0.85, 5);
+    expect(steadyGain.gain.value).toBeCloseTo(0.999, 5);
   });
 
   it("freezes on silence and muted output (no wind-up)", () => {
     const silent = stubAnalyser([0, 0, 0, 0, 0, 0, 0, 0]);
     const gain = stubGain(1.2);
-    const frozen = levelingTick({
-      analyser: silent,
-      gain,
-      element: stubElement(1),
-      buffer: null,
-      settleTicksLeft: 8,
-    });
+    const frozen = levelingTick(tick({ analyser: silent, gain }));
     expect(gain.gain.value).toBe(1.2);
-    expect(frozen?.settleTicksLeft).toBe(7);
+    // Silence must not spend the settle budget, or a speech station whose
+    // first 8s are mostly pauses reaches the steady crawl uncorrected.
+    expect(frozen?.settleTicksLeft).toBe(8);
     const mutedGain = stubGain(1.2);
-    const muted = levelingTick({
-      analyser: stubAnalyser([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]),
-      gain: mutedGain,
-      element: stubElement(0),
-      buffer: null,
-      settleTicksLeft: 8,
-    });
+    const muted = levelingTick(
+      tick({
+        analyser: stubAnalyser([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]),
+        gain: mutedGain,
+        element: stubElement(0),
+      }),
+    );
     expect(mutedGain.gain.value).toBe(1.2);
     expect(muted?.settleTicksLeft).toBe(8);
+  });
+
+  it("keeps the settle budget alive across quiet ticks, then converges", () => {
+    // A quiet station (speech, rms ~0.045) needs the full +9 dB clamp. Burn
+    // half the window on sub-floor ticks, then play real audio: the gain must
+    // still reach up instead of falling into the steady crawl.
+    const gain = stubGain(1);
+    let settleTicksLeft = 8;
+    // rms 0.004 < FREEZE_FLOOR — a pause, contributes nothing.
+    for (let index = 0; index < 4; index += 1) {
+      settleTicksLeft =
+        levelingTick(tick({ analyser: stubAnalyser([0.004, 0.004, 0.004, 0.004]), gain, settleTicksLeft }))
+          ?.settleTicksLeft ?? 0;
+    }
+    expect(settleTicksLeft).toBe(8);
+    // Real audio now: 8 loud ticks against the untouched budget.
+    for (let index = 0; index < 8; index += 1) {
+      settleTicksLeft =
+        levelingTick(tick({ analyser: stubAnalyser([0.045, 0.045, 0.045, 0.045]), gain, settleTicksLeft }))
+          ?.settleTicksLeft ?? 0;
+    }
+    expect(settleTicksLeft).toBe(0);
+    // Converged well up the clamp (was ~1.03 — 0.27 dB — before the fix).
+    expect(20 * Math.log10(gain.gain.value)).toBeGreaterThan(6);
+  });
+
+  it("folds the slow trim in on top of stage 1", () => {
+    // Pre-seeded +1 dB trim, K tap live but far below a full window: stage 1
+    // holds unity at target RMS while the node carries the trim product.
+    const trim = initTrimState();
+    trim.trimDb = 1;
+    const gain = stubGain(1);
+    const result = levelingTick(
+      tick({
+        analyser: stubAnalyser([0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14]),
+        gain,
+        kAnalyser: stubAnalyser([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]),
+        kBuffer: null,
+        trim,
+      }),
+    );
+    expect(result?.kBuffer?.length).toBe(8);
+    expect(gain.gain.value).toBeCloseTo(10 ** (1 / 20), 5);
+  });
+
+  it("skips the trim when the K tap is absent and survives its failure", () => {
+    const gain = stubGain(1);
+    levelingTick(
+      tick({ analyser: stubAnalyser([0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14]), gain, trim: initTrimState() }),
+    );
+    // Stage 1 at target RMS holds unity; with no K tap nothing multiplies it.
+    expect(gain.gain.value).toBeCloseTo(1, 5);
+    const failing = {
+      fftSize: 8,
+      getFloatTimeDomainData: () => {
+        throw new Error("gone");
+      },
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
+    } as unknown as AnalyserNode;
+    const survivedGain = stubGain(1);
+    expect(() => {
+      levelingTick(
+        tick({
+          analyser: stubAnalyser([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]),
+          gain: survivedGain,
+          kAnalyser: failing,
+          kBuffer: null,
+          trim: initTrimState(),
+        }),
+      );
+    }).not.toThrow();
+    expect(survivedGain.gain.value).toBeCloseTo(0.805, 5);
   });
 
   it("reallocates a stale buffer and survives analyser failure", () => {
     const analyser = stubAnalyser([0.5]);
     const gain = stubGain(1);
-    const stale = levelingTick({
-      analyser,
-      gain,
-      element: stubElement(1),
-      buffer: new Float32Array(4),
-      settleTicksLeft: 8,
-    });
+    const stale = levelingTick(tick({ analyser, gain, buffer: new Float32Array(4) }));
     expect(stale?.buffer.length).toBe(8);
     const failing = {
       fftSize: 8,
@@ -237,13 +305,7 @@ describe("levelingTick", () => {
       },
       // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as AnalyserNode;
-    const survived = levelingTick({
-      analyser: failing,
-      gain,
-      element: stubElement(1),
-      buffer: null,
-      settleTicksLeft: 8,
-    });
+    const survived = levelingTick(tick({ analyser: failing, gain }));
     expect(survived?.settleTicksLeft).toBe(8);
   });
 });

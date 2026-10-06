@@ -8,15 +8,20 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
 /**
- * Two-phase loudness-leveling processor: steers every station toward the same
+ * Two-stage loudness-leveling processor: steers every station toward the same
  * short-term RMS so switching stations stops jumping in volume — without
  * riding the music inside a station. Java port of the web leveling loop
  * ({@code src/lib/radio/normalize.ts}) — same target, settle/steady
  * coefficients, clamps and freeze floor, so both players agree.
  *
- * <p>Phase 1 (settle, 8s after {@link #resetForNewStation}): fast
- * attack/release kills the inter-station jump. Phase 2 (steady): a crawl
- * tracks only slow drift, so songs play untouched — no pumping.
+ * <p>Stage 1 (fast AGC): settle-phase attack/release kills the inter-station
+ * jump inside ~8s; steady phase crawls after that. Stage 2 (slow LUFS trim):
+ * a ±3 dB servo on gated K-weighted momentary loudness corrects the
+ * systematic offsets stage 1 leaves behind (speech vs music spectra,
+ * bass-heavy masters) over ~1 minute — the hybrid-AGC shape shipping
+ * broadcast processors use. A final brickwall safety limiter at −1 dBFS
+ * shaves boosted transient tips instead of flat-topping them, which is what
+ * lets the boost clamp sit at +9 dB.
  *
  * <p>Adaptation runs on a ~250ms wall-clock cadence (RMS accumulated across
  * buffers), matching the web ~4Hz tick: per-buffer stepping would converge
@@ -28,7 +33,7 @@ import java.nio.ByteOrder;
  * Disabled by default; when off each buffer passes through with a straight
  * copy (see {@link #isActive} for why the processor stays in the chain
  * rather than letting the sink bypass it).
- * Runs on the playback thread — two linear passes over 16-bit samples, no
+ * Runs on the playback thread — a few linear passes over 16-bit samples, no
  * allocation. Volume-safe by construction: ExoPlayer applies user volume
  * downstream at the AudioTrack, so the measurement never fights the slider.
  */
@@ -36,16 +41,55 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
 
     private static final float TARGET_RMS = 0.14f;
     private static final float ATTACK = 0.3f;
-    private static final float RELEASE = 0.05f;
+    /**
+     * Settle ride-up when quieter. Tracks {@code ATTACK} rather than crawling
+     * behind it: 0.05 converged a boosted station 80x slower than a ducked one
+     * (145s vs 1.8s), leaving anything needing lift audibly quiet. Parity with
+     * {@code src/lib/radio/normalize.ts RELEASE}.
+     */
+    private static final float RELEASE = 0.15f;
     private static final float STEADY_ATTACK = 0.002f;
     private static final float STEADY_RELEASE = 0.001f;
     private static final float FREEZE_FLOOR = 0.01f;
-    private static final float MIN_GAIN = 0.5f;
-    private static final float MAX_GAIN = 2f;
+    /**
+     * Stage-1 clamps (−9/+9 dB). The safety limiter below — not the clamp —
+     * bounds clipping, so the boost ceiling can absorb dynamic masters
+     * instead of stranding them quiet. Parity with the web loop.
+     */
+    private static final float MIN_GAIN = 0.35f;
+    private static final float MAX_GAIN = 2.8f;
     /** Adaptation cadence: match the web tick so coefficients agree. */
     private static final long ADAPT_INTERVAL_NS = 250_000_000L;
     /** Fast-settle window after tune-in: kill the jump, then hold. */
     private static final long SETTLE_NS = 8_000_000_000L;
+    /** Stage-2 K-domain target: streaming-convention −14 LUFS. */
+    private static final float TRIM_TARGET_LU = -14f;
+    /** Stage-2 authority: the slow stage corrects, never leads (±3 dB). */
+    private static final float TRIM_DB = 3f;
+    /**
+     * Stage-2 easing per evaluated momentary window (τ ≈ 50s — an order of
+     * magnitude slower than stage 1 so the stages can't fight).
+     */
+    private static final float TRIM_COEFF = 0.008f;
+    /** Momentary window in frames at the configured rate (400 ms at 48 kHz). */
+    private static final int TRIM_WINDOW_FRAMES = 19_200;
+    /** BS.1770 absolute gate: digital silence carries no loudness information. */
+    private static final float TRIM_ABS_GATE = -70f;
+    /** BS.1770 relative gate: blocks this far under the anchor don't steer. */
+    private static final float TRIM_REL_GATE = 10f;
+    /** Anchor easing per evaluated window (τ ≈ 2 min — history, not news). */
+    private static final float TRIM_ANCHOR_COEFF = 0.02f;
+    /** BS.1770 calibration offset (mean-square to LUFS). */
+    private static final float TRIM_K_OFFSET = 0.691f;
+    /** Safety limiter ceiling (−1 dBFS — broadcast headroom, tips shave). */
+    private static final float LIMITER_THRESHOLD = 0.891250938f;
+    /** Limiter release (50 ms — tips only, bodies untouched). */
+    private static final float LIMITER_RELEASE_MS = 50f;
+    /** Exact BS.1770 K-weighting biquads (48 kHz table — see web parity note). */
+    private static final float[] K_PRE_B = {1.53512485958697f, -2.69169618940638f, 1.19839281085285f};
+    private static final float[] K_PRE_A = {1f, -1.69065929318241f, 0.73248077421585f};
+    private static final float[] K_RLB_B = {1f, -2f, 1f};
+    private static final float[] K_RLB_A = {1f, -1.99004745483398f, 0.99007225036621f};
 
     /** Shared with the rest of the audio package so logcat filtering stays one tag. */
     private static final String LOG_TAG = "RadioPlayback";
@@ -56,6 +100,21 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     private long lastAdaptNanos = 0L;
     private double rmsAccum = 0;
     private long rmsFrames = 0;
+    /** Stage-2 slow trim in dB (multiplies stage 1 — bounded by {@code TRIM_DB}). */
+    private volatile float trimDb = 0f;
+    /** Slow gated-average anchor for the relative gate (null until first read). */
+    private float trimAnchor = Float.NaN;
+    /** K-weighted energy accumulator for the current momentary window. */
+    private double trimAccumE = 0;
+    private long trimAccumN = 0;
+    /** Continuous K-filter state (never reset mid-station — transients ring). */
+    private float kPreX1, kPreX2, kPreY1, kPreY2, kRlbX1, kRlbX2, kRlbY1, kRlbY2 = 0f;
+    /** Limiter peak envelope (post-gain — instant attack, slow release). */
+    private float limiterEnv = 0f;
+    /** Limiter release coefficient, derived from the configured rate. */
+    private float limiterReleaseCoeff = 0.999583f;
+    /** Frames per momentary window at the configured rate. */
+    private int trimWindowFrames = TRIM_WINDOW_FRAMES;
 
     /**
      * Flip leveling live (bridge thread-safe via volatile). Enabling
@@ -78,6 +137,14 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         settleDeadlineNanos = System.nanoTime() + SETTLE_NS;
         rmsAccum = 0;
         rmsFrames = 0;
+        // The slow trim learned the previous station's offsets — and the
+        // limiter envelope its peaks. Both restart untrimmed.
+        trimDb = 0f;
+        trimAnchor = Float.NaN;
+        trimAccumE = 0;
+        trimAccumN = 0;
+        kPreX1 = kPreX2 = kPreY1 = kPreY2 = kRlbX1 = kRlbX2 = kRlbY1 = kRlbY2 = 0f;
+        limiterEnv = 0f;
         // Adapt on the next buffer so the new station settles immediately.
         lastAdaptNanos = 0L;
     }
@@ -120,8 +187,78 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         return (float) (Math.sqrt(sum / samples.length) / 32768.0);
     }
 
+    /**
+     * One K-weighted sample (BS.1770 pre-filter then RLB, direct form I).
+     * Stateful — the caller threads one set of delay variables through the
+     * whole stream, never resetting mid-station.
+     */
+    float kFilterSample(float sample) {
+        if (!Float.isFinite(sample)) return 0f;
+        float pre =
+                K_PRE_B[0] * sample
+                        + K_PRE_B[1] * kPreX1
+                        + K_PRE_B[2] * kPreX2
+                        - K_PRE_A[1] * kPreY1
+                        - K_PRE_A[2] * kPreY2;
+        kPreX2 = kPreX1;
+        kPreX1 = sample;
+        kPreY2 = kPreY1;
+        kPreY1 = pre;
+        float out =
+                K_RLB_B[0] * pre
+                        + K_RLB_B[1] * kRlbX1
+                        + K_RLB_B[2] * kRlbX2
+                        - K_RLB_A[1] * kRlbY1
+                        - K_RLB_A[2] * kRlbY2;
+        kRlbX2 = kRlbX1;
+        kRlbX1 = pre;
+        kRlbY2 = kRlbY1;
+        kRlbY1 = out;
+        return out;
+    }
+
+    /** Trim correction as a linear multiplier (authority clamped by design). */
+    static float trimLinear(float trimDb) {
+        if (!Float.isFinite(trimDb)) return 1f;
+        return (float) Math.pow(10.0, Math.max(-TRIM_DB, Math.min(TRIM_DB, trimDb)) / 20.0);
+    }
+
+    /**
+     * One gated trim step toward the K target. Pure DSP core, kept static
+     * for unit tests: relative-gated blocks and unreadable reads hold the
+     * trim, everything else eases it inside its authority.
+     *
+     * @return new trim in dB (caller stores it)
+     */
+    static float evaluateTrim(float trimDb, float anchor, float postLu) {
+        if (!Float.isFinite(postLu)) return trimDb;
+        if (!(postLu > anchor - TRIM_REL_GATE)) return trimDb;
+        float want = Math.max(-TRIM_DB, Math.min(TRIM_DB, TRIM_TARGET_LU - postLu));
+        return trimDb + (want - trimDb) * TRIM_COEFF;
+    }
+
+    /** Slow anchor update for one gated momentary read (NaN seeds it). */
+    static float updateAnchor(float anchor, float postLu) {
+        if (!Float.isFinite(postLu)) return anchor;
+        if (Float.isNaN(anchor)) return postLu;
+        return anchor + (postLu - anchor) * TRIM_ANCHOR_COEFF;
+    }
+
+    /** K momentary loudness of one accumulated window (pre-gain domain). */
+    static float windowLu(double energy, long frames) {
+        if (frames <= 0) return Float.NEGATIVE_INFINITY;
+        return (float) (10 * Math.log10(Math.max(energy / frames, 1e-12)) - TRIM_K_OFFSET);
+    }
+
     @Override
     protected AudioFormat onConfigure(AudioFormat inputAudioFormat) {
+        // Rate-derived DSP: momentary window in frames, limiter release for a
+        // 50 ms tail at this rate. Unknown rates keep the 48 kHz defaults.
+        int rate = inputAudioFormat.sampleRate;
+        if (rate > 0) {
+            trimWindowFrames = (int) Math.round(TRIM_WINDOW_FRAMES * 1.0 * rate / 48000);
+            limiterReleaseCoeff = (float) Math.exp(-1.0 / (LIMITER_RELEASE_MS / 1000.0 * rate));
+        }
         return inputAudioFormat;
     }
 
@@ -169,7 +306,8 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         int frames = bytes / 2;
         inputBuffer.order(ByteOrder.LITTLE_ENDIAN);
         // Accumulate energy across buffers; the gain step runs at most every
-        // ~250ms (web-tick parity) no matter how small the buffers are.
+        // ~250ms (web-tick parity) no matter how small the buffers are. Stage
+        // 2 accumulates K-weighted energy in parallel for its momentary reads.
         double sum = 0;
         for (int i = 0; i < frames; i++) {
             short sample = inputBuffer.getShort(position + i * 2);
@@ -177,33 +315,75 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         }
         rmsAccum += sum;
         rmsFrames += frames;
+        // K tap on the mono mix (radio use — matches the web JS-side biquads).
+        for (int i = 0; i < frames; i += 2) {
+            float left = (float) inputBuffer.getShort(position + i * 2) / 32768f;
+            float right =
+                    (i + 1 < frames) ? (float) inputBuffer.getShort(position + (i + 1) * 2) / 32768f : left;
+            float k = kFilterSample((left + right) / 2f);
+            trimAccumE += (double) k * k;
+            trimAccumN += 1;
+        }
         long now = System.nanoTime();
+        // Stage-2 momentary evaluation every ~400 ms of audio (BS.1770 window
+        // at the configured rate). Measures stage-1-post loudness — the trim
+        // corrects the remainder onto target (feedforward, exact fixed point).
+        if (trimAccumN >= trimWindowFrames) {
+            float lu = windowLu(trimAccumE, trimAccumN);
+            trimAccumE = 0;
+            trimAccumN = 0;
+            if (lu > TRIM_ABS_GATE && gain > 0) {
+                float postLu = lu + (float) (20 * Math.log10(gain));
+                trimAnchor = updateAnchor(trimAnchor, postLu);
+                trimDb = evaluateTrim(trimDb, trimAnchor, postLu);
+            }
+        }
         if (rmsFrames > 0 && now - lastAdaptNanos >= ADAPT_INTERVAL_NS) {
             float rms = (float) (Math.sqrt(rmsAccum / rmsFrames) / 32768.0);
             rmsAccum = 0;
             rmsFrames = 0;
             lastAdaptNanos = now;
-            float before = gain;
-            gain = now < settleDeadlineNanos ? adaptGain(gain, rms) : adaptGainSteady(gain, rms);
-            // One line per real move, and only in the settle phase: the steady
-            // crawl would log every 250ms forever. Its absence is the signal
-            // that leveling is not reaching the audio path at all.
-            if (now < settleDeadlineNanos) {
-                Log.i(LOG_TAG, "leveling rms=" + rms + " gain=" + gain + " (was " + before + ")");
+            // A frozen window (silence, speech pause below the floor) must not
+            // spend the settle budget — otherwise a station whose first 8s are
+            // mostly quiet falls into the steady crawl uncorrected. Wall-clock
+            // time keeps moving, so hand the interval back to the deadline.
+            // Parity with the web tick, which only decrements on acted ticks.
+            if (!Float.isFinite(rms) || rms < FREEZE_FLOOR) {
+                settleDeadlineNanos += ADAPT_INTERVAL_NS;
+            } else {
+                float before = gain;
+                gain = now < settleDeadlineNanos ? adaptGain(gain, rms) : adaptGainSteady(gain, rms);
+                // One line per real move, and only in the settle phase: the steady
+                // crawl would log every 250ms forever. Its absence is the signal
+                // that leveling is not reaching the audio path at all.
+                if (now < settleDeadlineNanos) {
+                    Log.i(LOG_TAG, "leveling rms=" + rms + " gain=" + gain + " (was " + before + ")");
+                }
             }
         }
-        float applied = gain;
+        float applied = gain * trimLinear(trimDb);
         ByteBuffer output = replaceOutputBuffer(bytes);
         output.order(ByteOrder.LITTLE_ENDIAN);
         for (int i = 0; i < frames; i++) {
             short sample = inputBuffer.getShort(position + i * 2);
-            int scaled = Math.round(sample * applied);
-            if (scaled > 32767) {
-                scaled = 32767;
-            } else if (scaled < -32768) {
-                scaled = -32768;
+            float scaled = sample * applied;
+            // Safety limiter: one envelope fed by every sample, so L/R share
+            // the identical attenuation (no image shift). Instant attack,
+            // 50 ms release — only boosted transient tips ever engage it.
+            float peak = Math.abs(scaled) / 32768f;
+            if (peak > limiterEnv) {
+                limiterEnv = peak;
+            } else {
+                limiterEnv *= limiterReleaseCoeff;
             }
-            output.putShort((short) scaled);
+            float limited = scaled * Math.min(1f, LIMITER_THRESHOLD / Math.max(limiterEnv, 1e-9f));
+            int out = Math.round(limited);
+            if (out > 32767) {
+                out = 32767;
+            } else if (out < -32768) {
+                out = -32768;
+            }
+            output.putShort((short) out);
         }
         output.flip();
         inputBuffer.position(limit);

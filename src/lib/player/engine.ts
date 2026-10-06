@@ -62,7 +62,13 @@ import { ReconnectTimer, reconnectDelayMs } from "@/lib/radio/reconnect";
 import { SLEEP_FADE_MS } from "@/lib/radio/sleep";
 import { writeLastStation } from "@/lib/radio/last-played";
 import { emit, snapshot } from "@/lib/player/store";
-import { readNormalizeEnabled, writeNormalizeEnabled } from "@/lib/radio/normalize";
+import {
+  initTrimState,
+  readNormalizeEnabled,
+  resetTrimState,
+  type TrimState,
+  writeNormalizeEnabled,
+} from "@/lib/radio/normalize";
 import { readCarRefreshEnabled, writeCarRefreshEnabled } from "@/lib/radio/car-refresh";
 import {
   canonicalStreamUrl,
@@ -76,21 +82,14 @@ import {
 import { wsrvArtworkUrl } from "@/lib/radio/artwork";
 
 /**
- * Playback singleton — the player state machine. On the APK the Media3
+ * Playback state machine, and the app's largest module. On the APK the Media3
  * foreground service is the player; everywhere else one shared `<audio>`
- * element is, plus one staged incoming element during switches.
+ * element is, plus one staged incoming element during a switch.
  *
- * This module owns ALL remaining shared singletons (live + staged elements,
- * play/fade/handoff tokens, `usingNative`, leveling refs, reconnect loop)
- * that the extracted leaves (`fades`, `sleep-timer`, `native-bridge`,
- * `leveling`) deliberately do not: handoff and transport read and write the
- * same bindings on every transition, so a file seam between them would only
- * move complexity without concentrating it. The React binding lives in
- * `hooks/use-player`, which re-exports this module's public surface.
- *
- * Port of RadioDroid's `PlayerService` play path at web fidelity:
- * resolve → load → play → MediaSession. Recording and wake alarms stay
- * native-only (out of scope, same as before).
+ * The leaves extracted from this file (`fades`, `sleep-timer`, `native-bridge`,
+ * `leveling`, `hls`) stay out because handoff and transport share these
+ * bindings on every transition. Contract, generation tokens and handoff
+ * invariants: docs/modules/player/engine.md
  */
 
 let audio: HTMLAudioElement | null = null;
@@ -623,7 +622,6 @@ let usingNative = false;
 let nativeListenerReady = false;
 /** `true` when the pending load is an `http://` stream on an `https://` page (blocked by policy, not offline). */
 let lastLoadInsecure = false;
-/** Verdict copy lives in `lib/player/native-bridge` (shared with the takeover path). */
 
 /** Write prefs to storage and the live output (service or element). */
 export function applyPlayerPrefs(prefs: PlayerPrefs): void {
@@ -652,6 +650,8 @@ let carRefreshOn = readCarRefreshEnabled();
 let audioCtx: AudioContext | null = null;
 let normGain: GainNode | null = null;
 let normAnalyser: AnalyserNode | null = null;
+/** Raw-source tap for the stage-2 trim (null while playing direct). */
+let normKAnalyser: AnalyserNode | null = null;
 /** True while the live element is routed through the graph. */
 let audioRouted = false;
 /** Settle ticks left in the fast tune-in phase (0 = steady crawl). */
@@ -666,6 +666,10 @@ let retriedDirect = false;
 let audioAbort: AbortController | null = null;
 /** Scratch window for the analyser (allocated with the graph). */
 let analysisBuffer: Float32Array<ArrayBuffer> | null = null;
+/** Scratch window for the stage-2 K tap (allocated with the graph). */
+let kAnalysisBuffer: Float32Array<ArrayBuffer> | null = null;
+/** Slow LUFS trim state for the live element (fresh per station). */
+let trimState: TrimState = initTrimState();
 
 function ensureAudio(): HTMLAudioElement | null {
   if (globalThis.window === undefined) return null;
@@ -832,7 +836,10 @@ function maybeRouteAudio(element: HTMLAudioElement): void {
   audioCtx = run.graph.ctx;
   normGain = run.graph.gain;
   normAnalyser = run.graph.analyser;
+  normKAnalyser = run.graph.kAnalyser;
   analysisBuffer = run.buffer;
+  kAnalysisBuffer = run.kBuffer;
+  trimState = run.trim;
   audioRouted = true;
   // Fresh graph starts at unity in the fast settle phase (see play()).
   settleTicksLeft = run.settleTicksLeft;
@@ -871,7 +878,10 @@ function rebuildAudio(): HTMLAudioElement | null {
   }
   normGain = null;
   normAnalyser = null;
+  normKAnalyser = null;
   analysisBuffer = null;
+  kAnalysisBuffer = null;
+  trimState = initTrimState();
   audio = null;
   audioRouted = false;
   return ensureAudio();
@@ -880,6 +890,7 @@ function rebuildAudio(): HTMLAudioElement | null {
 /** Park the leveling gain at unity (toggle-off path — analysis just stops). */
 function freezeGain(): void {
   freezeLevelingGain(normGain, audioCtx);
+  resetTrimState(trimState);
 }
 
 /** One RMS tick: settle fast after tune-in, then crawl (never throws). */
@@ -889,10 +900,14 @@ function adaptTick(): void {
     gain: normGain,
     element: audio,
     buffer: analysisBuffer,
+    kAnalyser: normKAnalyser,
+    kBuffer: kAnalysisBuffer,
+    trim: trimState,
     settleTicksLeft,
   });
   if (!result) return;
   analysisBuffer = result.buffer;
+  kAnalysisBuffer = result.kBuffer;
   settleTicksLeft = result.settleTicksLeft;
 }
 
@@ -903,6 +918,10 @@ function adaptTick(): void {
  */
 function resetLevelingForStation(): void {
   settleTicksLeft = resetLevelingGain(normGain);
+  // The slow trim learned the previous station's offsets — a fresh station
+  // starts untrimmed (the staged element preloaded muted, so it learned
+  // nothing worth keeping either).
+  resetTrimState(trimState);
 }
 
 /** Station-switch crossfade length — old fades out while new sweeps in. */
@@ -952,13 +971,6 @@ function killIncoming(): void {
   handoffPrev = null;
   if (element) parkRecord({ element, abort, ctx: graph?.ctx ?? null });
 }
-
-/**
- * Crossfade blends ride `rampElement` from `lib/player/fades` (same step
- * shape as the live-output ramps). The handoff generation owns each chain:
- * callers pass `() => handoff !== handoffToken` so a superseding transport
- * action cancels the blend and parks the retiring side.
- */
 
 /**
  * Flip the car-display refresh toggle live (APK only — web has no Bluetooth
@@ -1021,8 +1033,6 @@ export function cancelSleepTimer(): void {
   disarmSleepTimer();
 }
 
-/** Fade lengths live in `lib/player/fades` (single shape for all ramps). */
-
 /** Write a fade level to the live output without touching persisted prefs. */
 function setFadeLevel(level: number): void {
   if (usingNative) {
@@ -1084,14 +1094,6 @@ function fadeOutAndPause(): void {
     setFadeLevel(start);
   });
 }
-
-/**
- * Web MediaSession publishing lives in `lib/player/native-bridge` (pure
- * metadata + injected transport handlers). The native service listener
- * below stays here: it drives the reconnect loop, which shares the engine's
- * bindings on every transition (kept whole deliberately — see the Phase 1e
- * assessment in `docs/REFACTOR_PLAYER_ENGINE_PLAN.md`).
- */
 
 /**
  * Mirror native transport state into the snapshot. Attached once, the first
@@ -1162,8 +1164,6 @@ function ensureNativeListener(): void {
     nativeListenerReady = false;
   });
 }
-
-/** Web-element parking lives in `lib/player/native-bridge` (element param). */
 
 /**
  * APK path: hand the resolved URL to the Media3 foreground service, which
@@ -1477,7 +1477,9 @@ function handoffToIncoming(station: Station, handoff: number): void {
   audioCtx = incomingGraph?.ctx ?? null;
   normGain = incomingGraph?.gain ?? null;
   normAnalyser = incomingGraph?.analyser ?? null;
+  normKAnalyser = incomingGraph?.kAnalyser ?? null;
   analysisBuffer = normAnalyser ? new Float32Array(normAnalyser.fftSize) : null;
+  kAnalysisBuffer = normKAnalyser ? new Float32Array(normKAnalyser.fftSize) : null;
   audioRouted = incomingRouted;
   incomingGraph = null;
   incomingRouted = false;
@@ -1495,7 +1497,9 @@ function handoffToIncoming(station: Station, handoff: number): void {
       audioCtx = null;
       normGain = null;
       normAnalyser = null;
+      normKAnalyser = null;
       analysisBuffer = null;
+      kAnalysisBuffer = null;
       audioRouted = false;
       if (ctx) void ctx.close().catch(() => {});
     });
@@ -1669,6 +1673,15 @@ function retryStation(station: Station): void {
   handoffPrev = null;
 }
 
+/**
+ * Start a station. Resolves the stream, hands over to the native service when
+ * it is available, and otherwise stages the incoming element for a zero-silence
+ * handoff. Supersedes any play already in flight via `playToken`, so rapid
+ * presses resolve to the last one rather than racing.
+ *
+ * `fromReconnect` marks a retry replay, which keeps its attempt count; a manual
+ * play resets the retry sequence.
+ */
 export function play(station: Station, options?: { fromReconnect?: boolean }): void {
   const token = ++playToken;
   // A fresh play cancels in-flight fades (a finishing pause-fade must never
@@ -1798,6 +1811,11 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
   })();
 }
 
+/**
+ * Pause the live station. A switch still in flight is abandoned first, so the
+ * dock never names a station that never started and `resume` cannot pick the
+ * wrong one. Fades when audible, parks immediately otherwise.
+ */
 export function pause(): void {
   // Pausing mid-switch abandons it: revert to the still-parked predecessor
   // first (pauseNow below then parks it) — otherwise the dock would name a
@@ -1840,6 +1858,11 @@ function pauseNow(): void {
   audio?.pause();
 }
 
+/**
+ * Resume from pause. Keeps the audible predecessor when a switch was in
+ * flight, and falls back to the full `play()` path when the restored row
+ * needs its stream resolved or an HLS bridge attached.
+ */
 export function resume(): Promise<void> {
   // Resuming mid-switch keeps the audible predecessor: kill the staged
   // switch, then continue below on the reverted snapshot (playing straight
@@ -1918,15 +1941,20 @@ export function toggle(): void {
 }
 
 /**
- * Card/row press behavior: pause/resume the current station, (re)play
- * anything else. The lists called `play()` unconditionally, so tapping the
- * Pause icon restarted the stream instead of pausing it.
+ * Card/row press behaviour: pause or resume the current station, play anything
+ * else. Anything unconditional here would make a press on Pause restart the
+ * stream instead of stopping it.
  */
 export function togglePlay(station: Station): void {
   if (snapshot.station?.stationuuid === station.stationuuid) toggle();
   else play(station);
 }
 
+/**
+ * Stop and release the output. Bumps `playToken`, so any play still resolving
+ * is abandoned, and tears down the bridge before the element's source is
+ * cleared.
+ */
 export function stop(): void {
   // Only fade audible playback — anything else parks immediately.
   if (snapshot.status !== "playing") {

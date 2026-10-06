@@ -6,15 +6,29 @@
  * `settleTicksLeft`, `blockedHosts` and `retriedDirect`, so `setNormalization`
  * (which replays through the handoff and transport) stays there: the state
  * machine stays whole deliberately (see
- * `docs/REFACTOR_PLAYER_ENGINE_PLAN.md` Phase 1e assessment).
+ * `docs/plans/REFACTOR_PLAYER_ENGINE_PLAN.md` Phase 1e assessment).
  *
  * The gain math itself lives in `lib/radio/normalize` (already unit-tested);
  * this module owns the tick plumbing around it (buffer lifecycle, settle vs
  * steady selection, teardown tolerance). Never throws.
+ *
+ * Subsystem contract, graph shape and the CORS rescue:
+ * docs/modules/player/leveling.md
  */
 import { hostOf } from "@/lib/player/elements";
 import { buildLevelingGraph, type LevelingGraph } from "@/lib/player/leveling-graph";
-import { adaptGain, adaptGainSteady, computeRms, effectiveRms, SETTLE_TICKS } from "@/lib/radio/normalize";
+import {
+  adaptGain,
+  adaptGainSteady,
+  computeRms,
+  effectiveRms,
+  FREEZE_FLOOR,
+  initTrimState,
+  SETTLE_TICKS,
+  trimAccumulate,
+  trimLinear,
+  type TrimState,
+} from "@/lib/radio/normalize";
 import { pickPlayableUrl, type Station } from "@/lib/radio/types";
 
 /**
@@ -37,6 +51,8 @@ export function canRouteLeveling(
 export interface LevelingRun {
   graph: LevelingGraph;
   buffer: Float32Array<ArrayBuffer>;
+  kBuffer: Float32Array<ArrayBuffer>;
+  trim: TrimState;
   settleTicksLeft: number;
 }
 
@@ -58,6 +74,8 @@ export function routeLevelingAudio(
   return {
     graph,
     buffer: new Float32Array(graph.analyser.fftSize),
+    kBuffer: new Float32Array(graph.kAnalyser.fftSize),
+    trim: initTrimState(),
     settleTicksLeft: SETTLE_TICKS,
   };
 }
@@ -102,34 +120,58 @@ export interface LevelingTick {
   gain: GainNode | null;
   element: HTMLAudioElement | null;
   buffer: Float32Array<ArrayBuffer> | null;
+  kAnalyser: AnalyserNode | null;
+  kBuffer: Float32Array<ArrayBuffer> | null;
+  trim: TrimState | null;
   settleTicksLeft: number;
 }
 
-/** One RMS tick: settle fast after tune-in, then crawl (never throws). */
+/**
+ * One RMS tick: settle fast after tune-in, then crawl (never throws). Stage 1
+ * writes its gain, then stage 2 folds its slow trim in on top — the node
+ * always holds the product, so the limiter downstream sees the true output.
+ */
 export function levelingTick(tick: LevelingTick): {
   buffer: Float32Array<ArrayBuffer>;
+  kBuffer: Float32Array<ArrayBuffer> | null;
   settleTicksLeft: number;
 } | null {
-  const { analyser, gain, element } = tick;
+  const { analyser, gain, element, kAnalyser, trim } = tick;
   if (!analyser || !gain || !element) return null;
-  let { buffer, settleTicksLeft } = tick;
+  let { buffer, kBuffer, settleTicksLeft } = tick;
   try {
     if (!buffer || buffer.length !== analyser.fftSize) {
       buffer = new Float32Array(analyser.fftSize);
     }
     analyser.getFloatTimeDomainData(buffer);
     const effective = effectiveRms(computeRms(buffer), element.volume);
-    if (effective === null) return { buffer, settleTicksLeft };
+    if (effective === null) return { buffer, kBuffer, settleTicksLeft };
+    // A tick the gain math refuses to act on (silence, speech pause, intro
+    // below the floor) must not spend the settle budget — otherwise a
+    // station whose first 8s are mostly quiet arrives at the steady crawl
+    // uncorrected and stays audibly under-level. Speech radio burned 50% of
+    // its window on pauses and settled 0.27 dB into a needed +6 dB.
+    if (effective < FREEZE_FLOOR) return { buffer, kBuffer, settleTicksLeft };
     if (settleTicksLeft > 0) {
       settleTicksLeft -= 1;
       gain.gain.value = adaptGain(gain.gain.value, effective);
     } else {
       gain.gain.value = adaptGainSteady(gain.gain.value, effective);
     }
+    // Slow LUFS trim on top: K-weighted raw samples servo the *output* onto
+    // target over ~1 min (corrects speech/bass offsets stage 1 can't see).
+    if (kAnalyser && trim) {
+      if (!kBuffer || kBuffer.length !== kAnalyser.fftSize) {
+        kBuffer = new Float32Array(kAnalyser.fftSize);
+      }
+      kAnalyser.getFloatTimeDomainData(kBuffer);
+      trimAccumulate(trim, kBuffer, gain.gain.value);
+      gain.gain.value *= trimLinear(trim.trimDb);
+    }
   } catch {
     // Analysis is progressive enhancement — never break playback.
   }
   // A null buffer here means the input had none and allocation threw —
   // report null so the engine keeps its previous (also null) buffer.
-  return buffer ? { buffer, settleTicksLeft } : null;
+  return buffer ? { buffer, kBuffer, settleTicksLeft } : null;
 }
