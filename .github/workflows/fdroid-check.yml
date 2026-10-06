@@ -1,6 +1,6 @@
 # Keep the F-Droid release contract valid without invoking fdroidserver.
 # The official metadata lint/build remains a pre-submission step in
-# docs/FDROID_PLAN.md because it needs the F-Droid build container.
+# docs/plans/FDROID_PLAN.md because it needs the F-Droid build container.
 
 name: F-Droid Readiness
 

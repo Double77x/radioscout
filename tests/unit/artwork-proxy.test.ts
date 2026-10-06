@@ -4,7 +4,7 @@ import { ddgArtworkUrl, isDdgPlaceholder, wsrvArtworkUrl } from "@/lib/radio/art
 const TUNEIN = "https://cdn-radiotime-logos.tunein.com/s24939q.png";
 const HTTP_ROW = "http://www.smoothradio.com/assets_v4r/smooth/img/favicon-196x196.png";
 
-describe("ddgArtworkUrl (primary)", () => {
+describe("ddgArtworkUrl (fallback leg)", () => {
   it("wraps the source untouched and encoded", () => {
     expect(ddgArtworkUrl(TUNEIN)).toBe(`https://proxy.duckduckgo.com/iu/?u=${encodeURIComponent(TUNEIN)}`);
   });
@@ -21,8 +21,10 @@ describe("ddgArtworkUrl (primary)", () => {
 
 describe("proxy order", () => {
   it("tries wsrv first — it reports failure honestly, so onError works", () => {
-    // The component builds `primary` from wsrv and only reaches DDG after a
-    // failure; this pins that mapping so the order cannot silently flip back.
+    // wsrv is the PRIMARY leg and DDG the fallback. This pins that mapping so
+    // the order cannot silently flip back: the two `describe` blocks above once
+    // carried each other's role, and the same swap appeared in StationArt's
+    // stage comment. Nothing in the types stops that, so it is asserted here.
     expect(new URL(wsrvArtworkUrl(TUNEIN)).host).toBe("wsrv.nl");
     expect(new URL(ddgArtworkUrl(TUNEIN)).host).toBe("proxy.duckduckgo.com");
   });
@@ -60,7 +62,7 @@ describe("isDdgPlaceholder", () => {
   });
 });
 
-describe("wsrvArtworkUrl (fallback)", () => {
+describe("wsrvArtworkUrl (primary leg)", () => {
   it("passes the full URL including scheme (stripped form breaks TLS-only ports)", () => {
     expect(wsrvArtworkUrl(TUNEIN)).toBe(`https://wsrv.nl/?url=${encodeURIComponent(TUNEIN)}`);
     expect(wsrvArtworkUrl(HTTP_ROW)).toBe(`https://wsrv.nl/?url=${encodeURIComponent(HTTP_ROW)}`);

@@ -32,7 +32,8 @@ export function StationArt({ src, className, fallbackClassName, iconClassName }:
   const primary = wsrvArtworkUrl(src);
   const fallback = ddgArtworkUrl(src);
   const current = stage === 0 ? primary : fallback;
-  // 0 → DDG, 1 → wsrv, 2 → give up. Shared by every failure path below.
+  // Stage 0 is the wsrv primary, stage 1 the DDG fallback, stage 2 gives up.
+  // Shared by every failure path below.
   const advance = () => {
     setStage((previous) => (previous === 0 ? 1 : 2));
   };

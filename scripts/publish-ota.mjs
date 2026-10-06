@@ -181,7 +181,7 @@ const tag = `ota-${channel}-${version}`;
 // GitHub source skips prereleases by default (`includePrereleases` defaults to
 // false). Do not "fix" that by flipping `includePrereleases` in
 // `distribution/obtainium/*.json`. A config that opts in would let a scraper
-// walk these `.zip`-only releases. See docs/OBTAINIUM_PLAN.md §4.1.
+// walk these `.zip`-only releases. See docs/plans/OBTAINIUM_PLAN.md §4.1.
 // `gh release create <file>#<label>` renaming is a no-op on Windows, and
 // GitHub serves `+` in asset names only percent-encoded — so stage an
 // exactly-named copy: the uploaded asset, the manifest URL and the on-disk

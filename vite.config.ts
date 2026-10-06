@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
           // `release-apk.yml`, `publish-ota.mjs`). That step is the real
           // guarantee; the env flag just documents intent.
           command:
-            "vp build && tsc -b && node scripts/generate-sitemap.js && node scripts/apply-header-policy.js && node scripts/generate-sw.mjs",
+            "vp build && tsc -b && node scripts/generate-sitemap.js && node scripts/apply-header-policy.js && node scripts/generate-sw.mjs && node scripts/check-doc-pointers.js",
           cache: {
             output: ["dist/**"],
           },

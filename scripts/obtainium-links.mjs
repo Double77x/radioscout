@@ -95,7 +95,7 @@ if (descriptionEn !== shortDescription) {
 // Obtainium skips unless asked. The earlier `apkFilterRegEx` existed to
 // insulate the listing from that release being a normal one; making it a
 // prerelease removes the need for the filter, and the directory's own criteria
-// ask for defaults wherever they work. See §4.2 of docs/OBTAINIUM_PLAN.md.
+// ask for defaults wherever they work. See §4.2 of docs/plans/OBTAINIUM_PLAN.md.
 const entry = config.config;
 if (!isRecord(entry)) {
   fail(

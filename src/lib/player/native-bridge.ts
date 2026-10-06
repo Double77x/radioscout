@@ -5,7 +5,7 @@
  * retry loop, so `ensureNativeListener` and `playViaNative` stay there:
  * handoff and transport share those bindings on every transition, and a
  * seam between them would move complexity without concentrating it
- * (see `docs/REFACTOR_PLAYER_ENGINE_PLAN.md` Phase 1e assessment).
+ * (see `docs/plans/REFACTOR_PLAYER_ENGINE_PLAN.md` Phase 1e assessment).
  *
  * Nothing in here reads player state or emits snapshots. Never throws.
  */

@@ -26,7 +26,7 @@ describe("parseIcyBlock", () => {
   });
 });
 
-// Captured live from stream.revma.ihrhls.com (see docs/STREAM_TITLES.md).
+// Captured live from stream.revma.ihrhls.com (see docs/plans/STREAM_TITLES.md).
 const IHEART_Z100 =
   'Bruno Mars - text="Risk It All" song_spot="M" MediaBaseId="3206087" itunesTrackId="0" amgTrackId="-1" amgArtistId="0" TAID="0" TPID="383258012" cartcutId="0445994001" amgArtworkURL="http://img.iheart.com/sca/imscale?w=195&img=http%3A//assets.iheart.com/default/Default-PlayerAlbumArt.png" length="00:03:18" unsID="-1" spotInstanceId="-1"';
 

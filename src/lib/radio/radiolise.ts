@@ -12,24 +12,18 @@ export interface RadioliseFetchOptions {
 }
 
 /**
- * One-shot title lookup against the open Radiolise metadata API
- * (`POST /api/v1/metadata`).
+ * One-shot title lookup against the open Radiolise metadata API.
  *
- * Worth a slot at the head of the probe chain because their server holds the
- * upstream ICY connection open across callers: a warm station answers in
- * well under a second with no audio bytes pulled by anyone. Measured
- * 0.3–0.6s for Xtra Hot and Gold. Cold stations hang instead — their REST
- * route only responds on the first published title (measured 60s+ on
- * Capital XTRA) — so callers must cap this well under the poll interval and
+ * Warm stations answer almost immediately because their server holds the
+ * upstream ICY connection open across callers; cold ones hang until their
+ * first published title, so callers cap this well under the poll interval and
  * fall through on anything but `ok`.
  *
- * POST, not GET: their docs warn query parameters land in server logs, which
- * would record who listens to what on every poll. The JSON body carries the
- * same field their route already reads.
+ * POST, not GET: query parameters land in their server logs, which would
+ * record who listens to what on every poll. The JSON body carries the same
+ * field their route already reads.
  *
- * Returned titles run through the same `normalizeStreamTitle` as in-page
- * reads: their parser ships the raw stuffed value, ad markers included.
- * Never rejects: every failure maps to an outcome the caller can route on.
+ * Chain order, the timeout cap and the outcome table: docs/modules/radio/radiolise.md
  */
 export async function fetchRadioliseTitle(
   target: string,

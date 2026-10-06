@@ -3,7 +3,7 @@ import { isRecord } from "./utils";
 /**
  * Shared edge-cache + JSON envelope for the Pages Functions probes
  * (`/api/icy-title`, `/api/bbc-title`). One module so the Cache API
- * ceremony lives in exactly one place — see `docs/STREAM_TITLES.md` for
+ * ceremony lives in exactly one place — see `docs/plans/STREAM_TITLES.md` for
  * why the explicit `caches.default.put` exists at all.
  */
 

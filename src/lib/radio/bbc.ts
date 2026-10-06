@@ -11,23 +11,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * BBC live metadata via the Radio & Music Services (RMS) JSON feeds.
+ * BBC live metadata via the Radio & Music Services JSON feeds, for BBC
+ * stations whose HLS streams carry no in-band `StreamTitle`.
  *
- * Shoutcast/Icecast `StreamTitle` never reaches us on BBC-style HLS
- * streams, so the player asks the BBC instead — the same feeds behind the
- * BBC Sounds "now playing" line (via `GET /api/bbc-title`, which is what
- * actually fetches RMS; browsers get no CORS headers from RMS, so this
- * module never calls it client-side outside dev middleware).
+ * RMS sends browsers no CORS headers, so the client never calls it directly —
+ * the edge function does. Everything here is parsing and URL building, which is
+ * what lets the dev middleware load this file too.
  *
- * Two feeds, first hit wins:
- * 1. `segments/latest` — the last music segment (`Artist - Track`).
- * 2. `broadcasts/latest` — the on-air programme (`Show - Episode`) for
- *    speech stations and music gaps with nothing recent.
- *
- * Station matching needs no directory: every BBC stream URL and Sounds
- * homepage already carries the service id (`bbc_radio_two`,
- * `bbc_6music`, `bbc_radio_one_anthems`, …), so it is read out of the
- * station row instead of maintained as a list.
+ * Feeds, poll policy, paging and the local `isRecord`: docs/modules/radio/bbc.md
  */
 
 export const BBC_RMS_BASE = "https://rms.api.bbc.co.uk/v2";

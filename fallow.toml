@@ -32,7 +32,7 @@ ignoreDependencies = [
   "@capacitor/android", # native platform shell (gradle side), never imported in TS
   "@capacitor/keyboard", # configured in capacitor.config.ts; implementation ships with the native shell
   "@tanstack/react-start", # framework entry (Start plugin + route tree), not a test-only dep
-  "vite-plugin-pwa", # deliberate: installed for the roadmap offline pass, unwired until then (docs/TECH_STACK.md)
+  "vite-plugin-pwa", # installed but deliberately unwired: the verified offline path is scripts/generate-sw.mjs (docs/standards/TECH_STACK.md)
   "wrangler", # invoked via the `preview` script, never imported
   "@playwright/test", # e2e specs + the native WebView probe script
 ]
