@@ -1,0 +1,1 @@
+Fixed volume climbing or dipping while a station plays: the leveler holds steady after tune-in instead of chasing speech and jingles. Most Loved always shows the full 50 stations again.

@@ -12,6 +12,15 @@ interface ChangelogEntry {
 /** Newest first. One entry per release — the markup below stays identical. */
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: "0.4.3",
+    title: "Steady volume, no more swelling",
+    date: "October 2026",
+    points: [
+      "Fixed the volume climbing or dipping while a station plays: the leveler no longer chases speech, jingles or loud passages, so what you hear stays put after the first few seconds.",
+      "Most Loved always shows the full 50 stations again, even when most top-voted rows can't play in a browser.",
+    ],
+  },
+  {
     version: "0.4.2",
     title: "Even volume across stations",
     date: "October 2026",
