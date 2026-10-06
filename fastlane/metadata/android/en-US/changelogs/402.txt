@@ -1,0 +1,1 @@
+Stations now play at a consistent volume: quieter stations are lifted to match louder ones, loud ones turned down without flattening the music, and a limiter stops boosted peaks from distorting. Applies in the browser and the Android app alike.

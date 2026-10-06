@@ -12,6 +12,15 @@ interface ChangelogEntry {
 /** Newest first. One entry per release — the markup below stays identical. */
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: "0.4.2",
+    title: "Even volume across stations",
+    date: "October 2026",
+    points: [
+      "Stations now play at a consistent volume: quieter stations are lifted to match louder ones as you switch, and the match keeps refining itself while you listen — speech stations settle in over the first minute.",
+      "Loud stations are turned down without flattening the music: songs keep their dynamics, and a limiter stops boosted peaks from distorting. Applies in the browser and the Android app alike.",
+    ],
+  },
+  {
     version: "0.4.1",
     title: "Offline on the web",
     date: "October 2026",
