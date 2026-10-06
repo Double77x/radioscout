@@ -650,8 +650,9 @@ let carRefreshOn = readCarRefreshEnabled();
 let audioCtx: AudioContext | null = null;
 let normGain: GainNode | null = null;
 let normAnalyser: AnalyserNode | null = null;
-/** Raw-source tap for the stage-2 trim (null while playing direct). */
-let normKAnalyser: AnalyserNode | null = null;
+/** Raw-source taps for the stage-2 trim, one per channel (null while direct). */
+let normKAnalyserL: AnalyserNode | null = null;
+let normKAnalyserR: AnalyserNode | null = null;
 /** True while the live element is routed through the graph. */
 let audioRouted = false;
 /** Settle ticks left in the fast tune-in phase (0 = steady crawl). */
@@ -666,10 +667,13 @@ let retriedDirect = false;
 let audioAbort: AbortController | null = null;
 /** Scratch window for the analyser (allocated with the graph). */
 let analysisBuffer: Float32Array<ArrayBuffer> | null = null;
-/** Scratch window for the stage-2 K tap (allocated with the graph). */
-let kAnalysisBuffer: Float32Array<ArrayBuffer> | null = null;
+/** Scratch windows for the stage-2 K taps (allocated with the graph). */
+let kAnalysisBufferL: Float32Array<ArrayBuffer> | null = null;
+let kAnalysisBufferR: Float32Array<ArrayBuffer> | null = null;
 /** Slow LUFS trim state for the live element (fresh per station). */
 let trimState: TrimState = initTrimState();
+/** Stage-1 gain for the live element (1 = unity; node holds product). */
+let stageGain = 1;
 
 function ensureAudio(): HTMLAudioElement | null {
   if (globalThis.window === undefined) return null;
@@ -836,10 +840,13 @@ function maybeRouteAudio(element: HTMLAudioElement): void {
   audioCtx = run.graph.ctx;
   normGain = run.graph.gain;
   normAnalyser = run.graph.analyser;
-  normKAnalyser = run.graph.kAnalyser;
+  normKAnalyserL = run.graph.kAnalyserL;
+  normKAnalyserR = run.graph.kAnalyserR;
   analysisBuffer = run.buffer;
-  kAnalysisBuffer = run.kBuffer;
+  kAnalysisBufferL = run.kBufferL;
+  kAnalysisBufferR = run.kBufferR;
   trimState = run.trim;
+  stageGain = run.stageGain;
   audioRouted = true;
   // Fresh graph starts at unity in the fast settle phase (see play()).
   settleTicksLeft = run.settleTicksLeft;
@@ -878,10 +885,13 @@ function rebuildAudio(): HTMLAudioElement | null {
   }
   normGain = null;
   normAnalyser = null;
-  normKAnalyser = null;
+  normKAnalyserL = null;
+  normKAnalyserR = null;
   analysisBuffer = null;
-  kAnalysisBuffer = null;
+  kAnalysisBufferL = null;
+  kAnalysisBufferR = null;
   trimState = initTrimState();
+  stageGain = 1;
   audio = null;
   audioRouted = false;
   return ensureAudio();
@@ -889,6 +899,7 @@ function rebuildAudio(): HTMLAudioElement | null {
 
 /** Park the leveling gain at unity (toggle-off path — analysis just stops). */
 function freezeGain(): void {
+  stageGain = 1;
   freezeLevelingGain(normGain, audioCtx);
   resetTrimState(trimState);
 }
@@ -900,15 +911,20 @@ function adaptTick(): void {
     gain: normGain,
     element: audio,
     buffer: analysisBuffer,
-    kAnalyser: normKAnalyser,
-    kBuffer: kAnalysisBuffer,
+    kAnalyserL: normKAnalyserL,
+    kAnalyserR: normKAnalyserR,
+    kBufferL: kAnalysisBufferL,
+    kBufferR: kAnalysisBufferR,
     trim: trimState,
     settleTicksLeft,
+    stageGain,
   });
   if (!result) return;
   analysisBuffer = result.buffer;
-  kAnalysisBuffer = result.kBuffer;
+  kAnalysisBufferL = result.kBufferL;
+  kAnalysisBufferR = result.kBufferR;
   settleTicksLeft = result.settleTicksLeft;
+  stageGain = result.stageGain;
 }
 
 /**
@@ -917,6 +933,7 @@ function adaptTick(): void {
  * next one. Gain touch lives in `lib/player/leveling` — the budget stays here.
  */
 function resetLevelingForStation(): void {
+  stageGain = 1;
   settleTicksLeft = resetLevelingGain(normGain);
   // The slow trim learned the previous station's offsets — a fresh station
   // starts untrimmed (the staged element preloaded muted, so it learned
@@ -1477,9 +1494,11 @@ function handoffToIncoming(station: Station, handoff: number): void {
   audioCtx = incomingGraph?.ctx ?? null;
   normGain = incomingGraph?.gain ?? null;
   normAnalyser = incomingGraph?.analyser ?? null;
-  normKAnalyser = incomingGraph?.kAnalyser ?? null;
+  normKAnalyserL = incomingGraph?.kAnalyserL ?? null;
+  normKAnalyserR = incomingGraph?.kAnalyserR ?? null;
   analysisBuffer = normAnalyser ? new Float32Array(normAnalyser.fftSize) : null;
-  kAnalysisBuffer = normKAnalyser ? new Float32Array(normKAnalyser.fftSize) : null;
+  kAnalysisBufferL = normKAnalyserL ? new Float32Array(normKAnalyserL.fftSize) : null;
+  kAnalysisBufferR = normKAnalyserR ? new Float32Array(normKAnalyserR.fftSize) : null;
   audioRouted = incomingRouted;
   incomingGraph = null;
   incomingRouted = false;
@@ -1497,9 +1516,11 @@ function handoffToIncoming(station: Station, handoff: number): void {
       audioCtx = null;
       normGain = null;
       normAnalyser = null;
-      normKAnalyser = null;
+      normKAnalyserL = null;
+      normKAnalyserR = null;
       analysisBuffer = null;
-      kAnalysisBuffer = null;
+      kAnalysisBufferL = null;
+      kAnalysisBufferR = null;
       audioRouted = false;
       if (ctx) void ctx.close().catch(() => {});
     });

@@ -237,8 +237,10 @@ function sineWindow(amplitude: number, samples: number = TRIM_WINDOW): Float32Ar
 describe("trimAccumulate", () => {
   it("rides up toward the K target on quiet programme", () => {
     const state = initTrimState();
-    // 1 kHz at 0.05 peak ≈ −26 LU momentary: three windows of want ≈ +3 dB.
-    for (let window = 0; window < 3; window += 1) trimAccumulate(state, sineWindow(0.05), 1);
+    // Dual-mono 1 kHz at 0.05 peak ≈ −23 LU momentary: ten windows of
+    // want ≈ +3 dB (channel energies sum per BS.1770).
+    const tone = sineWindow(0.05);
+    for (let window = 0; window < 10; window += 1) trimAccumulate(state, tone, tone, 1);
     expect(state.anchor).not.toBeNull();
     expect(state.trimDb).toBeGreaterThan(0.2);
     expect(state.trimDb).toBeLessThanOrEqual(TRIM_DB);
@@ -246,42 +248,115 @@ describe("trimAccumulate", () => {
   });
 
   it("counts stage-1 gain as output loudness", () => {
-    // 1 kHz at 0.2 peak ≈ −17 LU: untrimmed it wants the full +3 dB, but the
-    // same samples behind a stage-1 gain of 2 read 6 dB hotter and trim down.
+    // Dual-mono 1 kHz at 0.15 peak ≈ −16.5 LU: untrimmed it wants ≈ +2.5 dB,
+    // but the same samples behind a stage-1 gain of 2 read 6 dB hotter and
+    // trim down.
     const direct = initTrimState();
     const boosted = initTrimState();
-    for (let window = 0; window < 3; window += 1) trimAccumulate(direct, sineWindow(0.2), 1);
-    for (let window = 0; window < 3; window += 1) trimAccumulate(boosted, sineWindow(0.2), 2);
+    const tone = sineWindow(0.15);
+    for (let window = 0; window < 3; window += 1) trimAccumulate(direct, tone, tone, 1);
+    for (let window = 0; window < 3; window += 1) trimAccumulate(boosted, tone, tone, 2);
     expect(direct.trimDb).toBeGreaterThan(0);
     expect(boosted.trimDb).toBeLessThan(0);
   });
 
+  it("steers from the anchor, so bursts freeze instead of yanking", () => {
+    // Settle the anchor on quiet programme, then hammer three loud windows:
+    // each burst sits far outside the deadband, so the trim holds EXACTLY
+    // while the anchor underneath keeps learning (the old per-block want
+    // chased bursts straight to −3 dB — the Capital XTRA pumping report).
+    const state = initTrimState();
+    const quiet = sineWindow(0.15);
+    for (let window = 0; window < 15; window += 1) trimAccumulate(state, quiet, quiet, 1);
+    const settled = state.trimDb;
+    expect(settled).toBeGreaterThan(0.3);
+    const loud = sineWindow(1);
+    for (let window = 0; window < 3; window += 1) trimAccumulate(state, loud, loud, 1);
+    expect(state.trimDb).toBe(settled);
+  });
+
+  it("still converges on a sustained offset, just slowly", () => {
+    // Forty identical windows (≈40 s of audio) move the trim a third of the
+    // way to a +2.5 dB want — station offsets converge over minutes, never
+    // within a song. That slowness is the anti-pumping guarantee.
+    const state = initTrimState();
+    const tone = sineWindow(0.15);
+    for (let window = 0; window < 40; window += 1) trimAccumulate(state, tone, tone, 1);
+    expect(state.trimDb).toBeGreaterThan(0.5);
+    expect(state.trimDb).toBeLessThanOrEqual(TRIM_DB);
+  });
+
+  it("sums channel energies instead of mono-mixing", () => {
+    // Dual-mono reads 3 dB hotter than left-only (BS.1770 channel sum), so
+    // the same left samples trim down harder with a live right channel.
+    // Twenty windows: slow trim needs the run-up to separate clearly.
+    const dual = initTrimState();
+    const single = initTrimState();
+    const tone = sineWindow(0.3);
+    const silence = new Float32Array(TRIM_WINDOW);
+    for (let window = 0; window < 20; window += 1) {
+      trimAccumulate(dual, tone, tone, 1);
+      trimAccumulate(single, tone, silence, 1);
+    }
+    expect(dual.trimDb).toBeLessThan(single.trimDb - 0.3);
+  });
+
   it("ignores gated blocks: silence and quiet-relative passages don't steer", () => {
     const state = initTrimState();
-    for (let window = 0; window < 3; window += 1) trimAccumulate(state, sineWindow(1), 1);
+    const loud = sineWindow(1);
+    for (let window = 0; window < 3; window += 1) trimAccumulate(state, loud, loud, 1);
     const loudTrim = state.trimDb;
     expect(loudTrim).toBeLessThan(0);
     // Digital silence: absolute gate, accumulator only.
-    for (let window = 0; window < 3; window += 1) trimAccumulate(state, new Float32Array(TRIM_WINDOW), 1);
+    const silence = new Float32Array(TRIM_WINDOW);
+    for (let window = 0; window < 3; window += 1) trimAccumulate(state, silence, silence, 1);
     expect(state.trimDb).toBe(loudTrim);
     // −60 LU murmur after a loud anchor: relative gate, no steering.
-    for (let window = 0; window < 3; window += 1) trimAccumulate(state, sineWindow(0.001), 1);
+    const murmur = sineWindow(0.001);
+    for (let window = 0; window < 3; window += 1) trimAccumulate(state, murmur, murmur, 1);
     expect(state.trimDb).toBe(loudTrim);
   });
 
   it("never throws on garbage and resets cleanly per station", () => {
     const state = initTrimState();
-    for (let window = 0; window < 2; window += 1) trimAccumulate(state, sineWindow(0.05), 1);
+    const tone = sineWindow(0.05);
+    for (let window = 0; window < 2; window += 1) trimAccumulate(state, tone, tone, 1);
     expect(state.trimDb).not.toBe(0);
     expect(() => {
-      trimAccumulate(state, sineWindow(0.05), 0);
-      trimAccumulate(state, sineWindow(0.05), Number.NaN);
+      trimAccumulate(state, tone, tone, 0);
+      trimAccumulate(state, tone, tone, Number.NaN);
     }).not.toThrow();
     resetTrimState(state);
     expect(state.trimDb).toBe(0);
     expect(state.anchor).toBeNull();
     expect(trimLinear(Number.NaN)).toBe(1);
     expect(trimLinear(TRIM_DB + 10)).toBeCloseTo(10 ** (TRIM_DB / 20), 10);
+  });
+
+  it("evaluates loudness invariant to element.volume (never fights volume slider)", () => {
+    // A stream played at 50% element volume (-6 dB) has its source-tapped
+    // samples attenuated by half. trimAccumulate divides out volume so that
+    // both anchor and trimDb match 100% volume playback exactly.
+    const fullState = initTrimState();
+    const halfState = initTrimState();
+    const fullTone = sineWindow(0.15);
+    const halfTone = new Float32Array(fullTone.length);
+    for (let i = 0; i < fullTone.length; i += 1) {
+      const sample = fullTone[i];
+      if (sample !== undefined) halfTone[i] = sample * 0.5;
+    }
+
+    for (let window = 0; window < 10; window += 1) {
+      trimAccumulate(fullState, fullTone, fullTone, 1, 1);
+      trimAccumulate(halfState, halfTone, halfTone, 1, 0.5);
+    }
+
+    const fullAnchor = fullState.anchor ?? 0;
+    const halfAnchor = halfState.anchor ?? 0;
+    expect(fullState.anchor).not.toBeNull();
+    expect(halfState.anchor).not.toBeNull();
+    expect(halfAnchor).toBeCloseTo(fullAnchor, 2);
+    expect(halfState.trimDb).toBeCloseTo(fullState.trimDb, 3);
   });
 });
 

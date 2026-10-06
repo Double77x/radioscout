@@ -124,17 +124,18 @@ public class LevelingAudioProcessorTest {
 
     @Test
     public void kFilterBlocksDcAndPassesMidband() {
-        LevelingAudioProcessor processor = new LevelingAudioProcessor();
+        float[] state = LevelingAudioProcessor.newKState();
         float dc = 0f;
-        for (int i = 0; i < 2000; i++) dc = processor.kFilterSample(1f);
+        for (int i = 0; i < 2000; i++) dc = LevelingAudioProcessor.kFilterSample(1f, state);
         assertEquals(0f, dc, 0.01f);
         float peak = 0f;
         for (int i = 0; i < 4800; i++) {
-            float value = processor.kFilterSample((float) Math.sin(2 * Math.PI * 1000 * i / 48_000));
+            float value =
+                    LevelingAudioProcessor.kFilterSample((float) Math.sin(2 * Math.PI * 1000 * i / 48_000), state);
             if (i > 2400) peak = Math.max(peak, Math.abs(value));
         }
         org.junit.Assert.assertTrue("peak " + peak, peak > 0.9f && peak < 1.25f);
-        assertEquals(0f, processor.kFilterSample(Float.NaN), 0f);
+        assertEquals(0f, LevelingAudioProcessor.kFilterSample(Float.NaN, LevelingAudioProcessor.newKState()), 0f);
     }
 
     @Test
@@ -147,15 +148,32 @@ public class LevelingAudioProcessorTest {
 
     @Test
     public void evaluateTrimServosOutputOntoTarget() {
-        // Output 3 LU under target trims up; 3 LU over trims down.
-        float up = LevelingAudioProcessor.evaluateTrim(0f, -14f, -17f);
+        // Anchored 3 LU under target trims up; 3 LU over trims down. The step
+        // steers from the slow anchor — the live block only feeds the anchor.
+        float up = LevelingAudioProcessor.evaluateTrim(0f, -17f, -17f);
         org.junit.Assert.assertTrue(up > 0f && up <= 3f);
-        float down = LevelingAudioProcessor.evaluateTrim(0f, -14f, -11f);
+        float down = LevelingAudioProcessor.evaluateTrim(0f, -11f, -11f);
         org.junit.Assert.assertTrue(down < 0f && down >= -3f);
         // Relative-gated blocks and garbage hold the trim.
         assertEquals(1f, LevelingAudioProcessor.evaluateTrim(1f, -14f, -30f), 0f);
         assertEquals(1f, LevelingAudioProcessor.evaluateTrim(1f, Float.NaN, -14f), 0f);
         assertEquals(1f, LevelingAudioProcessor.evaluateTrim(1f, -14f, Float.NaN), 0f);
+    }
+
+    @Test
+    public void evaluateTrimSteersFromTheAnchorSoBurstsCannotYankIt() {
+        // Anchor settled on quiet programme; three loud burst blocks sit far
+        // outside the deadband, so the trim holds EXACTLY while the anchor
+        // underneath keeps learning (a per-block want would chase the bursts
+        // straight to −3 dB — the Capital XTRA pumping report).
+        float trim = 1.2f;
+        float anchor = -16.5f;
+        for (int i = 0; i < 3; i++) {
+            anchor = LevelingAudioProcessor.updateAnchor(anchor, 0f);
+            trim = LevelingAudioProcessor.evaluateTrim(trim, anchor, 0f);
+        }
+        assertEquals(1.2f, trim, 0f);
+        org.junit.Assert.assertTrue("anchor " + anchor, anchor > -16.5f);
     }
 
     @Test

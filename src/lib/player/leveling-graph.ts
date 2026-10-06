@@ -13,8 +13,13 @@ export interface LevelingGraph {
   ctx: AudioContext;
   gain: GainNode;
   analyser: AnalyserNode;
-  /** Raw-source tap for the stage-2 LUFS trim (K biquads run JS-side per tick). */
-  kAnalyser: AnalyserNode;
+  /**
+   * Raw-source taps for the stage-2 LUFS trim, one per stereo channel: BS.1770
+   * sums channel energies, and a mono-downmixed tap would read correlated
+   * stereo ~3 dB cold. K biquads run JS-side per tick over both buffers.
+   */
+  kAnalyserL: AnalyserNode;
+  kAnalyserR: AnalyserNode;
   /** Safety limiter: brickwall at −1 dBFS so boosted peaks shave, never clip. */
   comp: DynamicsCompressorNode;
 }
@@ -62,14 +67,21 @@ export function buildLevelingGraph(element: HTMLAudioElement): LevelingGraph | n
     presence.connect(analyser);
     analyser.connect(whisper);
     whisper.connect(ctx.destination);
-    // Raw-source tap for the stage-2 trim: the K biquads run JS-side per tick
-    // over this buffer, so the graph only hosts the tap. Joins the whisper
-    // tail (still −50 dB down summed — fully masked).
-    const kAnalyser = ctx.createAnalyser();
-    kAnalyser.fftSize = 2048;
-    source.connect(kAnalyser);
-    kAnalyser.connect(whisper);
-    return { ctx, gain, analyser, kAnalyser, comp };
+    // Raw-source taps for the stage-2 trim, split per channel (see interface):
+    // the K biquads run JS-side per tick over both buffers, so the graph only
+    // hosts the taps. Both join the whisper tail (still ~−50 dB down summed —
+    // fully masked).
+    const splitter = ctx.createChannelSplitter(2);
+    const kAnalyserL = ctx.createAnalyser();
+    kAnalyserL.fftSize = 2048;
+    const kAnalyserR = ctx.createAnalyser();
+    kAnalyserR.fftSize = 2048;
+    source.connect(splitter);
+    splitter.connect(kAnalyserL, 0);
+    splitter.connect(kAnalyserR, 1);
+    kAnalyserL.connect(whisper);
+    kAnalyserR.connect(whisper);
+    return { ctx, gain, analyser, kAnalyserL, kAnalyserR, comp };
   } catch {
     // Graph unavailable — the element plays directly, leveling skipped.
     return null;

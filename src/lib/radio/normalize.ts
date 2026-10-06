@@ -154,10 +154,16 @@ export const TRIM_TARGET_LU = -14;
 /** Trim authority: the slow stage corrects, never leads (±3 dB). */
 export const TRIM_DB = 3;
 /**
- * Trim easing per evaluated momentary window (~2.3s of tick audio — τ ≈ 50s,
- * an order of magnitude slower than stage 1 so the stages can't fight).
+ * Trim easing per evaluated momentary window (~2.3s of tick audio — τ ≈ 3 min,
+ * far slower than any song section or talk burst, so the trim only ever
+ * corrects sustained station-level offsets and can never ride the programme).
  */
-export const TRIM_COEFF = 0.045;
+export const TRIM_COEFF = 0.013;
+/** Adaptation deadband: content this far from its own slow average freezes
+ * the trim (bursts, jingles and tune-in transients included) while the
+ * anchor underneath keeps learning. Without it the trim chases every burst
+ * and the volume audibly breathes on speech stations. */
+export const TRIM_DEADBAND = 3;
 /** Anchor easing per evaluated window (τ ≈ 2 min — the anchor is history). */
 export const TRIM_ANCHOR_COEFF = 0.02;
 /** Momentary window in samples (400 ms at 48 kHz — rate-shift tolerant). */
@@ -175,12 +181,13 @@ export interface TrimState {
   anchor: number | null;
   accE: number;
   accN: number;
-  k: KFilterState;
+  kLeft: KFilterState;
+  kRight: KFilterState;
 }
 
 /** Fresh trim: 0 dB correction, no anchor, empty window (tune-in state). */
 export function initTrimState(): TrimState {
-  return { trimDb: 0, anchor: null, accE: 0, accN: 0, k: initKFilter() };
+  return { trimDb: 0, anchor: null, accE: 0, accN: 0, kLeft: initKFilter(), kRight: initKFilter() };
 }
 
 /** Restart the trim for a new station (previous correction must not carry). */
@@ -189,7 +196,8 @@ export function resetTrimState(state: TrimState): void {
   state.anchor = null;
   state.accE = 0;
   state.accN = 0;
-  state.k = initKFilter();
+  state.kLeft = initKFilter();
+  state.kRight = initKFilter();
 }
 
 /** Trim correction as a linear multiplier. Never throws. */
@@ -199,33 +207,55 @@ export function trimLinear(trimDb: number): number {
 }
 
 /**
- * Feed raw analyser-domain samples plus the stage-1 gain behind them. Each
- * completed 400 ms window is evaluated as post-gain K momentary loudness —
- * post-gain deliberately, so the trim servos the *output* onto target instead
- * of double-counting stage 1 (the 50s time constant keeps the loop stable
- * where a fast post-gain tap would oscillate). Muted/zeroed windows fall
- * under the absolute gate and only reset the accumulator. Never throws.
+ * Feed raw analyser-domain samples (one buffer per stereo channel — BS.1770
+ * sums channel energies, and mono-mixing first reads correlated stereo ~3 dB
+ * cold, which railed the trim fighting stage 1) plus the stage-1 gain behind
+ * them. Each completed 400 ms window is evaluated as post-gain K momentary
+ * loudness — post-gain deliberately, so the trim servos the *output* onto
+ * target instead of double-counting stage 1 (the ~3 min time constant keeps
+ * the loop stable where a fast post-gain tap would oscillate). Muted/zeroed
+ * windows fall under the absolute gate and only reset the accumulator.
+ * The trim steers from the slow anchor, never the live block, and content
+ * outside a 3 dB deadband around the anchor freezes adaptation while the
+ * anchor keeps learning — so bursts, jingles and tune-in transients cannot
+ * yank the volume around. Never throws.
  */
 export function trimAccumulate(
   state: TrimState,
-  samples: ArrayLike<number> & Iterable<number>,
+  left: ArrayLike<number>,
+  right: ArrayLike<number>,
   stage1Gain: number,
+  volume = 1,
+  settling = false,
 ): void {
   if (!Number.isFinite(stage1Gain) || stage1Gain <= 0) return;
+  if (!Number.isFinite(volume) || volume < VOLUME_FLOOR) return;
   try {
-    for (const sample of samples) {
-      const k = kFilterSample(state.k, sample);
-      state.accE += k * k;
+    const frames = Math.min(left.length, right.length);
+    for (let index = 0; index < frames; index += 1) {
+      const kl = kFilterSample(state.kLeft, left[index] ?? 0);
+      const kr = kFilterSample(state.kRight, right[index] ?? 0);
+      state.accE += kl * kl + kr * kr;
       state.accN += 1;
       if (state.accN >= TRIM_WINDOW) {
-        const lu = 10 * Math.log10(Math.max(state.accE / state.accN, 1e-12)) - TRIM_K_OFFSET;
+        // Divide out element volume: the Web Audio source tap is pre-attenuated
+        // by the volume slider, so divide back out to measure full-scale stream
+        // loudness and ensure stage 2 never fights the volume slider.
+        const meanSquare = state.accE / state.accN / (volume * volume);
+        const lu = 10 * Math.log10(Math.max(meanSquare, 1e-12)) - TRIM_K_OFFSET;
         state.accE = 0;
         state.accN = 0;
         if (!(lu > TRIM_ABS_GATE)) continue;
         const postLu = lu + 20 * Math.log10(stage1Gain);
+        if (settling) {
+          state.anchor = postLu;
+          continue;
+        }
         state.anchor = state.anchor === null ? postLu : state.anchor + (postLu - state.anchor) * TRIM_ANCHOR_COEFF;
         if (!(postLu > state.anchor - TRIM_REL_GATE)) continue;
-        const want = Math.max(-TRIM_DB, Math.min(TRIM_DB, TRIM_TARGET_LU - postLu));
+        // Burst freeze: steer only from content near its own average.
+        if (Math.abs(postLu - state.anchor) > TRIM_DEADBAND) continue;
+        const want = Math.max(-TRIM_DB, Math.min(TRIM_DB, TRIM_TARGET_LU - state.anchor));
         state.trimDb += (want - state.trimDb) * TRIM_COEFF;
       }
     }

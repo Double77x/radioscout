@@ -51,9 +51,11 @@ export function canRouteLeveling(
 export interface LevelingRun {
   graph: LevelingGraph;
   buffer: Float32Array<ArrayBuffer>;
-  kBuffer: Float32Array<ArrayBuffer>;
+  kBufferL: Float32Array<ArrayBuffer>;
+  kBufferR: Float32Array<ArrayBuffer>;
   trim: TrimState;
   settleTicksLeft: number;
+  stageGain: number;
 }
 
 /**
@@ -74,9 +76,11 @@ export function routeLevelingAudio(
   return {
     graph,
     buffer: new Float32Array(graph.analyser.fftSize),
-    kBuffer: new Float32Array(graph.kAnalyser.fftSize),
+    kBufferL: new Float32Array(graph.kAnalyserL.fftSize),
+    kBufferR: new Float32Array(graph.kAnalyserR.fftSize),
     trim: initTrimState(),
     settleTicksLeft: SETTLE_TICKS,
+    stageGain: 1,
   };
 }
 
@@ -120,10 +124,13 @@ export interface LevelingTick {
   gain: GainNode | null;
   element: HTMLAudioElement | null;
   buffer: Float32Array<ArrayBuffer> | null;
-  kAnalyser: AnalyserNode | null;
-  kBuffer: Float32Array<ArrayBuffer> | null;
+  kAnalyserL: AnalyserNode | null;
+  kAnalyserR: AnalyserNode | null;
+  kBufferL: Float32Array<ArrayBuffer> | null;
+  kBufferR: Float32Array<ArrayBuffer> | null;
   trim: TrimState | null;
   settleTicksLeft: number;
+  stageGain?: number;
 }
 
 /**
@@ -133,45 +140,56 @@ export interface LevelingTick {
  */
 export function levelingTick(tick: LevelingTick): {
   buffer: Float32Array<ArrayBuffer>;
-  kBuffer: Float32Array<ArrayBuffer> | null;
+  kBufferL: Float32Array<ArrayBuffer> | null;
+  kBufferR: Float32Array<ArrayBuffer> | null;
   settleTicksLeft: number;
+  stageGain: number;
 } | null {
-  const { analyser, gain, element, kAnalyser, trim } = tick;
+  const { analyser, gain, element, kAnalyserL, kAnalyserR, trim } = tick;
   if (!analyser || !gain || !element) return null;
-  let { buffer, kBuffer, settleTicksLeft } = tick;
+  let { buffer, kBufferL, kBufferR, settleTicksLeft } = tick;
+  let stageGain = tick.stageGain ?? gain.gain.value;
   try {
     if (!buffer || buffer.length !== analyser.fftSize) {
       buffer = new Float32Array(analyser.fftSize);
     }
     analyser.getFloatTimeDomainData(buffer);
     const effective = effectiveRms(computeRms(buffer), element.volume);
-    if (effective === null) return { buffer, kBuffer, settleTicksLeft };
+    if (effective === null) return { buffer, kBufferL, kBufferR, settleTicksLeft, stageGain };
     // A tick the gain math refuses to act on (silence, speech pause, intro
     // below the floor) must not spend the settle budget — otherwise a
     // station whose first 8s are mostly quiet arrives at the steady crawl
     // uncorrected and stays audibly under-level. Speech radio burned 50% of
     // its window on pauses and settled 0.27 dB into a needed +6 dB.
-    if (effective < FREEZE_FLOOR) return { buffer, kBuffer, settleTicksLeft };
-    if (settleTicksLeft > 0) {
+    if (effective < FREEZE_FLOOR) return { buffer, kBufferL, kBufferR, settleTicksLeft, stageGain };
+    const settling = settleTicksLeft > 0;
+    if (settling) {
       settleTicksLeft -= 1;
-      gain.gain.value = adaptGain(gain.gain.value, effective);
+      stageGain = adaptGain(stageGain, effective);
     } else {
-      gain.gain.value = adaptGainSteady(gain.gain.value, effective);
+      stageGain = adaptGainSteady(stageGain, effective);
     }
-    // Slow LUFS trim on top: K-weighted raw samples servo the *output* onto
-    // target over ~1 min (corrects speech/bass offsets stage 1 can't see).
-    if (kAnalyser && trim) {
-      if (!kBuffer || kBuffer.length !== kAnalyser.fftSize) {
-        kBuffer = new Float32Array(kAnalyser.fftSize);
+    gain.gain.value = stageGain;
+    // Slow LUFS trim on top: K-weighted channel energies servo the *output*
+    // onto target over ~1 min (corrects speech/bass offsets stage 1 can't
+    // see). Both channels feed it — a mono tap reads correlated stereo ~3 dB
+    // cold and rails the trim fighting stage 1.
+    if (kAnalyserL && kAnalyserR && trim) {
+      if (!kBufferL || kBufferL.length !== kAnalyserL.fftSize) {
+        kBufferL = new Float32Array(kAnalyserL.fftSize);
       }
-      kAnalyser.getFloatTimeDomainData(kBuffer);
-      trimAccumulate(trim, kBuffer, gain.gain.value);
-      gain.gain.value *= trimLinear(trim.trimDb);
+      if (!kBufferR || kBufferR.length !== kAnalyserR.fftSize) {
+        kBufferR = new Float32Array(kAnalyserR.fftSize);
+      }
+      kAnalyserL.getFloatTimeDomainData(kBufferL);
+      kAnalyserR.getFloatTimeDomainData(kBufferR);
+      trimAccumulate(trim, kBufferL, kBufferR, stageGain, element.volume, settling);
+      gain.gain.value = stageGain * trimLinear(trim.trimDb);
     }
   } catch {
     // Analysis is progressive enhancement — never break playback.
   }
   // A null buffer here means the input had none and allocation threw —
   // report null so the engine keeps its previous (also null) buffer.
-  return buffer ? { buffer, kBuffer, settleTicksLeft } : null;
+  return buffer ? { buffer, kBufferL, kBufferR, settleTicksLeft, stageGain } : null;
 }

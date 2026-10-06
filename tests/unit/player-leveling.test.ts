@@ -54,15 +54,17 @@ function stubElement(volume = 1): HTMLAudioElement {
   return { volume } as unknown as HTMLAudioElement;
 }
 
-/** Full tick with quiet defaults (no trim tap unless the test opts in). */
+/** Full tick with quiet defaults (no trim taps unless the test opts in). */
 function tick(overrides: Partial<LevelingTick> = {}): LevelingTick {
   return {
     analyser: stubAnalyser([0.5]),
     gain: stubGain(1),
     element: stubElement(1),
     buffer: null,
-    kAnalyser: null,
-    kBuffer: null,
+    kAnalyserL: null,
+    kAnalyserR: null,
+    kBufferL: null,
+    kBufferR: null,
     trim: null,
     settleTicksLeft: 8,
     ...overrides,
@@ -246,25 +248,29 @@ describe("levelingTick", () => {
   });
 
   it("folds the slow trim in on top of stage 1", () => {
-    // Pre-seeded +1 dB trim, K tap live but far below a full window: stage 1
+    // Pre-seeded +1 dB trim, K taps live but far below a full window: stage 1
     // holds unity at target RMS while the node carries the trim product.
     const trim = initTrimState();
     trim.trimDb = 1;
     const gain = stubGain(1);
+    const kTap = stubAnalyser([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]);
     const result = levelingTick(
       tick({
         analyser: stubAnalyser([0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14]),
         gain,
-        kAnalyser: stubAnalyser([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]),
-        kBuffer: null,
+        kAnalyserL: kTap,
+        kAnalyserR: kTap,
+        kBufferL: null,
+        kBufferR: null,
         trim,
       }),
     );
-    expect(result?.kBuffer?.length).toBe(8);
+    expect(result?.kBufferL?.length).toBe(8);
+    expect(result?.kBufferR?.length).toBe(8);
     expect(gain.gain.value).toBeCloseTo(10 ** (1 / 20), 5);
   });
 
-  it("skips the trim when the K tap is absent and survives its failure", () => {
+  it("skips the trim when the K taps are absent and survives their failure", () => {
     const gain = stubGain(1);
     levelingTick(
       tick({ analyser: stubAnalyser([0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14]), gain, trim: initTrimState() }),
@@ -284,8 +290,10 @@ describe("levelingTick", () => {
         tick({
           analyser: stubAnalyser([0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]),
           gain: survivedGain,
-          kAnalyser: failing,
-          kBuffer: null,
+          kAnalyserL: failing,
+          kAnalyserR: failing,
+          kBufferL: null,
+          kBufferR: null,
           trim: initTrimState(),
         }),
       );
@@ -307,5 +315,46 @@ describe("levelingTick", () => {
     } as unknown as AnalyserNode;
     const survived = levelingTick(tick({ analyser: failing, gain }));
     expect(survived?.settleTicksLeft).toBe(8);
+  });
+
+  it("does not compound trim across multiple ticks (volume never climbs)", () => {
+    // 40 consecutive ticks (~10s of steady playback) with +1 dB trim must hold
+    // unity * trim product stably without compounding exponentially into runaway volume.
+    const trim = initTrimState();
+    trim.trimDb = 1;
+    const gain = stubGain(1);
+    const kTap = stubAnalyser([0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]);
+    let stageGain = 1;
+    let settleTicksLeft = 0;
+    let buffer: Float32Array<ArrayBuffer> | null = null;
+    let kBufferL: Float32Array<ArrayBuffer> | null = null;
+    let kBufferR: Float32Array<ArrayBuffer> | null = null;
+
+    for (let i = 0; i < 40; i += 1) {
+      const res = levelingTick(
+        tick({
+          analyser: stubAnalyser([0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14, 0.14]),
+          gain,
+          kAnalyserL: kTap,
+          kAnalyserR: kTap,
+          buffer,
+          kBufferL,
+          kBufferR,
+          trim,
+          settleTicksLeft,
+          stageGain,
+        }),
+      );
+      if (!res) throw new Error("tick returned null");
+      buffer = res.buffer;
+      kBufferL = res.kBufferL;
+      kBufferR = res.kBufferR;
+      settleTicksLeft = res.settleTicksLeft;
+      stageGain = res.stageGain;
+    }
+
+    // Steady state stage-1 gain is 1.0, total node gain carries +1 dB trim product (~1.122), NOT 1.122^40.
+    expect(stageGain).toBeCloseTo(1, 4);
+    expect(gain.gain.value).toBeCloseTo(10 ** (1 / 20), 4);
   });
 });

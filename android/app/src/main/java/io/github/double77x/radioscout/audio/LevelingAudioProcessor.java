@@ -67,10 +67,11 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     /** Stage-2 authority: the slow stage corrects, never leads (±3 dB). */
     private static final float TRIM_DB = 3f;
     /**
-     * Stage-2 easing per evaluated momentary window (τ ≈ 50s — an order of
-     * magnitude slower than stage 1 so the stages can't fight).
+     * Stage-2 easing per evaluated momentary window (τ ≈ 3 min — far slower
+     * than any song section or talk burst, so the trim only corrects
+     * sustained station-level offsets and can never ride the programme).
      */
-    private static final float TRIM_COEFF = 0.008f;
+    private static final float TRIM_COEFF = 0.0022f;
     /** Momentary window in frames at the configured rate (400 ms at 48 kHz). */
     private static final int TRIM_WINDOW_FRAMES = 19_200;
     /** BS.1770 absolute gate: digital silence carries no loudness information. */
@@ -79,6 +80,11 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     private static final float TRIM_REL_GATE = 10f;
     /** Anchor easing per evaluated window (τ ≈ 2 min — history, not news). */
     private static final float TRIM_ANCHOR_COEFF = 0.02f;
+    /** Adaptation deadband in LU: content this far from its own slow average
+     * freezes the trim (bursts, jingles, tune-in transients) while the anchor
+     * keeps learning. Without it the trim chases every burst and the volume
+     * audibly breathes on speech stations. */
+    private static final float TRIM_DEADBAND = 3f;
     /** BS.1770 calibration offset (mean-square to LUFS). */
     private static final float TRIM_K_OFFSET = 0.691f;
     /** Safety limiter ceiling (−1 dBFS — broadcast headroom, tips shave). */
@@ -107,8 +113,9 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     /** K-weighted energy accumulator for the current momentary window. */
     private double trimAccumE = 0;
     private long trimAccumN = 0;
-    /** Continuous K-filter state (never reset mid-station — transients ring). */
-    private float kPreX1, kPreX2, kPreY1, kPreY2, kRlbX1, kRlbX2, kRlbY1, kRlbY2 = 0f;
+    /** Continuous K-filter state per channel (never reset mid-station — transients ring). */
+    private final float[] kStateL = new float[8];
+    private final float[] kStateR = new float[8];
     /** Limiter peak envelope (post-gain — instant attack, slow release). */
     private float limiterEnv = 0f;
     /** Limiter release coefficient, derived from the configured rate. */
@@ -143,7 +150,8 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         trimAnchor = Float.NaN;
         trimAccumE = 0;
         trimAccumN = 0;
-        kPreX1 = kPreX2 = kPreY1 = kPreY2 = kRlbX1 = kRlbX2 = kRlbY1 = kRlbY2 = 0f;
+        java.util.Arrays.fill(kStateL, 0f);
+        java.util.Arrays.fill(kStateR, 0f);
         limiterEnv = 0f;
         // Adapt on the next buffer so the new station settles immediately.
         lastAdaptNanos = 0L;
@@ -189,32 +197,38 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
 
     /**
      * One K-weighted sample (BS.1770 pre-filter then RLB, direct form I).
-     * Stateful — the caller threads one set of delay variables through the
-     * whole stream, never resetting mid-station.
+     * Stateful — the caller threads one 8-float delay vector per channel
+     * through the whole stream, never resetting mid-station. Layout:
+     * preX1, preX2, preY1, preY2, rlbX1, rlbX2, rlbY1, rlbY2.
      */
-    float kFilterSample(float sample) {
+    static float kFilterSample(float sample, float[] state) {
         if (!Float.isFinite(sample)) return 0f;
         float pre =
                 K_PRE_B[0] * sample
-                        + K_PRE_B[1] * kPreX1
-                        + K_PRE_B[2] * kPreX2
-                        - K_PRE_A[1] * kPreY1
-                        - K_PRE_A[2] * kPreY2;
-        kPreX2 = kPreX1;
-        kPreX1 = sample;
-        kPreY2 = kPreY1;
-        kPreY1 = pre;
+                        + K_PRE_B[1] * state[0]
+                        + K_PRE_B[2] * state[1]
+                        - K_PRE_A[1] * state[2]
+                        - K_PRE_A[2] * state[3];
+        state[1] = state[0];
+        state[0] = sample;
+        state[3] = state[2];
+        state[2] = pre;
         float out =
                 K_RLB_B[0] * pre
-                        + K_RLB_B[1] * kRlbX1
-                        + K_RLB_B[2] * kRlbX2
-                        - K_RLB_A[1] * kRlbY1
-                        - K_RLB_A[2] * kRlbY2;
-        kRlbX2 = kRlbX1;
-        kRlbX1 = pre;
-        kRlbY2 = kRlbY1;
-        kRlbY1 = out;
+                        + K_RLB_B[1] * state[4]
+                        + K_RLB_B[2] * state[5]
+                        - K_RLB_A[1] * state[6]
+                        - K_RLB_A[2] * state[7];
+        state[5] = state[4];
+        state[4] = pre;
+        state[7] = state[6];
+        state[6] = out;
         return out;
+    }
+
+    /** Zeroed K delay vector (one per channel, kept for the whole station). */
+    static float[] newKState() {
+        return new float[8];
     }
 
     /** Trim correction as a linear multiplier (authority clamped by design). */
@@ -226,14 +240,18 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
     /**
      * One gated trim step toward the K target. Pure DSP core, kept static
      * for unit tests: relative-gated blocks and unreadable reads hold the
-     * trim, everything else eases it inside its authority.
+     * trim, everything else eases it inside its authority. The step steers
+     * from the slow anchor — never the live block — and content outside the
+     * deadband freezes adaptation entirely, so bursts (jingles,
+     * talk-over-beds) cannot yank it around.
      *
      * @return new trim in dB (caller stores it)
      */
     static float evaluateTrim(float trimDb, float anchor, float postLu) {
-        if (!Float.isFinite(postLu)) return trimDb;
+        if (!Float.isFinite(postLu) || Float.isNaN(anchor)) return trimDb;
         if (!(postLu > anchor - TRIM_REL_GATE)) return trimDb;
-        float want = Math.max(-TRIM_DB, Math.min(TRIM_DB, TRIM_TARGET_LU - postLu));
+        if (Math.abs(postLu - anchor) > TRIM_DEADBAND) return trimDb;
+        float want = Math.max(-TRIM_DB, Math.min(TRIM_DB, TRIM_TARGET_LU - anchor));
         return trimDb + (want - trimDb) * TRIM_COEFF;
     }
 
@@ -315,13 +333,16 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
         }
         rmsAccum += sum;
         rmsFrames += frames;
-        // K tap on the mono mix (radio use — matches the web JS-side biquads).
+        // K tap on both channels (BS.1770 sums channel energies — a mono mix
+        // reads correlated stereo ~3 dB cold and rails the trim fighting
+        // stage 1). Matches the web splitter-plus-two-analysers tap.
         for (int i = 0; i < frames; i += 2) {
             float left = (float) inputBuffer.getShort(position + i * 2) / 32768f;
             float right =
                     (i + 1 < frames) ? (float) inputBuffer.getShort(position + (i + 1) * 2) / 32768f : left;
-            float k = kFilterSample((left + right) / 2f);
-            trimAccumE += (double) k * k;
+            float lk = kFilterSample(left, kStateL);
+            float rk = kFilterSample(right, kStateR);
+            trimAccumE += (double) lk * lk + (double) rk * rk;
             trimAccumN += 1;
         }
         long now = System.nanoTime();
@@ -334,8 +355,12 @@ public final class LevelingAudioProcessor extends BaseAudioProcessor {
             trimAccumN = 0;
             if (lu > TRIM_ABS_GATE && gain > 0) {
                 float postLu = lu + (float) (20 * Math.log10(gain));
-                trimAnchor = updateAnchor(trimAnchor, postLu);
-                trimDb = evaluateTrim(trimDb, trimAnchor, postLu);
+                if (now < settleDeadlineNanos) {
+                    trimAnchor = postLu;
+                } else {
+                    trimAnchor = updateAnchor(trimAnchor, postLu);
+                    trimDb = evaluateTrim(trimDb, trimAnchor, postLu);
+                }
             }
         }
         if (rmsFrames > 0 && now - lastAdaptNanos >= ADAPT_INTERVAL_NS) {
