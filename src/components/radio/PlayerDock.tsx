@@ -126,6 +126,12 @@ export function PlayerDock() {
   // Timeout ref (not state): the auto-hide timer is imperative by nature —
   // no declarative alternative, and cleanup owns the handle.
   const hideTimer = useRef<ReturnType<typeof globalThis.setTimeout> | null>(null);
+  // Volume trigger + the two overlay panels. Retiring a panel hands focus
+  // back to the trigger (see `closeOverlay`) instead of leaving it inside a
+  // subtree `inert` is about to pull out of the a11y tree.
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const overlayWideRef = useRef<HTMLDivElement | null>(null);
+  const overlayTallRef = useRef<HTMLDivElement | null>(null);
 
   const busy = status === "loading";
   const playing = status === "playing";
@@ -161,19 +167,36 @@ export function PlayerDock() {
     focusRadioSearch();
   };
 
+  /**
+   * Retire the overlay. Focus leaves the panel before it goes `inert`:
+   * handing it to the trigger keeps a keyboard user on the control they
+   * opened, where `inert` alone would drop them at the document root. The
+   * auto-hide timer makes this the common path — it fires with no click to
+   * move focus anywhere. Both panels stay mounted (each is viewport-gated by
+   * CSS), so focus can be in either — test them both rather than assuming
+   * the wide one is the ref that got set.
+   */
+  const closeOverlay = () => {
+    const panels = [overlayWideRef.current, overlayTallRef.current];
+    if (panels.some((panel) => panel?.contains(document.activeElement))) triggerRef.current?.focus();
+    setVolumeOpen(false);
+  };
+
   const pokeAutohide = () => {
     if (hideTimer.current !== null) globalThis.clearTimeout(hideTimer.current);
     hideTimer.current = globalThis.setTimeout(() => {
-      setVolumeOpen(false);
+      closeOverlay();
     }, VOLUME_AUTOHIDE_MS);
   };
 
   const toggleVolume = () => {
-    setVolumeOpen((prev) => {
-      if (!prev) pokeAutohide();
-      else if (hideTimer.current !== null) globalThis.clearTimeout(hideTimer.current);
-      return !prev;
-    });
+    if (volumeOpen) {
+      if (hideTimer.current !== null) globalThis.clearTimeout(hideTimer.current);
+      closeOverlay();
+      return;
+    }
+    setVolumeOpen(true);
+    pokeAutohide();
   };
 
   // Own the auto-hide handle: clear it on unmount so a staged close can
@@ -254,6 +277,7 @@ export function PlayerDock() {
             <>
               <button
                 type='button'
+                ref={triggerRef}
                 aria-label={muted ? "Unmute" : "Volume"}
                 aria-expanded={volumeOpen}
                 onClick={toggleVolume}
@@ -322,8 +346,8 @@ export function PlayerDock() {
         {station ? (
           <>
             <div
+              ref={overlayWideRef}
               inert={!overlayOpen}
-              aria-hidden={!overlayOpen}
               className={cn(
                 "absolute inset-y-0 right-30 left-0 hidden items-center gap-2 rounded-full border border-border bg-card/95 p-2 pr-3 backdrop-blur-xl transition-[clip-path] duration-300 ease-out lg:flex",
                 overlayOpen ? "[clip-path:inset(0)]" : "pointer-events-none [clip-path:inset(0_0_0_100%)]",
@@ -372,8 +396,8 @@ export function PlayerDock() {
               </button>
             </div>
             <div
+              ref={overlayTallRef}
               inert={!overlayOpen}
-              aria-hidden={!overlayOpen}
               className={cn(
                 "absolute right-2 bottom-full mb-3 flex origin-bottom flex-col items-center gap-2 rounded-3xl border border-border bg-card/95 p-3 shadow-xl backdrop-blur-xl transition-all duration-200 lg:hidden",
                 overlayOpen ? "scale-100 opacity-100" : "pointer-events-none scale-95 opacity-0",

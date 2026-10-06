@@ -96,6 +96,13 @@ describe("pickPlayableUrl", () => {
 
 const BBC_HTTP =
   "http://as-hls-ww-live.akamaized.net/pool_74208725/live/ww/bbc_radio_two/bbc_radio_two.isml/bbc_radio_two-audio%3d128000.norewind.m3u8";
+// Second allowlisted BBC host: a media playlist with relative segments.
+const BBC_MD_HTTP =
+  "http://as-hls-ww.live.cf.md.bbci.co.uk/pool_07364996/live/ww/bbc_world_service_news_internet/bbc_world_service_news_internet.isml/bbc_world_service_news_internet-audio=320000.norewind.m3u8";
+// Deliberately NOT allowlisted: a master playlist whose variants are
+// absolute http, so upgrading it would reinstate mixed-content warnings.
+const BBC_MASTER_HTTP =
+  "http://a.files.bbci.co.uk/media/live/manifesto/audio/simulcast/hls/nonuk/sbr_low/ak/bbc_afrique_radio.m3u8";
 
 describe("https upgrade hosts", () => {
   it("parses upgrade hostnames, lowercased", () => {
@@ -107,12 +114,24 @@ describe("https upgrade hosts", () => {
 
   it("flags verified upgrade hosts only", () => {
     expect(isHttpsUpgradeHost(BBC_HTTP)).toBe(true);
+    expect(isHttpsUpgradeHost(BBC_MD_HTTP)).toBe(true);
     expect(isHttpsUpgradeHost("http://stream-kiss.planetradio.co.uk/x.mp3")).toBe(false);
     expect(isHttpsUpgradeHost("")).toBe(false);
   });
 
+  it("keeps master-playlist hosts out of the allowlist", () => {
+    // Its body advertises absolute `http://` variants, so an upgrade would
+    // stop at the master and every variant/segment would warn as mixed
+    // content. Discovery drops these rows instead; the stations stay
+    // reachable through their Akamai rows.
+    expect(isHttpsUpgradeHost(BBC_MASTER_HTTP)).toBe(false);
+    expect(canonicalStreamUrl(BBC_MASTER_HTTP)).toBe(BBC_MASTER_HTTP);
+    expect(isPlayableStreamUrl(BBC_MASTER_HTTP)).toBe(false);
+  });
+
   it("canonicalizes verified http to https, leaves the rest alone", () => {
     expect(canonicalStreamUrl(BBC_HTTP)).toBe(BBC_HTTP.replace("http://", "https://"));
+    expect(canonicalStreamUrl(BBC_MD_HTTP)).toBe(BBC_MD_HTTP.replace("http://", "https://"));
     expect(canonicalStreamUrl("https://example.com/x")).toBe("https://example.com/x");
     expect(canonicalStreamUrl("http://stream-kiss.planetradio.co.uk/x.mp3")).toBe(
       "http://stream-kiss.planetradio.co.uk/x.mp3",

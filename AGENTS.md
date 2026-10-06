@@ -118,6 +118,8 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-05 — Two-stage leveling + safety limiter (broadcast chain)
 - 2026-10-05 — Settle symmetry + silence-budget fixes
 - 2026-10-06 — Artwork chain order is a safety decision
+- 2026-10-06 — CSP blocked the title socket; `aria-hidden` fought `inert`
+- 2026-10-06 — BBC host allowlist: one host added, one deliberately refused
 
 ## UI Primitives
 

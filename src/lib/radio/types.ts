@@ -151,8 +151,21 @@ export function pickPlayableUrl(station: Station): string {
  * canonicalizes it). Exact-host allowlist on purpose: blind scheme-swaps on
  * unverified hosts surface as misleading TLS errors. Verify a candidate by
  * loading its https variant directly before adding it here.
+ *
+ * Every entry must be a MEDIA playlist whose segment lines are relative, so
+ * the https upgrade carries to the segments. A host serving a MASTER
+ * playlist whose variants are absolute `http://` URLs must never be added:
+ * the upgrade only reaches the master, the demuxer then follows its body to
+ * http variants, and the page logs a mixed-content warning per variant and
+ * per segment. `a.files.bbci.co.uk` is exactly that shape (BBC Afrique and
+ * Arabic Radio live there) — it stays out deliberately, and those stations
+ * are reachable through their Akamai rows instead.
  */
-const HTTPS_UPGRADE_HOSTS = new Set(["as-hls-ww-live.akamaized.net", "media-the.musicradio.com"]);
+const HTTPS_UPGRADE_HOSTS = new Set([
+  "as-hls-ww-live.akamaized.net",
+  "as-hls-ww.live.cf.md.bbci.co.uk",
+  "media-the.musicradio.com",
+]);
 
 /** Lowercase hostname of an absolute URL, or "" when unparseable. Never throws. */
 export function hostOfUrl(raw: string): string {

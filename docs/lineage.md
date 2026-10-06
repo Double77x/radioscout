@@ -162,6 +162,30 @@ a plain `<img>` without `crossorigin` fetches with credentials `include`, so eve
 
 Deep dive: docs/plans/STREAM_TITLES.md
 
+### 2026-10-06 · CSP blocked the title socket; `aria-hidden` fought `inert`
+
+Two prod console errors, both from the same mistake class — a mechanism was assumed to cover ground it doesn't.
+
+The Radiolise push socket (`wss://backend.radiolise.com/api/data-service`) was blocked on every play. `connect-src` carried `https:`, which reads like it covers WebSockets; it does not. CSP scheme matching upgrades `http:` to `https:` and `ws:` to `wss:`, but `https:` never widens to `wss:` — so the socket needs its own scheme source. `public/_headers` now lists `wss://backend.radiolise.com` explicitly. Symptom was silent by design (the code already treats an unavailable socket as "fall back to polling"), so the whole push tier of the chain had been dead in prod while the REST tier carried titles alone. Adding a WebSocket means adding a `wss://` origin here, not just an `https:` one.
+
+The dock volume overlay set both `inert` and `aria-hidden` on the same subtree. `inert` already removes content from the accessibility tree and blocks focus, so `aria-hidden` was pure duplication — and the active duplication, because React applies both in one commit: `aria-hidden` lands while the panel's own slider still holds focus, and Chrome refuses the attribute (a11y warning, element stays exposed). Dropping `aria-hidden` fixes the warning. Separately, closing the overlay now returns focus to the volume trigger — `inert` would otherwise drop a keyboard user on `<body>`, and the auto-hide timer fires with no click to move focus. `closeOverlay` tests both panels (each is viewport-gated by CSS, so both are mounted and either can hold focus) rather than assuming the wide one is the ref that got set.
+
+Found while verifying the header fix: `scripts/apply-header-policy.js` built the deployed `_headers` from the copy already sitting in `dist/client`, falling back to `public/_headers` only when that copy was absent. The postbuild step was therefore self-referential — a stale `dist/` from any earlier build shadowed the source, so a policy edit rebuilt into the very policy it was meant to replace. It passed review because CI builds from a fresh checkout (`dist/` is untracked) and got the right answer by accident. The script now always derives the file from `public/_headers`, which makes it idempotent by construction and drops the marker guard it needed for the other behaviour. The trap and both root causes are now §15 rules rather than only history.
+
+Deep dive: none — both fixes are local and the reasoning fits here.
+
+### 2026-10-06 · BBC host allowlist: one host added, one deliberately refused
+
+Chasing the mixed-content warnings surfaced the inverse bug: `filterPlayableStations` drops any row that is not `https` after canonicalisation, so a BBC row on a host missing from `HTTPS_UPGRADE_HOSTS` is invisible in search and Most loved. Live data had 8 BBC names vanishing entirely, including BBC Afrique Radio (6,026 votes) and BBC Arabic Radio (4,572) on `a.files.bbci.co.uk`, plus BBC World Service News Internet on `as-hls-ww.live.cf.md.bbci.co.uk`. The curated Best of British shelf was never affected — `best-of-british.ts` deliberately lists the Akamai rows, and its own comment says so.
+
+Added `as-hls-ww.live.cf.md.bbci.co.uk`: verified by loading the https variant, `200` with a valid playlist and **relative** `.ts` segments, so the upgrade carries through.
+
+Refused `a.files.bbci.co.uk`, which is the trap this whole class of warning comes from. Its https variant also answers `200`, but it serves a **master** playlist whose variant lines are absolute `http://as-hls-ww-live.akamaized.net/...`. Allowlisting it would upgrade only the master; the demuxer would then follow the body to http variants and log a mixed-content warning per variant and per segment — precisely the noise being removed. It also explains the original report: master over https (silent), then http variants and their segments warning, which is why the log showed variants but never the master. Verified the allowlisted host cannot do this: all 12 Akamai BBC rows are media playlists with relative refs. So `filterPlayableStations` is screening out the exact shape that produces the warning, not over-filtering by accident.
+
+That leaves Afrique/Arabic on their discovery-ranking problem rather than a playability one — their audio is available on the Akamai rows, so those stations need the Akamai row to win the name-dedupe instead. Not done here; it changes what search returns and deserves its own change.
+
+Deep dive: none — the verification steps are in the §15 trap.
+
 ### 2026-10-05 · Song history in the detail sheet
 
 heard titles bank per station into a new Dexie `tracks` table (schema v3, 50 per station / 1000 global caps) and surface as a Recent tracks section with relative times (BBC programmes get a Show badge). Banking rides the two existing title funnels — probe `applyProbedTitle` (BBC verdict kinds, ICY otherwise) and the APK `onNativeTrackUpdate` bridge — fire-and-forget with query invalidation, playback untouched. Backup envelope goes to v7 (v6 restores default to empty); clearing history clears tracks. Two traps caught: query loaders must stay curried `(id) => () => promise` (a bare promise collapses inference to `never`, which tsc 7 accepts but the oxlint gate rejects), and per-station order uses auto-increment `id`, not wall-clock stamps (same-ms ties). Detail in `docs/plans/STREAM_TITLES.md`.

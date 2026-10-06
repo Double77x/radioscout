@@ -11,10 +11,16 @@ import path from "node:path";
  * `space.$spaceId.lazy.tsx` → `/space/*`) and appends `no-store` sections
  * to the DEPLOYED headers, so the list stays correct as routes come and go.
  * Static routes keep the global `must-revalidate` policy untouched.
- * Idempotent: `dist/` is wiped each build; a marker guard prevents doubles.
+ *
+ * The base is always `public/_headers`, never the copy already in `dist/`.
+ * Reading its own output made the deployed CSP self-referential: a stale
+ * `dist/` from any earlier build shadowed the source, so a policy edit
+ * (a new `connect-src` origin, say) rebuilt into the very policy it was
+ * meant to replace — silently, and only on machines where `dist/` persists.
+ * Deriving the whole file from the source also makes it idempotent by
+ * construction, so no marker guard is needed.
  */
 
-const MARKER = "# Managed by scripts/apply-header-policy.js (postbuild)";
 const DIST_HEADERS = path.resolve("dist", "client", "_headers");
 const PUBLIC_HEADERS = path.resolve("public", "_headers");
 const ROUTES_DIR = path.resolve("src", "routes");
@@ -69,18 +75,10 @@ const prefixes = [
   ),
 ].toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
-function readBaseHeaders() {
-  if (fs.existsSync(DIST_HEADERS)) {
-    const current = fs.readFileSync(DIST_HEADERS, "utf8");
-    return current.includes(MARKER) ? current.split(MARKER)[0].trimEnd() : current.trimEnd();
-  }
-  return fs.readFileSync(PUBLIC_HEADERS, "utf8").trimEnd();
-}
-
-const base = readBaseHeaders();
+const base = fs.readFileSync(PUBLIC_HEADERS, "utf8").trimEnd();
 
 const sections = prefixes.map((prefix) => `${prefix}\n  Cache-Control: no-store`).join("\n\n");
-const output = `${base}\n\n${MARKER} — dynamic prebuilt HTML is never cached\n${sections}\n`;
+const output = `${base}\n\n# Dynamic prebuilt HTML is never cached\n${sections}\n`;
 fs.mkdirSync(path.dirname(DIST_HEADERS), { recursive: true });
 fs.writeFileSync(DIST_HEADERS, output);
 console.log(`✅ Header policy applied (${prefixes.join(", ") || "no dynamic routes"}) → ${DIST_HEADERS}`);
