@@ -120,6 +120,8 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-06 — Artwork chain order is a safety decision
 - 2026-10-06 — CSP blocked the title socket; `aria-hidden` fought `inert`
 - 2026-10-06 — BBC host allowlist: one host added, one deliberately refused
+- 2026-10-06 — Leveling trim compounding and volume-slider decoupling
+- 2026-10-06 — Unfiltered charts page until full
 
 ## UI Primitives
 

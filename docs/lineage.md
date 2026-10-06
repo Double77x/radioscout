@@ -263,3 +263,15 @@ This supersedes the ordering given in the 2026-10-04 entry above, which describe
 ### 2026-10-05 · Settle symmetry + silence-budget fixes
 
 Stage-1 release rode up 6× slower than attack pulled down, which converged a boosted station 80× slower than a ducked one (145 s vs 1.8 s to within 0.5 dB of target) — anything needing lift stayed audibly quiet. RELEASE is now 0.15 against ATTACK 0.3, so both directions land inside the settle window. Separately, sub-floor ticks no longer spend the 32-tick settle budget: speech stations burned half their window on pauses and reached the steady crawl uncorrected. Both fixes are ported to the Android twin, which shared both defects (its wall-clock settle deadline hands frozen intervals back). Precursor to the two-stage entry: both address the same symptom, this one the convergence speed, that one the residual offset.
+
+### 2026-10-06 · Leveling trim compounding and volume-slider decoupling
+
+The Web Audio leveling stage suffered two interacting defects that caused gain to climb exponentially across ticks:
+(1) `gain.gain.value *= trimLinear(trim.trimDb)` ran at ~4 Hz in-place. Because `GainNode.gain.value` is stateful graph state and stage 1 read node gain back as its base input on subsequent ticks, the trim correction compounded geometrically on every tick ($1.12^{40} \approx 93\times$ gain in 10s). Fixed by maintaining explicit `stageGain` JS state and assigning `gain.gain.value = stageGain * (trim ? trimLinear(trim.trimDb) : 1)` directly (never `*=`).
+(2) In Web Audio, `<audio>` element volume attenuates audio *before* `createMediaElementSource`. While stage 1 divided out `element.volume`, stage 2 (`trimAccumulate`) read raw samples without volume scaling. Any volume setting below 100% caused stream energy to read cold, pegging `trimDb` at its +3 dB ceiling and supercharging the compounding loop. Fixed by scaling mean-square energy by `volume^2` in `trimAccumulate`, making stage 2 scale-invariant to the slider.
+Native Android (`LevelingAudioProcessor.java`) never had compounding (stored `gain` distinctly and computed `applied = gain * trimLinear(trimDb)` dynamically) and receives unattenuated PCM before `AudioTrack`. Android was updated with stereo energy summation ($L^2 + R^2$) matching BS.1770 and settle-window deadband tracking (`trimAnchor = postLu` during tune-in). Tests: `tests/unit/player-leveling.test.ts`, `tests/unit/radio-normalize.test.ts`, `LevelingAudioProcessorTest.java`.
+
+### 2026-10-06 · Unfiltered charts page until full
+
+Most Loved showed 43 stations with no filters instead of 50: the unfiltered topvote/topclick path fetched a fixed 3× over-fetch (150 rows) and sliced after the HTTPS-only filter, but 108 of the top-150 rows are plain HTTP — only 42 survive. Fixed by routing the unfiltered charts through the same paging-until-full walker the filtered charts already use (`searchPaged`, 200-row pages, `hidebroken=true`), so the list stays full however HTTP-heavy the top rows get. Verified live (61 playable on the first page) and covered by paging regression tests. Removed the now-dead `chartFetchCount` over-fetch. Tests: `tests/unit/radio-charts.test.ts`.
+
