@@ -122,6 +122,7 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-06 — BBC host allowlist: one host added, one deliberately refused
 - 2026-10-06 — Leveling trim compounding and volume-slider decoupling
 - 2026-10-06 — Unfiltered charts page until full
+- 2026-10-06 — R8 shrinking enabled for release builds (F-Droid request)
 
 ## UI Primitives
 

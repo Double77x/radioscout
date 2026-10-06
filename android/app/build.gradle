@@ -45,8 +45,12 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            // F-Droid requires R8 shrinking (APK size). Capacitor, Media3 and
+            // Guava ship consumer keep rules; the reflective Bridge plugin
+            // methods below live in proguard-rules.pro.
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (releaseKeystorePath) {
                 signingConfig signingConfigs.release
             }

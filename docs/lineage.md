@@ -275,3 +275,7 @@ Native Android (`LevelingAudioProcessor.java`) never had compounding (stored `ga
 
 Most Loved showed 43 stations with no filters instead of 50: the unfiltered topvote/topclick path fetched a fixed 3× over-fetch (150 rows) and sliced after the HTTPS-only filter, but 108 of the top-150 rows are plain HTTP — only 42 survive. Fixed by routing the unfiltered charts through the same paging-until-full walker the filtered charts already use (`searchPaged`, 200-row pages, `hidebroken=true`), so the list stays full however HTTP-heavy the top rows get. Verified live (61 playable on the first page) and covered by paging regression tests. Removed the now-dead `chartFetchCount` over-fetch. Tests: `tests/unit/radio-charts.test.ts`.
 
+### 2026-10-06 · R8 shrinking enabled for release builds (F-Droid request)
+
+Maintainer (`linsui`) asked for R8 on the inclusion MR (!49999). The release build now sets `minifyEnabled true` + `shrinkResources true` with `proguard-android-optimize.txt`; `proguard-rules.pro` keeps the Capacitor annotation-driven dispatch (`@CapacitorPlugin` classes, `@PluginMethod`/`@PermissionCallback` members) and the app audio package. Capacitor core, Media3 and Guava ship their own consumer rules, so no library keeps were added. Verified with a local `assembleRelease` (R8 `minifyReleaseWithR8` green, APK ~3.9 MB vs ~7.5 MB unshrunk). The published F-Droid reference APK predates the change and must be rebuilt with the recipe `commit:` advanced to the R8 commit.
+

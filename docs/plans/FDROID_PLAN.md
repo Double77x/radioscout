@@ -103,6 +103,18 @@ fastlane/metadata/android/en-US/
 `pnpm fdroid:check` verifies all required files, text limits, PNG validity,
 portrait screenshot dimensions, and the changelog filename/versionCode link.
 
+### 2.6 Release shrinking (R8)
+
+The release build enables R8 code + resource shrinking (`minifyEnabled`,
+`shrinkResources`, `proguard-android-optimize.txt` in
+`android/app/build.gradle`). Capacitor core, Media3 and Guava ship their own
+consumer keep rules; `android/app/proguard-rules.pro` keeps only the
+project-side reflective pieces (Capacitor `@CapacitorPlugin` classes,
+`@PluginMethod`/`@PermissionCallback` members, the app audio package).
+Debug builds stay unshrunk. Rebuilding the signed F-Droid reference APK after
+any shrinking change is required — the recipe `commit:` must advance to the
+same commit.
+
 ## 3. `fdroiddata` recipe template
 
 Create `metadata/io.github.double77x.radioscout.yml` in a fork of `fdroiddata`
