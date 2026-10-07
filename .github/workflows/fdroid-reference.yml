@@ -157,22 +157,37 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      # Explicit gh release calls rather than softprops/action-gh-release. That
+      # action reconciles an existing release against the *current* git ref, so
+      # it only worked while this workflow ran from an fdroid-reference-* tag
+      # where ref == tag_name. Now that it runs from a v* tag (or a dispatch
+      # branch) the two differ and the action fails with an HttpError on an
+      # already-published reference. These calls address the release by name.
       - name: Publish public reference asset
-        uses: softprops/action-gh-release@v3
-        with:
-          prerelease: true
-          tag_name: ${{ steps.version.outputs.referenceTag }}
-          name: F-Droid reproducible reference ${{ steps.version.outputs.version }} (${{ steps.version.outputs.versionCode }})
-          body: |
-            This is the signed F-Droid-specific reference APK for reproducible-build verification.
-
-            It is not the normal sideload/OTA release. The F-Droid flavor disables Capgo OTA, GitHub APK update prompts, and removes the Capgo native module before the Android build.
-
-            - Source commit: `${{ github.sha }}`
-            - Application ID: `io.github.double77x.radioscout`
-            - Version: `${{ steps.version.outputs.version }}`
-            - Version code: `${{ steps.version.outputs.versionCode }}`
-            - Asset: `${{ steps.version.outputs.apkName }}`
-          files: ${{ steps.version.outputs.apkName }}
-          fail_on_unmatched_files: true
-          overwrite_files: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REFERENCE_TAG: ${{ steps.version.outputs.referenceTag }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
+          VERSION: ${{ steps.version.outputs.version }}
+          VERSION_CODE: ${{ steps.version.outputs.versionCode }}
+        run: |
+          set -euo pipefail
+          title="F-Droid reproducible reference $VERSION ($VERSION_CODE)"
+          notes="$(printf '%s\n' \
+            'This is the signed F-Droid-specific reference APK for reproducible-build verification.' \
+            '' \
+            'It is not the normal sideload/OTA release. The F-Droid flavor disables Capgo OTA, GitHub APK update prompts, and removes the Capgo native module before the Android build.' \
+            '' \
+            "- Source commit: \`$GITHUB_SHA\`" \
+            '- Application ID: `io.github.double77x.radioscout`' \
+            "- Version: \`$VERSION\`" \
+            "- Version code: \`$VERSION_CODE\`" \
+            "- Asset: \`$APK_NAME\`")"
+          if gh release view "$REFERENCE_TAG" >/dev/null 2>&1; then
+            gh release edit "$REFERENCE_TAG" --title "$title" --notes "$notes"
+          else
+            git tag "$REFERENCE_TAG" "$GITHUB_SHA"
+            git push origin "$REFERENCE_TAG"
+            gh release create "$REFERENCE_TAG" --prerelease --title "$title" --notes "$notes"
+          fi
+          gh release upload "$REFERENCE_TAG" "$APK_NAME" --clobber
