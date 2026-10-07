@@ -252,9 +252,16 @@ Why this shape:
   `VITE_DISTRIBUTION=fdroid` to both the web build and `cap sync`; normal
   sideload builds retain the existing automatic updater.
 - The F-Droid recipe removes the Capgo module from the generated Gradle project
-  and plugin registry after sync. This keeps its Google Play/Firebase classes
-  out of the APK, which is required for F-Droid's binary scanner; the
-  JavaScript guard still prevents any updater call if the module is present.
+  after sync. `scripts/strip-capgo-plugin.mjs` does the same for
+  `capacitor.plugins.json`, which `cap sync` generates and the native bridge
+  reads at startup; stripping only the Gradle lines leaves the registry naming a
+  plugin class that is no longer on the classpath. This keeps its Google
+  Play/Firebase classes out of the APK, which is required for F-Droid's binary
+  scanner; the JavaScript guard still prevents any updater call if the module is
+  present. The recipe and the reference workflow both call that one script,
+  because they have to apply the same transform or the reference APK stops
+  reproducing. `sed` is not an option here: the registry is JSON, the updater
+  entry is last, and a range delete leaves a trailing comma.
 - Capacitor 8 requires Node.js 22 or newer, while the buildserver image ships
   Debian's Node 20. The F-Droid-only recipe installs the official Node `26.8.2`
   archive, verifies its SHA-256 digest, and keeps pnpm pinned separately at
@@ -382,6 +389,10 @@ stations and internet radio broadcasts".
 store-safety setting inside a wall of escaped JSON in a YAML list. It is now
 `capacitor.config.fdroid.json`, and the recipe copies it. See §2.7 for why the
 duplication needs the `fdroid:check` guard that came with it.
+
+The same objection applies to the second inline one-liner, which filtered
+`capacitor.plugins.json`. That is now `scripts/strip-capgo-plugin.mjs`, called
+by both the recipe and the reference workflow.
 
 **Autoupdate.** The submission had justified `AutoUpdateMode: None` by pointing
 at the `v0.3.6` tag, which still declared versionCode `202` and would have

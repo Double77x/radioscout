@@ -96,10 +96,10 @@ jobs:
           node scripts/strip-sw.mjs
           node scripts/normalize-ssr-timestamps.mjs dist/client
           VITE_DISTRIBUTION=fdroid npx cap sync android
+          node scripts/strip-capgo-plugin.mjs
           cd android
           sed -i '/capgo-capacitor-updater/d' capacitor.settings.gradle
           sed -i '/capgo-capacitor-updater/d' app/capacitor.build.gradle
-          node -e "const fs=require('fs');const p='app/src/main/assets/capacitor.plugins.json';const a=JSON.parse(fs.readFileSync(p,'utf8'));fs.writeFileSync(p,JSON.stringify(a.filter((x)=>x.pkg!=='@capgo/capacitor-updater'),null,2));"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
