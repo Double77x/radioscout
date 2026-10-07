@@ -1,12 +1,15 @@
 /**
  * Repository-side F-Droid readiness gate.
  *
- * Verifies the two contracts F-Droid cannot repair during its build: the
- * committed Android version must match package.json, and the in-repo Fastlane
- * listing must contain valid, current assets for that versionCode.
+ * Verifies the contracts F-Droid cannot repair during its build: the committed
+ * Android version must match package.json, the in-repo Fastlane listing must
+ * contain valid, current assets for that versionCode, and the checked-in
+ * `capacitor.config.fdroid.json` must still be exactly what
+ * `capacitor.config.ts` resolves to in the F-Droid flavour.
  */
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const root = path.resolve(import.meta.dirname, "..");
 /** @type {string[]} */
@@ -117,6 +120,62 @@ check(`two phone screenshots are present (found ${screenshots.length})`, screens
 for (const name of screenshots.slice(0, 2)) {
   const size = pngDimensions(`${metadata}/images/phoneScreenshots/${name}`);
   check(`${name} is a portrait phone screenshot`, size !== null && size.width >= 320 && size.height >= 480);
+}
+
+/**
+ * Stable JSON with sorted keys, so two configs that differ only in key order
+ * compare equal.
+ *
+ * @param {unknown} value
+ * @returns {string}
+ */
+function stableStringify(value) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
+  const entries = Object.entries(value)
+    .filter(([, v]) => v !== undefined)
+    .toSorted(([a], [b]) => (a < b ? -1 : 1))
+    .map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`);
+  return `{${entries.join(",")}}`;
+}
+
+/**
+ * The F-Droid recipe copies `capacitor.config.fdroid.json` over
+ * `capacitor.config.json` so `cap sync` sees a static config that cannot
+ * re-enable the updater, whatever the buildserver's Node does with the
+ * TypeScript source. That copy is a duplicate, so it can drift from the file
+ * it mirrors; resolve `capacitor.config.ts` in the F-Droid flavour and require
+ * the checked-in JSON to match it exactly.
+ */
+const fdroidConfigPath = absolute("capacitor.config.fdroid.json");
+const previousDistribution = process.env.VITE_DISTRIBUTION;
+process.env.VITE_DISTRIBUTION = "fdroid";
+try {
+  // The cache-busting query defeats a config module already loaded earlier in
+  // this process, so the module-scope flavour check re-runs.
+  const configUrl = `${pathToFileURL(absolute("capacitor.config.ts")).href}?flavor=fdroid`;
+  // Annotating as unknown is what makes assigning the dynamic import's `any`
+  // safe; the `in` check then narrows it without an assertion.
+  /** @type {unknown} */
+  const moduleNamespace = await import(configUrl);
+  const resolved =
+    typeof moduleNamespace === "object" && moduleNamespace !== null && "default" in moduleNamespace
+      ? moduleNamespace.default
+      : null;
+  /** @type {unknown} */
+  const committed = fs.existsSync(fdroidConfigPath) ? JSON.parse(fs.readFileSync(fdroidConfigPath, "utf8")) : null;
+  const same = committed !== null && stableStringify(committed) === stableStringify(resolved);
+  check("capacitor.config.fdroid.json matches capacitor.config.ts in the F-Droid flavour", same);
+  if (!same && committed !== null) {
+    console.error(`  committed: ${stableStringify(committed)}`);
+    console.error(`  resolved:  ${stableStringify(resolved)}`);
+  }
+} catch (error) {
+  check("capacitor.config.ts is importable to resolve the F-Droid config (needs Node type stripping)", false);
+  console.error(`  ${error instanceof Error ? error.message : String(error)}`);
+} finally {
+  if (previousDistribution === undefined) delete process.env.VITE_DISTRIBUTION;
+  else process.env.VITE_DISTRIBUTION = previousDistribution;
 }
 
 if (failures.length > 0) {

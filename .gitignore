@@ -93,6 +93,11 @@ $RECYCLE.BIN/
 # Capacitor (native shells are committed; only generated outputs/secrets ignored)
 # ---------------------------------------------------------------------------
 capacitor.config.local.ts
+# Transient copy of capacitor.config.fdroid.json, staged by the F-Droid recipe
+# during `cap sync`. Capacitor reads .ts before .json, so the recipe also moves
+# capacitor.config.ts aside; both are undone after the build.
+capacitor.config.json
+capacitor.config.ts.fdroid
 android/app/build
 android/app/src/main/assets
 android/build

@@ -1,0 +1,26 @@
+{
+  "appId": "io.github.double77x.radioscout",
+  "appName": "RadioScout",
+  "webDir": "dist/client",
+  "backgroundColor": "#eef1eb",
+  "android": {
+    "allowMixedContent": false
+  },
+  "server": {
+    "androidScheme": "https",
+    "cleartext": false
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 0
+    },
+    "Keyboard": {
+      "resize": "body",
+      "resizeOnFullScreen": true
+    },
+    "CapacitorUpdater": {
+      "autoUpdate": false,
+      "statsUrl": ""
+    }
+  }
+}

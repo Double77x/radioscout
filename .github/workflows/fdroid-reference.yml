@@ -5,12 +5,19 @@ name: F-Droid reproducible reference
 # release: the F-Droid flavor has update channels disabled and excludes the
 # Capgo native module so its non-free Google Play/Firebase classes stay out of
 # the APK.
+#
+# Runs on every v* tag because fdroiddata auto-updates from those tags and
+# verifies each build against a reference APK named
+# fdroid-reference-<versionName>-<versionCode>. Everything version-shaped is
+# read from android/app/build.gradle, which the release flow keeps in step with
+# package.json (see scripts/cap-version.js), so publishing a reference for a new
+# release needs no edit here.
 
 on:
   workflow_dispatch:
   push:
     tags:
-      - "fdroid-reference-*"
+      - "v*"
 
 permissions:
   contents: write
@@ -18,10 +25,6 @@ permissions:
 concurrency:
   group: fdroid-reference-${{ github.ref }}
   cancel-in-progress: false
-
-env:
-  REFERENCE_TAG: fdroid-reference-0.4.3-403
-  REFERENCE_APK: radioscout-fdroid-0.4.3-403.apk
 
 jobs:
   build-reference:
@@ -32,6 +35,27 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v7
+
+      - name: Resolve reference version
+        id: version
+        run: |
+          set -euo pipefail
+          gradle=android/app/build.gradle
+          version="$(sed -n 's/^[[:space:]]*versionName[[:space:]]*"\(.*\)".*/\1/p' "$gradle")"
+          versionCode="$(sed -n 's/^[[:space:]]*versionCode[[:space:]]*\([0-9][0-9]*\).*/\1/p' "$gradle")"
+          test -n "$version" || { echo "::error::no versionName in $gradle"; exit 1; }
+          test -n "$versionCode" || { echo "::error::no versionCode in $gradle"; exit 1; }
+          # A tag that disagrees with the committed Android version would
+          # publish a reference F-Droid never looks for. Only meaningful on a tag
+          # push: under workflow_dispatch ref_name is a branch, not a release tag.
+          if [ "${{ github.ref_type }}" = "tag" ] && [ "${{ github.ref_name }}" != "v$version" ]; then
+            echo "::error::tag ${{ github.ref_name }} does not match versionName v$version in $gradle"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "versionCode=$versionCode" >> "$GITHUB_OUTPUT"
+          echo "referenceTag=fdroid-reference-$version-$versionCode" >> "$GITHUB_OUTPUT"
+          echo "apkName=radioscout-fdroid-$version-$versionCode.apk" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -97,18 +121,19 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
         run: |
           ./gradlew assembleRelease --no-daemon
           test -f app/build/outputs/apk/release/radioscout-release.apk
-          cp app/build/outputs/apk/release/radioscout-release.apk "../$REFERENCE_APK"
+          cp app/build/outputs/apk/release/radioscout-release.apk "../$APK_NAME"
 
       - name: Verify signature and record certificate
         env:
-          REFERENCE_APK: ${{ env.REFERENCE_APK }}
+          APK_NAME: ${{ steps.version.outputs.apkName }}
         run: |
           set -euo pipefail
           APKSIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          APK="$GITHUB_WORKSPACE/$REFERENCE_APK"
+          APK="$GITHUB_WORKSPACE/$APK_NAME"
           "$APKSIGNER" verify --verbose --print-certs "$APK" | tee "$RUNNER_TEMP/apksigner.txt"
           CERT_DIGEST="$(awk -F': ' '/Signer #1 certificate SHA-256 digest/ {print tolower($2); exit}' "$RUNNER_TEMP/apksigner.txt")"
           test -n "$CERT_DIGEST"
@@ -116,7 +141,7 @@ jobs:
           {
             echo "### F-Droid reference APK"
             echo
-            echo "- APK: \`$REFERENCE_APK\`"
+            echo "- APK: \`$APK_NAME\`"
             echo "- Source commit: \`$GITHUB_SHA\`"
             echo "- SHA-256: \`$SHA256\`"
             echo "- Signer certificate SHA-256: \`$CERT_DIGEST\`"
@@ -128,7 +153,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: fdroid-reference-apk
-          path: ${{ env.REFERENCE_APK }}
+          path: ${{ steps.version.outputs.apkName }}
           if-no-files-found: error
           retention-days: 30
 
@@ -136,8 +161,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           prerelease: true
-          tag_name: ${{ env.REFERENCE_TAG }}
-          name: F-Droid reproducible reference 0.4.3 (403)
+          tag_name: ${{ steps.version.outputs.referenceTag }}
+          name: F-Droid reproducible reference ${{ steps.version.outputs.version }} (${{ steps.version.outputs.versionCode }})
           body: |
             This is the signed F-Droid-specific reference APK for reproducible-build verification.
 
@@ -145,9 +170,9 @@ jobs:
 
             - Source commit: `${{ github.sha }}`
             - Application ID: `io.github.double77x.radioscout`
-            - Version: `0.4.3`
-            - Version code: `403`
-            - Asset: `${{ env.REFERENCE_APK }}`
-          files: ${{ env.REFERENCE_APK }}
+            - Version: `${{ steps.version.outputs.version }}`
+            - Version code: `${{ steps.version.outputs.versionCode }}`
+            - Asset: `${{ steps.version.outputs.apkName }}`
+          files: ${{ steps.version.outputs.apkName }}
           fail_on_unmatched_files: true
           overwrite_files: true
