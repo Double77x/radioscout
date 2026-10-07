@@ -51,9 +51,7 @@ export default defineConfig(({ mode }) => {
       pool: "vmThreads",
       setupFiles: "./src/test-setup.ts",
       css: true,
-      // `.mjs` covers the build-time scripts under scripts/, which run under
-      // bare Node in CI and the F-Droid recipe and so cannot be TypeScript.
-      include: ["tests/**/*.test.{ts,tsx,mjs}"],
+      include: ["tests/**/*.test.{ts,tsx}"],
     },
     server: {
       host: "::",
