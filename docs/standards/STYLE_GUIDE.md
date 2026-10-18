@@ -21,7 +21,7 @@ RadioScout is a mobile-first radio browser. Phones get a centred 430px column; w
 
 ## 3. Layout
 
-- **`AppShell` is the frame.** Fog backdrop (`bg-scout-fog`) with the column on top: `max-w-107.5` (430px), widening to `lg:max-w-2xl xl:max-w-4xl`, with `sm:border-x sm:border-border`.
+- **`AppShell` is the frame.** Fog backdrop (`bg-scout-fog`) with the column on top: `max-w-107.5` (430px), widening to `min-[600px]:max-w-2xl` (tablets), `md:max-w-3xl`, then `xl:max-w-4xl`, with `sm:border-x sm:border-border`.
 - **Insets are environment-driven.** The shell carries `pt-[env(safe-area-inset-top)]` and `PlayerDock` carries the bottom inset. Never hardcode a status-bar height.
 - **Height is `min-h-dvh`**, not `min-h-screen`, so mobile browser chrome doesn't clip the dock.
 - **`.section-container`** (`mx-auto max-w-7xl` with responsive padding) is for the wide legal and landing pages only. In-app screens stay inside the column.
