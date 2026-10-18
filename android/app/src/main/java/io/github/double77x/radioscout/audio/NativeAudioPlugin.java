@@ -24,7 +24,6 @@ import androidx.media3.session.MediaController;
 import androidx.media3.session.SessionToken;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
-import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -482,14 +481,9 @@ public class NativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void play(PluginCall call) {
-        String permissionState;
-        try {
-            permissionState = String.valueOf(getPermissionState("notifications"));
-        } catch (Exception e) {
-            permissionState = "unknown";
-        }
-        Log.i(LOG_TAG, "play: notifications=" + permissionState);
-        if (needsNotificationPermission()) {
+        boolean needsPermission = needsNotificationPermission();
+        Log.i(LOG_TAG, "play: notifications=" + (needsPermission ? "not granted" : "granted"));
+        if (needsPermission) {
             // First playback on Android 13+: ask for the notification
             // permission in context, then start regardless — denied just
             // means no lock-screen/shade UI, audio still plays.
@@ -513,7 +507,13 @@ public class NativeAudioPlugin extends Plugin {
     private boolean needsNotificationPermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false;
         try {
-            return getPermissionState("notifications") != PermissionState.GRANTED;
+            // Capacitor can return null for a declared permission alias on
+            // some installed APKs even when Android has already granted it.
+            // Treating null as denied sends play() into a permission request
+            // that never calls back, leaving every station stuck tuning.
+            return ContextCompat.checkSelfPermission(
+                            getContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    != android.content.pm.PackageManager.PERMISSION_GRANTED;
         } catch (Exception e) {
             return false;
         }
