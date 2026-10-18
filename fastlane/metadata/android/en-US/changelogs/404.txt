@@ -1,0 +1,1 @@
+Volume leveling in the Android app now matches the browser player: the same steady level after tune-in, and a smooth fade when leveling is switched off instead of a jump in volume. Tablets now get a full-width layout instead of a phone-width column with empty sides.

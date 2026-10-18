@@ -12,6 +12,15 @@ interface ChangelogEntry {
 /** Newest first. One entry per release — the markup below stays identical. */
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: "0.4.4",
+    title: "Android volume, matched to the web",
+    date: "October 2026",
+    points: [
+      "Volume leveling in the Android app now matches the browser player: it measures the same signal, settles at the same steady level after tune-in, and fades smoothly when you switch leveling off instead of jumping in volume.",
+      "On tablets the app now fills the screen: the column grows with the viewport instead of staying at phone width with empty margins.",
+    ],
+  },
+  {
     version: "0.4.3",
     title: "Steady volume, no more swelling",
     date: "October 2026",
