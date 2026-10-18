@@ -125,6 +125,8 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-06 — R8 shrinking enabled for release builds (F-Droid request)
 - 2026-10-07 — F-Droid review round 2: category, committed config, autoupdate
 
+- 2026-10-17 — Native leveling parity (tap, mono, anchor cadence, glide)
+
 ## UI Primitives
 
 `src/components/ui/*` holds Base UI + shadcn primitives: `accordion`, `badge`, `breadcrumb`, `button`, `input`, `popover`, `select`, `sonner`, `table`, `tabs`, `tooltip` (plus `button-variants`/`badge-variants`). Dialogs use `@base-ui/react/dialog` directly (no wrapper file). When you need another primitive, re-add the Base UI + shadcn version, not Radix:

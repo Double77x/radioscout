@@ -56,6 +56,12 @@ android {
             }
         }
     }
+    testOptions {
+        // The leveling JVM tests drive queueInput directly, and its settle
+        // path logs via android.util.Log — return stub defaults (silent)
+        // instead of the not-mocked exceptions.
+        unitTests.returnDefaultValues = true
+    }
 }
 
 repositories {

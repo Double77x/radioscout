@@ -195,6 +195,7 @@ In force now, not history. Each exists because breaking it causes damage that is
 - **Never gate the `isDdgPlaceholder` test on `stage`.** A cached instant decode resolves before React registers its listeners, and an HTTP-cache hit can serve the decoded placeholder to the wsrv attempt without any event firing, so a `stage` guard passes while the row still shows the placeholder. (`docs/lineage.md`, 2026-10-04)
 - **Do not let the native playlist read gate the web play chain.** IndexedDB stalls under the mocked timers the unit tests use, so building the playlist inline breaks the web path. (`docs/lineage.md`, 2026-10-02)
 - **Never mutate `GainNode.gain.value` with in-place multiplication (`*=`) from an adaptive stage.** `GainNode.gain.value` is stateful hardware/graph state. Retain an explicit JavaScript variable for stage gain and assign `gain.gain.value = stageGain * trimLinear(trimDb)` directly to prevent exponential compounding across ticks. (`docs/lineage.md`, 2026-10-06)
+- **Never change one leveling player's chain without the other in the same change.** The Android twin (`LevelingAudioProcessor.java`) mirrors `normalize.ts` and the `leveling-graph.ts` tap — constants, filters, clamps and shaping all change in pairs. Per-window easings must additionally be cadence-scaled: native windows are 400 ms of contiguous audio while the web evaluates once per ~2.34 s of tick-sampled audio (× 400/2340). No test spans the two players, so a one-sided change diverges them silently. (`docs/lineage.md`, 2026-10-17)
 
 ### Verification traps
 

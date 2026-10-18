@@ -56,6 +56,10 @@ Pulling a stream through Web Audio needs CORS headers, and many stations do not 
 
 Because of this, `crossOrigin` must be set **before** any `src` assignment. It is load-time state, which is why routing happens at element build time in both the live and staged paths.
 
+## Native twin
+
+`LevelingAudioProcessor.java` (Android, Media3) is a port, not a second design: same target, coefficients, K-weighting and limiter placement. Since 2026-10-17 it also runs this graph's stage-1 tap — the 60 Hz high-pass (Web Audio's dB Q) then the +4 dB / 1.5 kHz shelf — over the mono down-mix before the RMS read, and reads the K tap per frame with a mono stream's right channel as silence, matching what the analyser and the splitter feed the web taps. Two divergences are deliberate: the limiter is a native brickwall where the web drives `DynamicsCompressorNode`, and native windows are 400 ms of contiguous audio rather than ~2.3 s of tick-sampled snapshots, so its per-window easings carry the 400/2340 cadence factor. `LevelingAudioProcessorTest.java` pins the port against the browser-measured curves.
+
 ## Lineage
 
 `docs/lineage.md`, 2026-10-05 (Two-stage leveling + safety limiter) records the research, the rejected approaches and the known limits. The earlier clamp-only behaviour and the AGC split are described there rather than here, since this document describes what the code does now.
