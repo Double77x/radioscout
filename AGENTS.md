@@ -127,6 +127,7 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 
 - 2026-10-17 — Native leveling parity (tap, mono, anchor cadence, glide)
 - 2026-10-18 — Tablet-width app frame (600px step, `md` 768px, `xl` 896px)
+- 2026-10-18 — Android notification permission alias could strand playback
 
 ## UI Primitives
 

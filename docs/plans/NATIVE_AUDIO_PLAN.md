@@ -80,6 +80,13 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   POST_NOTIFICATIONS is requested in-context on first native play
   (Android 13+ denies it by default — without the grant the media
   notification, and with it all lock-screen/shade controls, never appears).
+  The gate in `NativeAudioPlugin.needsNotificationPermission()` reads the
+  Android grant with `ContextCompat.checkSelfPermission()` for
+  `Manifest.permission.POST_NOTIFICATIONS`. Do not use Capacitor's permission
+  alias state as the playback gate: it can return `null` even when Android has
+  granted the permission, which leaves the play call waiting forever for a
+  permission callback. The platform check must be false (granted) before
+  continuing playback, and fail open if the permission plumbing itself throws.
 - [x] N3 (scoped): Dance Wave's https directory URL 302s to its http edge,
   which ExoPlayer refused as a cross-protocol downgrade (`302` → Source
   error). Both players are now built by `RadioPlayerFactory` (one pipeline:
