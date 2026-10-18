@@ -13,6 +13,11 @@ import { isNative } from "@/lib/capacitor";
  */
 export function registerServiceWorker(): void {
   if (isNative()) return;
+  // The build chain writes `sw.js` into `dist/client`; the dev server does not
+  // have it, so it answers `/sw.js` with the app shell and Chrome rejects the
+  // registration with an unsupported-MIME console error. Offline is verified
+  // against a real build, never here.
+  if (import.meta.env.DEV) return;
   try {
     if (!("serviceWorker" in navigator)) return;
     const register = (): void => {
