@@ -55,11 +55,11 @@ describe("nativeTrackArtist", () => {
 describe("parkWebAudioElement", () => {
   it("pauses, clears and reloads in order", () => {
     const calls: string[] = [];
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const element = {
       pause: () => void calls.push("pause"),
       removeAttribute: () => void calls.push("removeAttribute"),
       load: () => void calls.push("load"),
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
     parkWebAudioElement(element);
     expect(calls).toEqual(["pause", "removeAttribute", "load"]);
@@ -70,13 +70,13 @@ describe("parkWebAudioElement", () => {
       parkWebAudioElement(null);
     }).not.toThrow();
     const calls: string[] = [];
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const element = {
       pause: () => {
         throw new Error("gone");
       },
       removeAttribute: () => void calls.push("removeAttribute"),
       load: () => void calls.push("load"),
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
     expect(() => {
       parkWebAudioElement(element);

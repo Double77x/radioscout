@@ -15,9 +15,9 @@ const PLAIN_MP3 = "https://stream.example.org/live.mp3";
 
 /** Partial element double: only `canPlayType` is exercised here. */
 function stubElement(canPlay: string): HTMLAudioElement {
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   return {
     canPlayType: () => canPlay,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as HTMLAudioElement;
 }
 
@@ -29,11 +29,11 @@ describe("hasNativeHls", () => {
   });
 
   it("treats a throwing element as unsupported", () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const element = {
       canPlayType: () => {
         throw new Error("detached");
       },
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
     expect(hasNativeHls(element)).toBe(false);
   });

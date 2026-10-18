@@ -93,6 +93,7 @@ describe("runFadeRamp", () => {
 function stubElement(): HTMLAudioElement & { writes: number[] } {
   const writes: number[] = [];
   let volume = 0;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   const element = {
     writes,
     get volume(): number {
@@ -102,7 +103,6 @@ function stubElement(): HTMLAudioElement & { writes: number[] } {
       volume = next;
       writes.push(next);
     },
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as HTMLAudioElement & { writes: number[] };
   return element;
 }
@@ -157,6 +157,7 @@ describe("rampElement", () => {
 
   it("resolves via onDone when the element is torn down", () => {
     const volume = 0;
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const element = {
       get volume(): number {
         return volume;
@@ -164,7 +165,6 @@ describe("rampElement", () => {
       set volume(_next: number) {
         throw new Error("gone");
       },
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement;
     let done = 0;
     expect(() => {

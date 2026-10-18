@@ -7,6 +7,9 @@ minimumReleaseAgeExclude:
   # 7-day gate can never pass for this family.
   - vite-plus
   - "@voidzero-dev/*"
+  # Exact-pinned by @voidzero-dev/vite-plus-core in lockstep with the toolchain.
+  - "@oxc-project/types"
+  - "@oxc-project/runtime"
   - oxlint
   - oxfmt
   - oxlint-tsgolint
@@ -23,8 +26,8 @@ minimumReleaseAgeExclude:
   # lint, unit and build gates validate updates instead.
   - "@tanstack/*"
 catalog:
-  vite: npm:@voidzero-dev/vite-plus-core@1.0.0
-  vite-plus: 1.0.0
+  vite: npm:@voidzero-dev/vite-plus-core@1.3.0
+  vite-plus: 1.3.0
 overrides:
   vite@*: "catalog:"
 peerDependencyRules:

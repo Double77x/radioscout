@@ -48,11 +48,11 @@ export function SegmentedControl<T extends string>({
     <fieldset
       className={cn("scout-segmented", className)}
       style={
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- CSS custom properties are not in React's CSSProperties
         {
           "--active-index": activeIndex,
           "--segment-count": options.length,
           "--segment-height": density === "compact" ? "1.75rem" : "2.25rem",
-          // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- CSS custom properties are not in React's CSSProperties
         } as CSSProperties
       }>
       <legend className='sr-only'>{label}</legend>

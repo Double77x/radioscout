@@ -21,18 +21,18 @@ function stubRecord(overrides: Partial<RetiredOutput> = {}): RetiredOutput & {
     calls,
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     abort: { abort: () => void calls.push("abort") } as unknown as AbortController,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     element: {
       pause: () => void calls.push("pause"),
       removeAttribute: () => void calls.push("removeAttribute"),
       load: () => void calls.push("load"),
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as HTMLAudioElement,
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     ctx: {
       close: () => {
         calls.push("close");
         return Promise.resolve();
       },
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as AudioContext,
     ...overrides,
   };
@@ -55,13 +55,13 @@ describe("parkRecord", () => {
 
   it("keeps tearing down when a step throws", () => {
     const record = stubRecord({
+      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
       element: {
         pause: () => {
           throw new Error("gone");
         },
         removeAttribute: vi.fn(),
         load: vi.fn(),
-        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
       } as unknown as HTMLAudioElement,
     });
     expect(() => {

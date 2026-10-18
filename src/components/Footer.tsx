@@ -4,9 +4,11 @@ import { Logo } from "@/components/Logo";
 import { FOOTER_LEGAL_LINKS, FOOTER_PRODUCT_LINKS } from "@/data/navigation";
 import { siteConfig } from "@/lib/site";
 
-const Footer = () => {
-  const year = new Date().getFullYear();
+// `new Date()` in render trips react(purity); the copyright year is fixed for
+// the life of the bundle, so read it once at module load instead.
+const CURRENT_YEAR = new Date().getFullYear();
 
+const Footer = () => {
   return (
     <footer className='border-t border-border bg-surface-2'>
       <div className='mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8'>
@@ -101,7 +103,7 @@ const Footer = () => {
 
         <div className='mt-10 flex flex-col gap-3 border-t border-border pt-6 sm:flex-row sm:items-center sm:justify-between'>
           <p className='text-xs text-muted-foreground'>
-            © {year} {siteConfig.name}. All rights reserved.
+            © {CURRENT_YEAR} {siteConfig.name}. All rights reserved.
           </p>
           <p className='flex items-center gap-2 text-xs text-muted-foreground'>
             <Link

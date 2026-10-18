@@ -20,6 +20,7 @@ function FakeAudioContext(): void {}
 
 function stubAnalyser(samples: number[], fftSize = 8): AnalyserNode & { calls: number } {
   let calls = 0;
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   const stub = {
     fftSize,
     get calls(): number {
@@ -29,13 +30,13 @@ function stubAnalyser(samples: number[], fftSize = 8): AnalyserNode & { calls: n
       calls += 1;
       output.set(samples.slice(0, output.length));
     },
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as AnalyserNode & { calls: number };
   return stub;
 }
 
 function stubGain(value = 1): GainNode & { targetCalls: [number, number, number][] } {
   const targetCalls: [number, number, number][] = [];
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   const stub = {
     gain: {
       value,
@@ -44,7 +45,6 @@ function stubGain(value = 1): GainNode & { targetCalls: [number, number, number]
       },
     },
     targetCalls,
-    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
   } as unknown as GainNode & { targetCalls: [number, number, number][] };
   return stub;
 }
@@ -166,11 +166,11 @@ describe("resetLevelingGain", () => {
   });
 
   it("tolerates teardown races and missing graphs", () => {
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const torn = {
       get gain(): { value: number } {
         throw new Error("gone");
       },
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as GainNode;
     expect(() => resetLevelingGain(torn)).not.toThrow();
     expect(resetLevelingGain(null)).toBe(SETTLE_TICKS);
@@ -277,12 +277,12 @@ describe("levelingTick", () => {
     );
     // Stage 1 at target RMS holds unity; with no K tap nothing multiplies it.
     expect(gain.gain.value).toBeCloseTo(1, 5);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const failing = {
       fftSize: 8,
       getFloatTimeDomainData: () => {
         throw new Error("gone");
       },
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as AnalyserNode;
     const survivedGain = stubGain(1);
     expect(() => {
@@ -306,12 +306,12 @@ describe("levelingTick", () => {
     const gain = stubGain(1);
     const stale = levelingTick(tick({ analyser, gain, buffer: new Float32Array(4) }));
     expect(stale?.buffer.length).toBe(8);
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     const failing = {
       fftSize: 8,
       getFloatTimeDomainData: () => {
         throw new Error("gone");
       },
-      // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- partial test double: unexercised members are intentionally absent
     } as unknown as AnalyserNode;
     const survived = levelingTick(tick({ analyser: failing, gain }));
     expect(survived?.settleTicksLeft).toBe(8);
