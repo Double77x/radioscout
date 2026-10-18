@@ -210,6 +210,7 @@ Signals that look conclusive and are not. Each has already produced a wrong conc
 - **`Cache-Control` alone does not prove an edge cache hit.** Pages Function responses are not edge-cached by that header on its own, and a deterministic error body reads the same whether it was re-probed or served from cache. Compare full bodies (identical `at` field) plus MISS/HIT timings. (`docs/lineage.md`, 2026-10-01)
 - **Regenerating icons churns the committed favicon and PNGs.** The committed assets predate `scripts/generate-icons.mjs`, so a regen produces a large unrelated diff. Run `node scripts/generate-icons.mjs`, then `pnpm cap:assets`, then revert the favicon/PNG churn. (`docs/lineage.md`, 2026-09-20)
 - **Set `npm_config_manage_package_manager_versions=false` for local pnpm invocations.** `packageManager` pins 12.8.1, which is newer than `minimumReleaseAge` (10080 minutes), so a bare `pnpm` self-installs a different version. (`docs/lineage.md`, 2026-09-30)
+- **Green lint, format, build and unit tests do not prove the Playwright suite is green.** Nothing in the build runs `pnpm test:e2e`, and the specs reach icon-only controls by accessible name, so a rename under `src/components/radio/` reddens them with no other gate noticing. Run `pnpm test:e2e` when an accessible name or role in the radio UI changes. (`docs/lineage.md`, 2026-10-05)
 
 ## 16. Tool & MCP Usage
 

@@ -366,7 +366,7 @@ test.describe("RadioScout home", () => {
     await page.getByRole("button", { name: "Details for Test Jazz FM" }).first().click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Test Jazz FM").first()).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Play now" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Play Test Jazz FM" })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Share Test Jazz FM" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close details" }).click();
     await expect(dialog).toBeHidden();
@@ -377,9 +377,9 @@ test.describe("RadioScout home", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Test Jazz FM").first()).toBeVisible();
     await expect(dialog.getByText("10", { exact: true })).toBeVisible();
-    await dialog.getByRole("button", { name: "Vote +1" }).click();
+    await dialog.getByRole("button", { name: "Vote for Test Jazz FM" }).click();
     await expect(dialog.getByText("11", { exact: true })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Voted ✓" })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Vote for Test Jazz FM" })).toBeDisabled();
   });
 
   test("dead station links explain instead of stranding", async ({ page }) => {
@@ -415,7 +415,7 @@ test.describe("RadioScout home", () => {
     expect(target).not.toBeNull();
     await target?.click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("button", { name: "Play now" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Play Test Jazz FM" })).toBeVisible();
     await expect(page).toHaveURL(/station=/);
     // Let the navigation's scroll restoration run before measuring.
     await page.waitForTimeout(250);

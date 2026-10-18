@@ -36,7 +36,9 @@ test("clear button empties the box", async ({ page }) => {
   const search = await readySearch(page);
   await search.fill("jazz");
   await expect(search).toHaveValue("jazz");
-  await page.getByRole("button", { name: "Clear search" }).click();
+  // exact: typing commits `?q=`, which reveals the filtered-home back arrow
+  // whose label ("Clear search and filters") also contains "Clear search".
+  await page.getByRole("button", { name: "Clear search", exact: true }).click();
   await expect(search).toHaveValue("");
 });
 
