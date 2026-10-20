@@ -7,9 +7,7 @@ import { StatusBar, Style } from "@capacitor/status-bar";
 import { useTheme } from "@/lib/theme";
 import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
-import { isFdroidDistribution } from "@/lib/distribution";
-import { envString } from "@/lib/utils";
-import { pickOtaUpdate } from "@/lib/ota";
+import { runOtaUpdateCheck } from "@/lib/native-ota";
 import { playBackTransition } from "@/lib/animated-back";
 import { checkpointListeningSession } from "@/lib/player/store";
 import { syncNativeStation } from "@/hooks/use-player";
@@ -21,75 +19,6 @@ import { syncNativeStation } from "@/hooks/use-player";
  * dynamic `import()` inside effects, and these packages are SSR-safe
  * (no DOM access at import time) plus tiny enough for the shared bundle.
  */
-/**
- * One-shot OTA check: mark the running bundle healthy, fetch the static
- * manifest, and stage any newer compatible bundle for next launch.
- * Module-level (not inline) so the effect below stays a thin subscription;
- * every step is abort-aware and failures resolve null, never throw past
- * the boot path. Returns the staged version, or null when nothing staged.
- */
-async function runOtaUpdateCheck(signal: AbortSignal): Promise<string | null> {
-  // Store-managed builds must not contact or stage anything through the
-  // sideload updater, including its initial app-ready notification.
-  if (isFdroidDistribution()) return null;
-
-  try {
-    await CapacitorUpdater.notifyAppReady();
-  } catch (error: unknown) {
-    console.warn("[ota] app-ready", error instanceof Error ? error.message : error);
-  }
-  if (signal.aborted) return null;
-  // Manifest host: explicit override wins, else the site serves its own
-  // manifest (`public/ota/` in this repo). Unresolvable base (or a 404
-  // before the first publish) means dormant — never an error.
-  const override = envString("VITE_OTA_URL")?.replace(/\/+$/, "");
-  const canonical = envString("VITE_CANONICAL_URL")?.replace(/\/+$/, "");
-  // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- empty env var counts as unset and falls through to the canonical base
-  const base = override || (canonical ? `${canonical}/ota` : "");
-  if (!base) return null;
-  const info = await App.getInfo().catch((error: unknown) => {
-    console.warn("[ota] app-info", error instanceof Error ? error.message : error);
-    return null;
-  });
-  if (signal.aborted || !info) return null;
-  // Version basis: after an OTA applies, App.getInfo() still reports the
-  // NATIVE versionName — comparing against it would re-pick the staged
-  // bundle every boot. Prefer the live bundle version instead.
-  let currentVersion = info.version;
-  try {
-    const current = await CapacitorUpdater.current();
-    if (current?.bundle && current.bundle.id !== "builtin" && current.bundle.version) {
-      currentVersion = current.bundle.version;
-    }
-  } catch {
-    // Bundle info unavailable — the native version stands.
-  }
-  if (signal.aborted) return null;
-  const manifest: unknown = await fetch(`${base}/production.json`, { cache: "no-store", signal })
-    .then((response) => (response.ok ? response.json() : null))
-    .catch((error: unknown) => {
-      // Aborts are cleanup, not failures — stay quiet on unmount.
-      if (!signal.aborted) console.warn("[ota] check", error instanceof Error ? error.message : error);
-      return null;
-    });
-  const update = pickOtaUpdate(manifest, currentVersion, Number(info.build) || 0);
-  if (signal.aborted || !update) return null;
-  const bundle = await CapacitorUpdater.download({
-    url: update.url,
-    version: update.version,
-    checksum: update.checksum,
-  }).catch((error: unknown) => {
-    console.warn("[ota] download", error instanceof Error ? error.message : error);
-    return null;
-  });
-  if (signal.aborted || !bundle) return null;
-  await CapacitorUpdater.next({ id: bundle.id }).catch((error: unknown) => {
-    console.warn("[ota] stage", error instanceof Error ? error.message : error);
-  });
-  console.info(`[ota] staged ${update.version}, applies on next launch`);
-  return update.version;
-}
-
 export function NativeShell() {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
@@ -188,7 +117,7 @@ export function NativeShell() {
   }, []);
 
   // OTA update check (static in-repo manifest + GitHub Release zips, see
-  // `src/lib/ota.ts` and `scripts/publish-ota.mjs`), once per mount. The work lives in `runOtaUpdateCheck` above; the effect only
+  // `src/lib/ota.ts` and `scripts/publish-ota.mjs`), once per mount. The work lives in `src/lib/native-ota.ts`; the effect only
   // owns the abort signal, so unmounting mid-check cancels the fetch and
   // every later step stands down via the same signal. A freshly staged
   // bundle surfaces as a restart toast (it would otherwise apply silently
