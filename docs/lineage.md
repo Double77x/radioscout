@@ -440,6 +440,8 @@ The suite now lives in its own reusable workflow and treats acceleration as opti
 
 The cost is a slower boot on a runner without KVM and a suite that no longer runs against a Google services image. The tests read Media3 constants, the manifest and the permission state, none of which depend on Google services, and the device smoke on the self-hosted runner still covers a real device.
 
+Correction, same day: the claim that the ATD image boots "with or without acceleration" was wrong. Measured on a workstation with the emulator forced into software mode, the ATD image was still not booted after 1504 seconds, so the suite does need a runner with hardware acceleration. The ATD image does boot in about 80 seconds on a runner that has it, and the second runner exists for the runners that do not. Acceleration is therefore a requirement of the runner, not of the project, and the second runner is the backstop rather than a fallback.
+
 ### 2026-10-20 · Workflow files are checked by actionlint
 
 Two of the release-day failures were workflow syntax that only GitHub could see: a job that calls a reusable workflow carrying `continue-on-error`, and a composite action `run:` step without a `shell`. Both were found by a failed run, not by a check.
