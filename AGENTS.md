@@ -143,6 +143,7 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-20 — Dependabot cooldown matches pnpm's release age
 - 2026-10-20 — Native verification follows native changes
 - 2026-10-20 — Android emulator needs KVM, not a longer timeout
+- 2026-10-20 — Gradle stays on 8.x until AGP 9
 
 ## UI Primitives
 

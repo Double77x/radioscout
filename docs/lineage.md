@@ -425,3 +425,9 @@ The trade-off is deliberate: a web-only pull request no longer proves an APK bui
 The 0.4.5 release preflight failed with `Timeout waiting for emulator to boot`, and the log carried QEMU's TCG warnings (`CPUID.01H:ECX.avx`). The emulator was not using hardware acceleration because the runner user could not open `/dev/kvm`; the workflow had assumed the action handled permissions on its own. Disabling snapshots, raising the timeout and pinning `ubuntu-24.04` all left the same software-emulation loop.
 
 The job now writes the KVM udev rule, reloads udev, checks that `/dev/kvm` is readable and writable, and passes `-accel on`. If acceleration is missing the job fails with a permission error instead of burning the full boot timeout. The 900-second timeout stays as a safety net, not as the fix. `gradle/actions/setup-gradle` moves to v6 in the same pass to clear the Node 20 deprecation warning.
+
+### 2026-10-20 · Gradle stays on 8.x until AGP 9
+
+`setup-gradle` v6 annotates a job when the wrapper is one major behind the latest release, or more than two minors behind on the current major. Gradle 9.8.1 is out, so the 8.14.3 wrapper drew an "out of date" notice in Verify. The notice is informational; the job stayed green.
+
+Gradle 9 needs Android Gradle Plugin 9, and the project is on AGP 8.13.0. That is a toolchain migration, not a patch bump, so it does not belong in a patch release. The wrapper moves to 8.14.6, the last 8.x patch, which keeps the maintenance line on its latest fixes. The notice stays until AGP 9 lands, and that move gets its own change with the JVM tests, the R8 build and the instrumentation run as its gate.
