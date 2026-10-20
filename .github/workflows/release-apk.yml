@@ -3,11 +3,13 @@
 #
 # Usage: bump `version` in package.json, run `pnpm cap:version`, commit both
 # files, then `git tag vX.Y.Z && git push origin vX.Y.Z`. Tagging is the deliberate
-# release act: every `v*` tag builds the release-signed APK from that commit,
-# attaches it to the release, then publishes a `production` OTA bundle
-# (`publish-ota` job below — same web build devices already have baked in,
-# so older shells on this core catch up and the manifest stays in step).
-# `workflow_dispatch` builds without publishing (no APK, no OTA).
+# release act: every `v*` tag runs Verify as a required preflight, builds the
+# release-signed APK from that commit, attaches it to the release, then
+# publishes a `production` OTA bundle (`publish-ota` job below — same web build
+# devices already have baked in, so older shells on this core catch up and the
+# manifest stays in step).
+# `workflow_dispatch` runs the same preflight and build without publishing
+# (no APK, no OTA).
 #
 # The app is local-only (no backend), so the build needs no env vars beyond
 # the release-signing secrets below.
@@ -34,9 +36,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Reuse the pull-request/main gate rather than keeping a second, drifting
+  # copy of it here. A tag cannot reach the signing or publish steps unless
+  # this whole workflow (web, native JVM and instrumentation) succeeds.
+  preflight:
+    name: Verify
+    uses: ./.github/workflows/verify.yml
+
   build-and-release:
+    needs: preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@v7

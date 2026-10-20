@@ -1,0 +1,98 @@
+# Device-only release smoke. This is deliberately manual: it needs a physical
+# Android device or an emulator with host audio, which the standard GitHub
+# runners do not provide. Run it on a self-hosted runner labelled `android`
+# with a device attached (or a booted emulator) before promoting a release.
+# Use a dedicated test device: the workflow uninstalls the package between
+# variants, so it must not run against a daily-driver phone.
+#
+# It builds the R8-shrunk release-shaped variant, drives the full WebView
+# smoke against the local stream, then installs the non-debuggable release
+# variant and checks that it launches without a fatal crash.
+name: Android device smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      serial:
+        description: Optional adb serial when several devices are attached
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-device-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: [self-hosted, android]
+    timeout-minutes: 45
+    env:
+      ANDROID_SERIAL: ${{ inputs.serial }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Setup Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check device connection
+        run: adb devices
+
+      - name: Build native web assets
+        run: |
+          pnpm cap:android
+          pnpm cap:version
+
+      - name: Create a local debug keystore (release launch only)
+        run: |
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android -keypass android \
+              -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Assemble release-shaped and release APKs
+        working-directory: android
+        run: |
+          export ANDROID_KEYSTORE_FILE="$HOME/.android/debug.keystore"
+          export ANDROID_KEYSTORE_PASSWORD=android
+          export ANDROID_KEY_ALIAS=androiddebugkey
+          export ANDROID_KEY_PASSWORD=android
+          ./gradlew assembleReleaseTest assembleRelease --no-daemon
+
+      - name: Install and smoke the release-shaped build
+        run: |
+          adb uninstall io.github.double77x.radioscout || true
+          adb install android/app/build/outputs/apk/releaseTest/radioscout-releaseTest.apk
+          pnpm android:smoke
+
+      - name: Check the denied-notification fail-open path
+        run: pnpm android:smoke:permission
+
+      - name: Install and smoke the non-debuggable release build
+        run: |
+          adb uninstall io.github.double77x.radioscout || true
+          adb install android/app/build/outputs/apk/release/radioscout-release.apk
+          pnpm android:smoke:release
