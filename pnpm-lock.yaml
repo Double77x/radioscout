@@ -209,8 +209,8 @@ importers:
         specifier: ^8.0.4
         version: 8.0.4(@capacitor/core@8.5.3)
       '@capgo/capacitor-updater':
-        specifier: ^8.52.1
-        version: 8.52.1(@capacitor/core@8.5.3)
+        specifier: ^8.53.0
+        version: 8.53.0(@capacitor/core@8.5.3)
       '@tanstack/react-hotkeys':
         specifier: ^0.15.1
         version: 0.15.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -998,8 +998,8 @@ packages:
   '@capacitor/synapse@1.0.4':
     resolution: {integrity: sha512-/C1FUo8/OkKuAT4nCIu/34ny9siNHr9qtFezu4kxm6GY1wNFxrCFWjfYx5C1tUhVGz3fxBABegupkpjXvjCHrw==}
 
-  '@capgo/capacitor-updater@8.52.1':
-    resolution: {integrity: sha512-bvI6kUms5QJXtWznv7JoTdmKlmjobPYIW1santxgn5AZAciXpiDXXcwdaK2sjgK1NyuzREwZw68vzUCWGhrbAA==}
+  '@capgo/capacitor-updater@8.53.0':
+    resolution: {integrity: sha512-fJfHi/h6AwZLvLrRlztxFUhKt+CDCHiMsRLzuOT0wFUvqP2qIK/B39nMr8xNXuRLzQoQWBkriQJO1ZWzhq3Afg==}
     peerDependencies:
       '@capacitor/core': ^8.0.0
 
@@ -7085,7 +7085,7 @@ snapshots:
 
   '@capacitor/synapse@1.0.4': {}
 
-  '@capgo/capacitor-updater@8.52.1(@capacitor/core@8.5.3)':
+  '@capgo/capacitor-updater@8.53.0(@capacitor/core@8.5.3)':
     dependencies:
       '@capacitor/core': 8.5.3
 
