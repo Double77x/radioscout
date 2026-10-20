@@ -88,4 +88,4 @@ build hash with the result.
 
 | Date | Device / Android | Build SHA-256 | Result | Notes |
 | :--- | :--------------- | :------------ | :----- | :---- |
-|      |                  |               |        |       |
+| 2026-10-20 | none — no device attached | `3bad4b795779fb9b4b767920e847835c1de3141ad489b57ddd3b1723f24c0a56` (published v0.4.5 APK) | Not run | Released on the hosted emulator (instrumentation) and the JVM/R8 evidence only. Audible output, lock-screen presentation, routing, calls, Android Auto and doze are unproven for 0.4.5. |
