@@ -100,6 +100,11 @@ capacitor.config.json
 capacitor.config.ts.fdroid
 android/app/build
 android/app/src/main/assets
+# Generated Android smoke TLS material; never commit the private key.
+tests/fixtures/android/.generated/
+tests/fixtures/android/*.pem
+tests/fixtures/android/*.key
+tests/fixtures/android/*.p12
 android/build
 android/.gradle
 android/.kotlin
