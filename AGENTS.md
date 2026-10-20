@@ -140,6 +140,7 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-20 — Fallow health pass: probes, drag, store and sheet seams
 - 2026-10-20 — APK smoke finds native pause status; device checks become repeatable
 - 2026-10-20 — Native release gates: fixture smoke, R8, permission fail-open
+- 2026-10-20 — Dependabot cooldown matches pnpm's release age
 
 ## UI Primitives
 

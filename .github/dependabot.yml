@@ -9,6 +9,11 @@ updates:
       time: "09:00"
       timezone: "Europe/London"
     open-pull-requests-limit: 10
+    # pnpm rejects lockfile entries younger than seven days. Keep the
+    # Dependabot cooldown at least that long, otherwise a fresh release opens
+    # a pull request that cannot install anywhere, CI included.
+    cooldown:
+      default-days: 7
     labels:
       - "dependencies"
       - "npm"

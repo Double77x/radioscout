@@ -29,7 +29,7 @@ concurrency:
 jobs:
   build-reference:
     name: Build signed F-Droid reference APK
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
 
     steps:
@@ -59,7 +59,7 @@ jobs:
           echo "apkName=radioscout-fdroid-$version-$versionCode.apk" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           run_install: false
 
@@ -157,7 +157,7 @@ jobs:
           echo "APK_SHA256=$SHA256" >> "$GITHUB_ENV"
 
       - name: Upload Actions artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: fdroid-reference-apk
           path: ${{ steps.version.outputs.apkName }}

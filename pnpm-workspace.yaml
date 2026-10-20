@@ -1,3 +1,5 @@
+# Keep the npm cooldown in .github/dependabot.yml at least this long. A
+# shorter cooldown opens pull requests that this gate then rejects at install.
 minimumReleaseAge: 10080 # 7 days
 minimumReleaseAgeExclude:
   - typescript
