@@ -81,7 +81,7 @@
     "@vitejs/plugin-react": "^6.1.2",
     "adm-zip": "^0.6.1",
     "cross-env": "10.1.0",
-    "eslint-plugin-better-tailwindcss": "^4.9.0",
+    "eslint-plugin-better-tailwindcss": "^4.9.1",
     "eslint-plugin-react-doctor": "0.9.17",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
