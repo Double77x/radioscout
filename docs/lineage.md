@@ -431,3 +431,11 @@ The job now writes the KVM udev rule, reloads udev, checks that `/dev/kvm` is re
 `setup-gradle` v6 annotates a job when the wrapper is one major behind the latest release, or more than two minors behind on the current major. Gradle 9.8.1 is out, so the 8.14.3 wrapper drew an "out of date" notice in Verify. The notice is informational; the job stayed green.
 
 Gradle 9 needs Android Gradle Plugin 9, and the project is on AGP 8.13.0. That is a toolchain migration, not a patch bump, so it does not belong in a patch release. The wrapper moves to 8.14.6, the last 8.x patch, which keeps the maintenance line on its latest fixes. The notice stays until AGP 9 lands, and that move gets its own change with the JVM tests, the R8 build and the instrumentation run as its gate.
+
+### 2026-10-20 · Hosted runners do not all expose KVM
+
+The KVM entry above said the emulator job should fail when acceleration is missing. That was wrong. Acceleration is a property of the host, not of the project: one run booted the emulator in five minutes, the next failed the same step in one second on a different runner, and the runner-images maintainers note that nested virtualisation is not guaranteed across the hosted fleet. A hard requirement turned the release preflight into a coin flip.
+
+The suite now lives in its own reusable workflow and treats acceleration as optional. The job installs the udev rule, reports whether `/dev/kvm` is usable, and runs against the ATD system image, which carries no Google services and boots in a fraction of the time of a full image with or without acceleration. Verify runs the suite a second time when the first attempt fails: the first attempt is tolerated, and only the second one, on another runner, blocks the release.
+
+The cost is a slower boot on a runner without KVM and a suite that no longer runs against a Google services image. The tests read Media3 constants, the manifest and the permission state, none of which depend on Google services, and the device smoke on the self-hosted runner still covers a real device.
