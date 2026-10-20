@@ -493,7 +493,10 @@ export default {
         },
       },
       {
-        files: ["src/components/radio/PlayerDock.tsx"],
+        // The touch volume control is a deliberate div slider: rotated native
+        // range inputs render inconsistently across mobile browsers (see the
+        // component's header for the full reason).
+        files: ["src/components/radio/PlayerVolumeOverlay.tsx"],
         rules: {
           "jsx-a11y/prefer-tag-over-role": "off",
         },
