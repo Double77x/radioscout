@@ -7,16 +7,17 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
 ### Key Modules
 
 1. **Home (`/`):**
-   - `HomePage` with URL search state (`q`, `tag`): `RadioHeader` (search + genre chips + directory total), accordion sections (Saved first, Most loved, Best of British, Recently played, Listening), footer directory credit. Search autofocuses on fine-pointer devices; the dock Browse button focuses it from anywhere via event.
-   - Prerendered to static HTML at build time (8 pages) with embedded SEO meta, JSON-LD schemas, and OpenGraph headers.
+   - `HomePage` with URL search state (`q`, `tag`): `RadioHeader` (search + genre chips + directory total), accordion sections (Saved first, Most loved, Best of British, Recently played, Listening), footer directory credit. Search autofocuses on fine-pointer devices; the dock Browse button focuses it from anywhere via event. The search branch, section trigger and filter summary are split into `HomeSearchResults`, `HomeSectionTrigger` and `HomeFilterSummary`.
+   - Prerendered to static HTML at build time (9 pages) with embedded SEO meta, JSON-LD schemas, and OpenGraph headers.
 2. **Station lists:**
-   - `StationCard` rows (play, art, details sheet, favourite, drag-reorder in Saved).
+   - `StationCard` rows (play, art, details sheet, favourite, drag-reorder in Saved). `SavedStations` keeps the reducer, DOM wiring and rendering; geometry, hit-testing and drop resolution live in `lib/radio/drag-reorder.ts`. The sheet body is split into `StationSheetTabs` (`StationInfoTab`, `RecentTracks`, `StationStats`), `StationSheetHeader`, `StationSheetActions` and `StationSheetFallback`.
    - Card-shaped skeletons (`StationCardSkeleton`/`StationListSkeleton`) mirror row geometry so lists swap with no shift; sections carry `aria-busy`.
 3. **Radio engine (`src/lib/radio/` + hooks):**
    - `api.ts` (radio-browser directory: top/search/stats, mirror failover), `store.ts` (isolated `RadioDB`: favourites with persisted `sort`, history deduped latest-wins), `prefs.ts` (volume/muted), `votes.ts`, `genres.ts`, `backup.ts` (versioned JSON envelope: export via share/download, import via Settings → Data).
-   - `use-radio.ts` (directory queries with `keepPreviousData`; favourites/history with `initialData: []` so they never flash), player engine (`lib/player/engine.ts` owns the playback singleton — live + staged `<audio>` elements, tokens, reconnect loop, transport; unit-tested leaves in `lib/player/{fades,sleep-timer,native-bridge,leveling}.ts`; `hooks/use-player.ts` is the thin `useSyncExternalStore` facade, MediaSession included).
+   - `use-radio.ts` (directory queries with `keepPreviousData`; favourites/history with `initialData: []` so they never flash), player engine (`lib/player/engine.ts` owns the playback singleton — live + staged `<audio>` elements, tokens, reconnect loop, transport; unit-tested leaves in `lib/player/{fades,sleep-timer,native-bridge,leveling}.ts`, with `lib/player/title-probe.ts` owning the title chain; `hooks/use-player.ts` is the thin `useSyncExternalStore` facade, MediaSession included).
     - Stream-URL policy (`lib/radio/types.ts`): sanitize upstream junk → canonicalize verified https-upgrade hosts (`HTTPS_UPGRADE_HOSTS`, e.g. BBC/Akamai) → drop unverified HTTP/empty rows from discovery via `filterPlayableStations()` (no per-row probing — pure string work). Playback resolves local + fresh `/json/url/` remote through the same canonicalizer, so web `<audio>` and the native Media3 service receive the identical URL.
     - Artwork policy (`lib/radio/artwork.ts`): station logos are **never** fetched from the broadcaster, so every load goes through one of two proxies. Chain order, the refusal-placeholder trap and the `img-src` allowlist are in `docs/modules/radio/artwork.md`.
+    - Title probes (`lib/radio/icy.ts`, driven by `lib/player/title-probe.ts`): in-band ICY decoding shared by the in-page read and `/api/icy-title`, with normalisation at extraction so both paths show the same string. The edge function fetches only public `http(s)` targets (no credentials, loopback/private literals or URLs over 2 KB) and caps the metadata interval and bytes read. There is no host allowlist — the directory is third-party and dynamic, and the client may hold a resolved variant — so per-IP throttling belongs in a Cloudflare rate-limit rule. The probe module owns the Radiolise push socket, BBC adaptive timer and fallback chain; the engine supplies the live-play guard and title sinks.
 4. **Quick Find Command Palette (`CommandPalette`):**
    - **Shortcuts:** Powered by `@tanstack/react-hotkeys` (`⌘K` / `Ctrl+K`, `Esc`).
    - **Dialog Shell:** Base UI Dialog (`@base-ui/react/dialog`) with smooth animations and accessibility.
@@ -32,7 +33,7 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
   - Mounts global providers (`ThemeProvider`, `TooltipProvider`, `Sonner`).
 - **File-Based Routes (`src/routes/`):**
   - Home (`/`) plus legal pages code-split via `.lazy.tsx` chunks.
-  - SSG prerender crawls chip and card links and produces static `.html` files for all 8 pages during `pnpm exec vp run build`.
+  - SSG prerender crawls chip and card links and produces static `.html` files for all 9 pages during `pnpm exec vp run build`.
 - **Catch-All 404 (`src/routes/$.tsx`):**
   - Handles unmatched client routes cleanly.
 
@@ -45,24 +46,26 @@ RadioScout is a mobile-first free worldwide radio player powered by **TanStack S
 ## 4. Design System & Component Infrastructure
 
 - **UI Primitives:** Base UI primitives (`@base-ui/react`) styled with Tailwind CSS v4 in `src/components/ui/` (`select.tsx`, `popover.tsx` mirror the shadcn composition API over Base UI parts).
-- **Settings (`SettingsMenu`):** Logo/tab trigger opens a screen-centred flyout with radio Data (export/import) and Style (System/Light/Dark, device-following by default) stacked in one scroll view, plus version footer. The app is local-only: no accounts, no sync.
+- **Settings (`SettingsMenu`):** Logo/tab trigger opens a screen-centred flyout with radio Data (export/import) and Style (System/Light/Dark, device-following by default) stacked in one scroll view, plus version footer. Sections share `SettingsSection`; `RadioDataSection` owns backup I/O, and the language/country filters share `PickerPanel` for search + virtualized rows. The app is local-only: no accounts, no sync.
 - **Brand mark (`Logo`):** Inline adaptive SVG (glass music note + sparkle, per-instance gradient IDs, silver note in dark scheme). `scripts/generate-icons.mjs` is the single artwork source for `public/` icons (SVGs, PNGs, ICO) and `pnpm cap:assets` carries it into the android drawables.
 - **Layouts & Shells (DRY Centralization):**
   - `AppShell` (`src/components/scout/AppShell.tsx:1`): Mobile-first centred-column frame with `PlayerDock` and `StationDetailSheet`.
+  - **Player dock keys (web):** the `PlayerDock` registrations are `K` (play/pause) and `←`/`→` (volume in 1% steps — the same step the focused range input takes — with the dock overlay revealed so the level is visible; the base is the stored volume, so a press while muted restores it). The hotkey manager skips keys a focused control owns — range inputs, radio groups, selects, menus, the dock's own `role="slider"` — so widget navigation keeps its arrows.
   - `LegalLayout` (`src/components/layout/LegalLayout.tsx:1`): Clean reading layout with breadcrumbs, now driven by `LegalLayout` + `Prose`/`ProseH2` (`src/components/layout/Prose.tsx:1`).
   - `StateShell`/`CenteredState` (`src/components/shared/StateShell.tsx:1`): Unified full-page error/404 shells (used by `GlobalErrorComponent`, `NotFoundComponent`).
 - **Navigation Single Source:** `src/data/navigation.ts:1` (`FOOTER_*`, `COMMAND_STATIC_ITEMS` + `LEGAL_META` from `src/data/legal.ts:1`) drives `Footer` and `CommandPalette` (fuzzy search via Fuse.js) — eliminates drift between palette, footer, and route SEO.
 - **Site Config:** `src/lib/site.ts:1` centralizes `url`, `email`, `links` (github/twitter) for `Seo`/`Footer`.
 - **Typography:** Self-hosted Poppins font family with pre-computed CSS metric fallbacks to prevent layout shift.
 - **Scout Tokens:** `src/styles/index.css:1` maps `--scout-*` brand and pastel-tint variables (plus `text-scout-title`, `rounded-scout-card`/`rounded-scout-hero`) into Tailwind v4 theme tokens — no arbitrary values in components.
-- **Local-first radio store (`src/lib/radio/store.ts`):** Isolated `RadioDB` (favourites with `sort` for drag-reorder, history capped + deduped) — deliberately separate from any other store so version bumps can't disturb each other.
+- **Local-first radio store (`src/lib/radio/store.ts`):** Isolated `RadioDB` (favourites with `sort` for drag-reorder, history capped + deduped) — deliberately separate from any other store so version bumps can't disturb each other. Listening aggregation is pure and lives in `listening-summary.ts`; `store.ts` keeps the Dexie read/filter wrapper.
 - **Quality Gates:** `fallow.toml:1` (migrated from `knip.ts`) runs `dead-code`/`dupes`/`health`/`audit` with `ignorePatterns`/`ignoreDependencies` and embedded `regression.baseline` for CI `--fail-on-regression`.
 
 ## 5. Native App (Capacitor APK)
 
 One SSG artifact (`dist/client` — must stay in sync with `pages_build_output_dir` in `wrangler.toml`) serves Pages and the Android shell (`capacitor.config.ts:1`, `android/` committed, only local outputs/secrets gitignored).
 
-- **Shell bootstrap (`NativeShell`, mounted in `RootDocument`):** theme-following status bar, splash hide, Android hardware back (animated via the `SwipeBack` frame when mounted, `App.exitApp()` at root), plus the zero-service OTA check (`src/lib/ota.ts:1`) — all client-only, no-op on web.
+- **Shell bootstrap (`NativeShell`, mounted in `RootDocument`):** theme-following status bar, splash hide, Android hardware back (animated via the `SwipeBack` frame when mounted, `App.exitApp()` at root), plus the zero-service OTA check (`src/lib/native-ota.ts`, manifest contract in `src/lib/ota.ts:1`) — all client-only, no-op on web.
 - **Edge-swipe back (`SwipeBack` in `AppShell`):** touch-gated page gesture with flick/commit thresholds; blocked inside dialogs, fields, and scrollable chip rows. Shared guard in `src/lib/animated-back.ts:1` so gesture and OS back never double-navigate.
 - **Native branches (`src/lib/capacitor.ts:1`):** every native call site has a web fallback — radio backup goes through the share sheet (`src/lib/files.ts:1`).
-- **Builds:** `pnpm build:android:apk` (debug) / `build:android:aab` (release) — `cap:version` syncs `package.json` version into `versionName` plus a deterministic `versionCode`; `cap:assets` regenerates icons/splash from source art. Never commit `capacitor.config.local.ts` (LAN live-reload URL).
+- **Builds:** `pnpm build:android:apk` (debug), `build:android:release-like` (`releaseTest`: release assets and R8, debug-signed, non-debuggable, WebView debugging enabled), or `build:android:aab` (release) — `cap:version` syncs `package.json` version into `versionName` plus a deterministic `versionCode`; `cap:assets` regenerates icons/splash from source art. Never commit `capacitor.config.local.ts` (LAN live-reload URL).
+- **Release gates:** `.github/workflows/verify.yml` runs the hosted web/JVM/instrumentation checks and is the reusable `preflight` for `release-apk.yml`; a tag cannot sign or publish until it passes. The self-hosted `android-device-smoke.yml` adds the fixture media smoke and release launch check on a real runtime. Physical audio, lock-screen, routing and doze checks stay in `docs/plans/ANDROID_DEVICE_CHECKLIST.md`; the generated fixture CA is trusted only by debug/`releaseTest`.

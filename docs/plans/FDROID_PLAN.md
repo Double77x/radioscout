@@ -24,7 +24,7 @@ store.
 
 RadioScout has two sideload update paths:
 
-1. Capgo OTA bundles checked by `runOtaUpdateCheck()` in `NativeShell.tsx`.
+1. Capgo OTA bundles checked by `runOtaUpdateCheck()` in `src/lib/native-ota.ts`.
 2. The GitHub APK prompt checked by `checkApkUpdate()` and rendered by
    `AppUpdateDialog.tsx`.
 
@@ -42,8 +42,9 @@ no OTA environment variables: an F-Droid build must not depend on ignored local
 ### 2.1 Store-owned updates
 
 - `src/lib/distribution.ts` exposes the single F-Droid flavor predicate.
-- `NativeShell.tsx` returns before any Capgo app-ready call, manifest fetch, or
-  bundle download when the predicate is true.
+- `src/lib/native-ota.ts` returns before any Capgo app-ready call, manifest
+  fetch, or bundle download when the predicate is true; `NativeShell` only
+  owns the abort signal and restart toast.
 - `checkApkUpdate()` returns before install inspection or GitHub access, so the
   existing `AppUpdateDialog` receives no update and remains closed. The dialog
   component itself is unchanged.

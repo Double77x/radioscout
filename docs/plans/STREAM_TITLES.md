@@ -25,10 +25,12 @@ session, so a car, the lock screen and Android Auto show the song too.
   Each play probes once immediately, then re-polls every 20s while playing
   so track changes land instead of going stale. Probes are staleness-guarded
   (play token + station uuid) and never paint after supersede/pause/stop.
-  The chain per tick is a shared Radiolise lookup, an in-page read, then the
-  edge fallback, with a push subscription over their WebSocket standing the
-  loop down while healthy. BBC stations probe the RMS feeds below instead of
-  ICY (their HLS carries no ICY blocks); everything else probes ICY.
+  The chain per tick lives in `src/lib/player/title-probe.ts`: a shared
+  Radiolise lookup, an in-page read, then the edge fallback, with a push
+  subscription over their WebSocket standing the loop down while healthy.
+  `engine.ts` supplies the live-play guard and title sinks. BBC stations probe
+  the RMS feeds below instead of ICY (their HLS carries no ICY blocks);
+  everything else probes ICY.
 
 ## BBC metadata (RMS feeds)
 
@@ -60,7 +62,7 @@ canonical URL (hardcoded site fallback — APK builds bake no
 `VITE_CANONICAL_URL`). Dev uses the vite-only
 `/__bbc/probe?service=<id>` middleware (`scripts/icy-probe-plugin.ts`).
 
-Poll timing (`engine.ts` — one adaptive timeout chain per play, no fixed
+Poll timing (`title-probe.ts` — one adaptive timeout chain per play, no fixed
 interval, rescheduled from every verdict via `bbcNextPollDelayMs`):
 
 - **Tracks** (or nothing yet): hot 30s loop. Segment `offset` numbers are
@@ -110,9 +112,19 @@ Two feed-shape facts worth knowing (both verified live):
    trace, `meta=0` toggle; `scripts/icy-probe-plugin.ts`).
 
 Shared decoder: `src/lib/radio/icy.ts` (`parseIcyBlock`,
-`fetchIcyTitles`). Probe timeouts map both `AbortError` and `TimeoutError`
-(what Node throws for `AbortSignal.timeout()` — a `DOMException` is not an
-`Error` in every runtime, so the check reads `.name` without `instanceof`).
+`fetchIcyTitles`). Both the in-page read and the edge function stop at the
+same limits: an `icy-metaint` above 1 MiB is treated as no usable metadata,
+a probe stops after 2 MiB of body, and any title already decoded survives
+the `byte-limit` verdict. Real streams send an 8–64 KiB interval and deliver
+the first block within a few KB. The edge function additionally accepts only
+public `http(s)` targets through `isProbeableStreamUrl` — no embedded
+credentials, loopback/private/ULA/link-local literals, or URLs over 2 KB.
+There is no host allowlist: the directory is third-party and dynamic, and
+the client may hold a resolved variant the directory never listed; per-IP
+throttling belongs in a Cloudflare rate-limit rule. Probe timeouts map both
+`AbortError` and `TimeoutError` (what Node throws for
+`AbortSignal.timeout()` — a `DOMException` is not an `Error` in every
+runtime, so the check reads `.name` without `instanceof`).
 Display: `TrackTicker` (scrolls only on compact viewports when
 overflowing, static otherwise).
 

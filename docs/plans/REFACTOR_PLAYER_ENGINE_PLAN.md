@@ -175,6 +175,31 @@ Each phase is one commit / one review. Never combine 1d+1e+1f.
 > prerenders 9 pages with an unchanged chunk graph (dynamic Dexie/api imports
 > intact; the pre-existing `INEFFECTIVE_DYNAMIC_IMPORT` notice is untouched),
 > `fallow audit` pass with 0 introduced, `oxfmt --check` clean.
+>
+> Phase 3 landed 2026-10-19, after the Fallow health pass ranked `PlayerDock`
+> as the top web-player hotspot (cognitive 71 / cyclomatic 36 in a 355-line
+> function). The planned single `VolumeControl.tsx` became four modules:
+> `PlayerNowPlaying` (artwork, identity, live dot, subtitle), `PlayerControls`
+> (volume trigger, play/pause, stop), `PlayerVolumeOverlay` (both panels +
+> the touch slider) and `hooks/use-dock-volume.ts` (open state, auto-hide
+> timer, trigger/panel refs, key-step nudge). DOM and behaviour are
+> unchanged. Measured after: `PlayerDock` cognitive 71 → 17, cyclomatic
+> 36 → 7, body 355 → 153 lines; the extracted components sit at 16–18
+> cognitive, under the 30 threshold. The CRAP finding remains because Fallow
+> models UI components as untested (Playwright coverage is not counted), not
+> because a hot function is left behind. Next web-player hotspot:
+> `refreshOnce`'s IIFE in `engine.ts` (cognitive 29).
+>
+> Post-Fallow maintainability pass landed 2026-10-20. Phase 2's drag engine is
+> now `lib/radio/drag-reorder.ts` (geometry, drop resolution, row styles,
+> threshold/hold constants, unit tests) with `SavedStations` keeping the
+> reducer, DOM wiring and rendering. The title probe moved verbatim to
+> `lib/player/title-probe.ts` behind explicit hooks for the live-play guard,
+> current title, native flag and title sinks; `engine.ts` keeps transport,
+> handoff, snapshot publishing and song-history banking. The same pass split
+> listening aggregation (`listening-summary.ts`), the OTA check
+> (`native-ota.ts`), the station sheet, settings sections, picker panel and
+> Home branches. No engine transport/handoff seam was cut.
 
 ## 4. Non-goals
 

@@ -67,6 +67,7 @@ Only files that need explaining beyond their code get one. `src/lib/radio/icy.ts
 **plans/** — dated decision records, append-only:
 
 - `AGENTIC_PLAY.md` — the `?play=` URL contract
+- `ANDROID_DEVICE_CHECKLIST.md` — physical-device release checks
 - `CAPACITOR_PLAN.md` — native shell, signing, release workflow
 - `FDROID_PLAN.md` — reproducible builds, listing metadata
 - `NATIVE_AUDIO_PLAN.md` — the Media3 foreground-service player

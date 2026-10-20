@@ -44,6 +44,8 @@ Baseline to record on the clean tree **before Phase 1a** (paste outputs into the
 | 1f transport | `tests/resume.spec.ts` in isolation (quick-resume paused, no hydration errors) + `radio-player-sessions` + `radio-listening` unit (session clock banks on `emit` transitions) |
 | Facade | `grep -rn "from \"@/hooks/use-player\"" src` before/after identical; public export list diff empty |
 
+> The 2026-10-20 APK smoke found a pre-existing pause-status bug and fixed it in `NativeAudioPlugin`/`PlaybackStatus`. That is a separate product fix, not a refactor slice; the bridge contract (event names and payload shape) is unchanged.
+
 ## 4. Safety rails
 
 - **Export freeze**: the facade's export list (`usePlayer`, `play`, `pause`, `resume`, `toggle`, `togglePlay`, `stop`, `setVolume`, `toggleMute`, `setSleepTimer`, `cancelSleepTimer`, `setNormalization`, `applyPlayerPrefs`) held for all landed slices — verified by grep at every gate. New helpers stay module-private to the engine.

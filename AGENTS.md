@@ -129,6 +129,18 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-18 — Tablet-width app frame (600px step, `md` 768px, `xl` 896px)
 - 2026-10-18 — Android permission alias could strand playback
 
+- 2026-10-19 — Volume arrow keys on the web dock
+
+- 2026-10-19 — Fresh installs started silent (missing volume key read as 0)
+
+- 2026-10-19 — ICY probe: caller-supplied URLs gated, reads budgeted
+
+- 2026-10-19 — Player dock split out of one 480-line component
+
+- 2026-10-20 — Fallow health pass: probes, drag, store and sheet seams
+- 2026-10-20 — APK smoke finds native pause status; device checks become repeatable
+- 2026-10-20 — Native release gates: fixture smoke, R8, permission fail-open
+
 ## UI Primitives
 
 `src/components/ui/*` holds Base UI + shadcn primitives: `accordion`, `badge`, `breadcrumb`, `button`, `input`, `popover`, `select`, `sonner`, `table`, `tabs`, `tooltip` (plus `button-variants`/`badge-variants`). Dialogs use `@base-ui/react/dialog` directly (no wrapper file). When you need another primitive, re-add the Base UI + shadcn version, not Radix:
@@ -170,4 +182,5 @@ inventory (all load-bearing, no declarative alternative found 2026-09-10):
 - `NativeShell.tsx` OTA check — one-shot native boot check with an AbortController-owned fetch (not reactive data; Query would add a subscription lifecycle to a fire-and-forget bridge call).
 - `Home.tsx` — `open-home-section` global event subscription (command palette lives outside Home; expands the accordion section before scrolling it into view).
 - `RadioHeader.tsx` — search-box draft adoption (URL writes come from typing, chips, clear, back/forward and palette jumps; adopting a still-committing navigation while focused is what yanked the cursor mid-word).
-- `StationDetailSheet.tsx` (RecentTracks) — 30s interval re-render so wall-clock song ages stay honest between title banks (time has no reactive source; unmount clears it).
+- `RecentTracks.tsx` — 30s interval re-render so wall-clock song ages stay honest between title banks (time has no reactive source; unmount clears it). Moved out of `StationDetailSheet.tsx` in the 2026-10-20 split.
+- `use-dock-volume.ts` — volume overlay auto-hide timer cleanup (the handle is imperative; unmount must cancel a staged close). Moved out of `PlayerDock.tsx` in the 2026-10-19 split.

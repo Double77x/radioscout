@@ -2,7 +2,7 @@
 
 `src/lib/radio/radiolise.ts` is a one-shot title lookup against Radiolise's open metadata API. It sits at the head of the title probe chain because their server holds the upstream ICY connection open across callers — a warm station answers in a fraction of a second with no audio bytes pulled by anyone.
 
-Cold stations behave differently: their REST route only responds on the first published title, so a cold lookup *hangs* rather than returning empty. Callers must therefore cap this well under the poll interval and fall through on any outcome other than `ok`. `engine.ts` uses a 5s cap against a 20s poll.
+Cold stations behave differently: their REST route only responds on the first published title, so a cold lookup *hangs* rather than returning empty. Callers must therefore cap this well under the poll interval and fall through on any outcome other than `ok`. `title-probe.ts` uses a 5s cap against a 20s poll.
 
 ## POST, not GET
 

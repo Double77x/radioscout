@@ -63,7 +63,7 @@ Cold starts enter the service silent and the caller sweeps up, so a station swit
 
 ## Title probing
 
-`armIcyProbe` owns the subtitle chain: Radiolise, direct in-page read, then the edge function, with a push subscription standing the poll loop down while healthy. BBC stations take a different, RMS-backed route — see `docs/plans/STREAM_TITLES.md` for that subsystem and `modules/radio/radiolise.md` for the first tier.
+`armIcyProbe` in `engine.ts` is a thin adapter: it supplies the play-token guard and title sinks to `lib/player/title-probe.ts`, which owns the subtitle chain — Radiolise, direct in-page read, then the edge function, with a push subscription standing the poll loop down while healthy. BBC stations take a different, RMS-backed route — see `docs/plans/STREAM_TITLES.md` for that subsystem and `modules/radio/radiolise.md` for the first tier.
 
 Probing is skipped for HLS and bridged elements: playlists carry no ICY blocks, so it would burn a request per play and per poll for a title that cannot be there.
 
