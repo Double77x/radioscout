@@ -145,6 +145,7 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-20 — Android emulator needs KVM, not a longer timeout
 - 2026-10-20 — Gradle stays on 8.x until AGP 9
 - 2026-10-20 — Hosted runners do not all expose KVM
+- 2026-10-20 — Workflow files are checked by actionlint
 
 ## UI Primitives
 

@@ -16,6 +16,9 @@ jobs:
     name: Instrumented tests (first runner)
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    # The first runner is informational: a hosted runner that cannot boot a
+    # device must not decide the release on its own. The second runner does.
+    continue-on-error: true
     outputs:
       emulator: ${{ steps.suite.outputs.emulator-outcome }}
     steps:

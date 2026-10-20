@@ -47,19 +47,29 @@ runs:
 
     # Acceleration is a bonus, not a requirement. The rule gives the runner
     # user access to /dev/kvm when the host exposes it; when it does not, the
-    # ATD image still boots, just in software.
+    # ATD image still boots, just in software. The host facts land in the job
+    # summary, so a failure can be read without digging through the logs.
     - name: Enable KVM access
+      id: kvm
       shell: bash
       run: |
         echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
         sudo udevadm control --reload-rules
         sudo modprobe kvm 2>/dev/null || true
         sudo udevadm trigger --name-match=kvm 2>/dev/null || true
+        {
+          echo "### Emulator host"
+          echo ""
+          echo "- /dev/kvm: $(ls -l /dev/kvm 2>&1 | head -1)"
+          echo "- hardware virtualisation flags: $(grep -c -E 'vmx|svm' /proc/cpuinfo)"
+          echo "- kvm modules loaded: $(grep -c kvm /proc/modules)"
+        } >> "$GITHUB_STEP_SUMMARY"
         if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
-          echo "KVM is available: $(ls -l /dev/kvm)"
+          echo "kvm=ready" >> "$GITHUB_OUTPUT"
+          echo "- acceleration: available" >> "$GITHUB_STEP_SUMMARY"
         else
-          echo "::warning::This runner has no usable /dev/kvm; the emulator will boot in software."
-          ls -l /dev/kvm 2>&1 || echo "/dev/kvm is missing"
+          echo "kvm=absent" >> "$GITHUB_OUTPUT"
+          echo "- acceleration: none, the emulator boots in software" >> "$GITHUB_STEP_SUMMARY"
         fi
 
     # The ATD image carries no Google services, which the suite does not need,
@@ -79,3 +89,11 @@ runs:
         disable-animations: true
         emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
         script: cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon
+
+    - name: Report the outcome
+      shell: bash
+      run: |
+        {
+          echo ""
+          echo "- suite outcome: ${{ steps.emulator.outcome }}"
+        } >> "$GITHUB_STEP_SUMMARY"

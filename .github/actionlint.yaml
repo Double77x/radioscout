@@ -1,0 +1,4 @@
+# The device smoke runs on the repository's self-hosted runner.
+self-hosted-runner:
+  labels:
+    - android

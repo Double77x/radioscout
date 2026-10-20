@@ -439,3 +439,9 @@ The KVM entry above said the emulator job should fail when acceleration is missi
 The suite now lives in its own reusable workflow and treats acceleration as optional. The job installs the udev rule, reports whether `/dev/kvm` is usable, and runs against the ATD system image, which carries no Google services and boots in a fraction of the time of a full image with or without acceleration. The workflow runs the suite a second time when the first attempt fails: the first attempt is tolerated, and only the second one, on another runner, blocks the release.
 
 The cost is a slower boot on a runner without KVM and a suite that no longer runs against a Google services image. The tests read Media3 constants, the manifest and the permission state, none of which depend on Google services, and the device smoke on the self-hosted runner still covers a real device.
+
+### 2026-10-20 · Workflow files are checked by actionlint
+
+Two of the release-day failures were workflow syntax that only GitHub could see: a job that calls a reusable workflow carrying `continue-on-error`, and a composite action `run:` step without a `shell`. Both were found by a failed run, not by a check.
+
+Verify now runs actionlint, the standard checker for workflow files, in the web job. The shellcheck and pyflakes integrations stay off because they flag pre-existing style in the F-Droid workflow, and a style gate is not what a release needs. actionlint does not read composite action metadata, so the composite action keeps its own shape and a `shell:` on every `run:` step. The self-hosted `android` label is declared in `.github/actionlint.yaml` so the check knows it is not a typo.

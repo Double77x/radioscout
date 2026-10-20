@@ -65,7 +65,7 @@ jobs:
           fi
 
           native=false
-          if grep -Eq '^(android/|assets/|capacitor\.config\.|scripts/(cap-version\.js|strip-sw\.mjs|generate-native-assets\.mjs))' <<<"$files"; then
+          if grep -Eq '^(android/|assets/|capacitor\.config\.|scripts/(cap-version\.js|strip-sw\.mjs|generate-native-assets\.mjs)|\.github/actions/)' <<<"$files"; then
             native=true
           fi
 
@@ -105,6 +105,11 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Check the workflow files
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color -shellcheck= -pyflakes=
 
       - name: Lint
         run: pnpm lint
