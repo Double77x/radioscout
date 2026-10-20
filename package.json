@@ -68,7 +68,7 @@
     "@axe-core/playwright": "^4.13.0",
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.5.3",
-    "@cloudflare/workers-types": "^5.20261013.1",
+    "@cloudflare/workers-types": "^5.20261016.1",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/router-plugin": "1.168.47",
