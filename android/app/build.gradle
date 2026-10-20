@@ -4,6 +4,9 @@ apply plugin: 'com.android.application'
 // .github/workflows/release-apk.yml). Without them the release stays
 // unsigned and local installs should use `assembleDebug` instead.
 def releaseKeystorePath = System.getenv("ANDROID_KEYSTORE_FILE")
+// Generated on demand; never committed. The fixture CA is only merged into
+// debug and releaseTest resources.
+def fixtureCaResDir = new File(layout.buildDirectory.get().asFile, "generated/fixtureCa/res")
 
 android {
     namespace = "io.github.double77x.radioscout"
@@ -24,8 +27,11 @@ android {
         applicationId "io.github.double77x.radioscout"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 404
-        versionName "0.4.4"
+        versionCode 405
+        versionName "0.4.5"
+        // Only the release-shaped test variant flips this on. Debug builds
+        // already enable WebView debugging through Capacitor.
+        buildConfigField "boolean", "WEBVIEW_DEBUG", "false"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -55,12 +61,56 @@ android {
                 signingConfig signingConfigs.release
             }
         }
+        // Release-shaped build for device smoke: same R8/shrinking and web
+        // assets as release, still non-debuggable, debug-signed so the fixture
+        // CA can be trusted, and WebView debugging explicitly enabled through
+        // BuildConfig so Playwright can attach. Never publish this variant.
+        releaseTest {
+            initWith(buildTypes.getByName('release'))
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+            buildConfigField "boolean", "WEBVIEW_DEBUG", "true"
+        }
+    }
+    buildFeatures {
+        buildConfig true
+    }
+    sourceSets {
+        // The loopback trust config lives in src/debug/res; the CA itself is
+        // generated into the build directory and reused by releaseTest.
+        debug {
+            res.srcDir(fixtureCaResDir)
+        }
+        releaseTest {
+            res.srcDirs += [fixtureCaResDir, 'src/debug/res']
+        }
     }
     testOptions {
         // The leveling JVM tests drive queueInput directly, and its settle
         // path logs via android.util.Log — return stub defaults (silent)
         // instead of the not-mocked exceptions.
         unitTests.returnDefaultValues = true
+    }
+}
+
+def fixtureCaFile = new File(fixtureCaResDir, "raw/android_fixture_ca.pem")
+def generateFixtureCerts = tasks.register("generateFixtureCerts", Exec) {
+    group = "build"
+    description = "Generate the uncommitted Android smoke fixture CA"
+    workingDir rootProject.projectDir.parentFile
+    commandLine "node", "scripts/android-fixture-certs.mjs", "--ca-out", fixtureCaFile.absolutePath
+    inputs.file rootProject.file("../scripts/android-fixture-certs.mjs")
+    outputs.files(
+        fixtureCaFile,
+        rootProject.file("../tests/fixtures/android/.generated/fixture-ca.pem"),
+        rootProject.file("../tests/fixtures/android/.generated/fixture-server.p12")
+    )
+}
+// Anchor generation to the variant pre-build so every resource task sees the
+// generated CA before it reads the source set.
+tasks.configureEach { task ->
+    if (task.name == "preDebugBuild" || task.name == "preReleaseTestBuild") {
+        task.dependsOn generateFixtureCerts
     }
 }
 

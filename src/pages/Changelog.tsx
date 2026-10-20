@@ -12,6 +12,17 @@ interface ChangelogEntry {
 /** Newest first. One entry per release — the markup below stays identical. */
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: "0.4.5",
+    title: "Volume keys and a lighter player",
+    date: "October 2026",
+    points: [
+      "The web player now takes the left and right arrow keys for volume: each press moves one percent and reveals the level, so you can adjust it without reaching for the slider. Held keys keep stepping, and arrows still belong to search fields, menus and the focused volume slider.",
+      "Performance work across the dock, station sheet, settings and pickers keeps opening a station, switching tabs and scrolling long lists responsive.",
+      "Android playback no longer waits for the notification permission prompt. If you deny it — or the prompt never appears — audio still starts, and pausing during a buffering stream shows Paused immediately instead of leaving the dock on Tuning in.",
+      "Fresh installs now actually start at 25% volume instead of silence.",
+    ],
+  },
+  {
     version: "0.4.4",
     title: "Android volume, matched to the web",
     date: "October 2026",

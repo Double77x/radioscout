@@ -1,0 +1,1 @@
+The web player now uses the left and right arrow keys for volume: each press moves one percent and reveals the level. The dock, station sheet and settings are lighter and more responsive. Android playback starts even if the notification permission is denied, pausing a buffering stream shows Paused immediately, and fresh installs start at 25% volume.
