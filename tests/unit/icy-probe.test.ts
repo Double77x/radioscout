@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { directIcyRoute, fetchIcyTitles, normalizeStreamTitle, parseIcyBlock } from "@/lib/radio/icy";
+import {
+  directIcyRoute,
+  fetchIcyTitles,
+  isProbeableStreamUrl,
+  normalizeStreamTitle,
+  parseIcyBlock,
+} from "@/lib/radio/icy";
 
 function blockOf(text: string): Uint8Array {
   const bytes = new TextEncoder().encode(text);
@@ -122,6 +128,41 @@ function icyStream(metaint: number, blocks: string[]): Response {
   return new Response(stream, { headers: { "icy-metaint": String(metaint), "content-type": "audio/mpeg" } });
 }
 
+describe("isProbeableStreamUrl", () => {
+  it.each([
+    "http://stream.example.com:8000/live.mp3",
+    "https://stream.example.com/live",
+    "http://198.51.100.7:8000/stream", // public IP literal: some stations use one
+  ])("accepts %s", (target) => {
+    expect(isProbeableStreamUrl(target)).toBe(true);
+  });
+
+  it.each([
+    ["empty", ""],
+    ["not a URL", "not a url"],
+    ["file", "file:///etc/passwd"],
+    ["data", "data:text/plain,hello"],
+    ["ftp", "ftp://example.com/stream"],
+    ["credentials", "https://user:pass@example.com/stream"],
+    ["localhost", "http://localhost:8000/stream"],
+    ["an mDNS name", "http://studio.local/stream"],
+    ["loopback v4", "http://127.0.0.1:8000/stream"],
+    ["private v4", "http://192.168.1.10/stream"],
+    ["link-local v4", "http://169.254.169.254/latest/meta-data"],
+    ["carrier NAT", "http://100.64.0.1/stream"],
+    ["loopback v6", "http://[::1]:8000/stream"],
+    ["IPv4-mapped loopback", "http://[::ffff:127.0.0.1]/stream"],
+    ["unique local v6", "http://[fd00::1]/stream"],
+    ["link-local v6", "http://[fe80::1]/stream"],
+  ])("refuses %s", (_label, target) => {
+    expect(isProbeableStreamUrl(target)).toBe(false);
+  });
+
+  it("refuses a target longer than 2 KB", () => {
+    expect(isProbeableStreamUrl(`https://example.com/${"a".repeat(2048)}`)).toBe(false);
+  });
+});
+
 describe("fetchIcyTitles", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -142,6 +183,21 @@ describe("fetchIcyTitles", () => {
     const { outcome, titles } = await fetchIcyTitles("http://example.com/s.mp3", { maxTitles: 1 });
     expect(outcome).toBe("no-metaint");
     expect(titles).toHaveLength(0);
+  });
+
+  it("treats an implausibly large metadata interval as no metadata", async () => {
+    vi.stubGlobal("fetch", () => icyStream(2 * 1024 * 1024, ["StreamTitle='Never Reached';"]));
+    const { outcome, titles } = await fetchIcyTitles("http://example.com/s.mp3", { maxTitles: 1 });
+    expect(outcome).toBe("no-metaint");
+    expect(titles).toHaveLength(0);
+  });
+
+  it("stops at the byte budget and keeps the titles already read", async () => {
+    const tail = Array.from({ length: 2100 }, () => "");
+    vi.stubGlobal("fetch", () => icyStream(1024, ["StreamTitle='First Song';", ...tail]));
+    const { outcome, titles } = await fetchIcyTitles("http://example.com/s.mp3", { maxTitles: 2 });
+    expect(outcome).toBe("byte-limit");
+    expect(titles.map((entry) => entry.title)).toEqual(["First Song"]);
   });
 
   it("cleans a stuffed title and skips an ad-break marker", async () => {
@@ -187,6 +243,11 @@ describe("directIcyRoute", () => {
   it("retries direct after a timeout, which only means the station was slow", () => {
     expect(directIcyRoute("timeout", [])).toEqual({ kind: "edge", memo: false });
     expect(directIcyRoute("complete", [])).toEqual({ kind: "edge", memo: false });
+    expect(directIcyRoute("byte-limit", [])).toEqual({ kind: "edge", memo: false });
+  });
+
+  it("still publishes a title read before the byte budget ran out", () => {
+    expect(directIcyRoute("byte-limit", [found])).toEqual({ kind: "apply", title: "Nova - Ramp" });
   });
 
   it("ignores a blank title rather than publishing it", () => {

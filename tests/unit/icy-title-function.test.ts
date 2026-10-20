@@ -39,8 +39,12 @@ function fakeCaches(): { store: Map<string, Response>; caches: unknown } {
   return { store, caches };
 }
 
+function requestFor(target: string): Request {
+  return new Request(`https://app.test/api/icy-title?url=${encodeURIComponent(target)}&titles=1`);
+}
+
 function probeRequest(): Request {
-  return new Request(`https://app.test/api/icy-title?url=${encodeURIComponent("http://example.com/s.mp3")}&titles=1`);
+  return requestFor("http://example.com/s.mp3");
 }
 
 function titleOf(body: unknown): string {
@@ -106,5 +110,37 @@ describe("icy-title function cache", () => {
     vi.stubGlobal("caches", caches);
     const response = await onRequestGet({ request: probeRequest() });
     expect(response.headers.get("cache-control")).toBe("public, max-age=20");
+  });
+});
+
+describe("icy-title target gate", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["a file URL", "file:///etc/passwd"],
+    ["a data URL", "data:text/plain,hello"],
+    ["credentials", "https://user:pass@example.com/stream"],
+    ["loopback", "http://127.0.0.1:8000/stream"],
+    ["a private literal", "http://192.168.1.10:8000/stream"],
+    ["localhost", "http://localhost:8000/stream"],
+  ])("rejects %s without fetching", async (_label, target) => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubGlobal("caches", undefined);
+    const response = await onRequestGet({ request: requestFor(target) });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ ok: false, reason: "invalid-target", titles: [] });
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("lets a public station URL through to the probe", async () => {
+    const fetchSpy = vi.fn(() => new Response("", { status: 404 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubGlobal("caches", undefined);
+    const response = await onRequestGet({ request: requestFor("https://stream.example.com/live.mp3") });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(await response.json()).toMatchObject({ ok: false, reason: "http-404" });
   });
 });

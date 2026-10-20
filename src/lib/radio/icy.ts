@@ -10,7 +10,9 @@
  *
  * `normalizeStreamTitle` runs at the one point a title is extracted, so the
  * edge function and the direct-fetch fallback both get the cleaned value.
- * Native titles do not come through here — ExoPlayer decodes ICY itself.
+ * The endpoint's target gate and the probe's read budget live here too, so
+ * both runtimes share one policy. Native titles do not come through here —
+ * ExoPlayer decodes ICY itself.
  */
 
 export interface IcyStreamInfo {
@@ -30,7 +32,7 @@ export interface IcyTitle {
   title: string;
 }
 
-export type IcyOutcome = "complete" | "timeout" | "fetch-error" | "http-error" | "no-metaint";
+export type IcyOutcome = "complete" | "timeout" | "fetch-error" | "http-error" | "no-metaint" | "byte-limit";
 
 /** What a caller should do with the result of a direct in-page read. */
 export type IcyDirectRoute =
@@ -164,11 +166,234 @@ export function normalizeStreamTitle(raw: string): string {
   return joinTitle((stuffed.groups.head ?? "").replace(/[\s‐-―-]+$/u, ""), song);
 }
 
+/**
+ * Longest target the edge probe accepts. Station URLs are far shorter; the
+ * cap only stops the endpoint being handed a megabyte of query text.
+ */
+const MAX_PROBE_URL_LENGTH = 2048;
+
+/**
+ * Largest `icy-metaint` the pump will honour. Real streams send 8–64 KiB;
+ * anything larger would make it buffer audio a probe can never reach inside
+ * the timeout, so the station is treated as having no usable metadata.
+ */
+const MAX_ICY_METAINT = 1 << 20;
+
+/** Body bytes one probe may read before it stops for this poll window. */
+const MAX_PROBE_BYTES = 2 << 20;
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d{1,3}$/.test(part))) return false;
+  const [a = 0, b = 0] = parts.map(Number);
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 100 && b >= 64 && b <= 127)
+  );
+}
+
+function isPrivateHostname(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
+  const literal = host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+  if (literal === "::" || literal === "::1") return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(literal)) return true; // fc00::/7 unique local
+  if (/^fe[89ab][0-9a-f]:/.test(literal)) return true; // fe80::/10 link local
+  if (literal.startsWith("::ffff:")) {
+    // IPv4-mapped IPv6: WHATWG normalises `::ffff:127.0.0.1` to
+    // `::ffff:7f00:1`, so rebuild the dotted quad from the last 32 bits.
+    const [high = "", low = ""] = literal.slice(7).split(":");
+    const value = (Number.parseInt(high, 16) << 16) | Number.parseInt(low, 16);
+    return isPrivateIpv4(`${value >>> 24}.${(value >>> 16) & 255}.${(value >>> 8) & 255}.${value & 255}`);
+  }
+  return isPrivateIpv4(literal);
+}
+
+/**
+ * Endpoint gate for `/api/icy-title`: may the edge fetch this target on a
+ * caller's behalf? Public radio is the only legitimate answer, so anything
+ * that is not a plain `http(s)` URL — credentials, loopback and private
+ * literals, absurd lengths — is refused before a request is made.
+ *
+ * This cannot prove where a *hostname* resolves; a public name pointing at a
+ * private address is unreachable from Workers anyway, and the response is
+ * bounded by `MAX_PROBE_BYTES`. There is deliberately no host allowlist:
+ * stations come from a live third-party directory and the client may hold a
+ * resolved variant that directory never listed.
+ */
+export function isProbeableStreamUrl(raw: string): boolean {
+  if (raw.length === 0 || raw.length > MAX_PROBE_URL_LENGTH) return false;
+  let url: URL | null = null;
+  try {
+    url = new URL(raw);
+  } catch {
+    // Not a URL at all.
+  }
+  if (url === null) return false;
+  if (url.protocol !== "http:" && url.protocol !== "https:") return false;
+  if (url.username !== "" || url.password !== "") return false;
+  return !isPrivateHostname(url.hostname);
+}
+
 function concatBytes(left: Uint8Array, right: Uint8Array): Uint8Array {
   const out = new Uint8Array(left.length + right.length);
   out.set(left, 0);
   out.set(right, left.length);
   return out;
+}
+
+/** The response plus the headers the probe needs to describe the stream. */
+interface OpenedIcyStream {
+  response: Response;
+  info: IcyStreamInfo;
+}
+
+/**
+ * Request the stream and decode its advertised metadata interval. Throws like
+ * `fetch` so the caller can classify a timeout separately from a dead URL.
+ */
+async function openIcyStream(target: string, options?: IcyFetchOptions): Promise<OpenedIcyStream> {
+  // AbortSignal combinators throw synchronously on older browsers rather than
+  // returning a rejected promise, so the caller keeps this inside its `try`.
+  const timeout = AbortSignal.timeout(options?.timeoutMs ?? 30_000);
+  const signal = options?.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  const headers: Record<string, string> = {};
+  if (options?.sendMetaHeader !== false) headers["Icy-MetaData"] = "1";
+  if (options?.userAgent !== undefined) headers["User-Agent"] = options.userAgent;
+  const response = await fetch(target, { headers, redirect: "follow", signal });
+  const metaint = Number(response.headers.get("icy-metaint"));
+  const info: IcyStreamInfo = {
+    status: response.status,
+    finalUrl: response.url,
+    contentType: response.headers.get("content-type"),
+    icyName: response.headers.get("icy-name"),
+    icyGenre: response.headers.get("icy-genre"),
+    icyBr: response.headers.get("icy-br"),
+    metaint: Number.isInteger(metaint) && metaint > 0 && metaint <= MAX_ICY_METAINT ? metaint : null,
+  };
+  options?.onTrace?.(`status ${info.status}, final ${info.finalUrl}`);
+  options?.onTrace?.(
+    `content-type=${info.contentType ?? "(none)"} ` +
+      `icy-name=${info.icyName ?? "(none)"} ` +
+      `icy-metaint=${info.metaint ?? "(absent)"}`,
+  );
+  return { response, info };
+}
+
+/** Mutable cursor over one stream read, shared by the loop and error trace. */
+interface IcyReadState {
+  titles: IcyTitle[];
+  bytesRead: number;
+  emptyBlocks: number;
+  outcome: IcyOutcome;
+  buffered: Uint8Array;
+  audioToSkip: number;
+  metaBytesNeeded: number;
+}
+
+function createIcyReadState(interval: number, titles: IcyTitle[]): IcyReadState {
+  return {
+    titles,
+    bytesRead: 0,
+    emptyBlocks: 0,
+    outcome: "complete",
+    buffered: new Uint8Array(0),
+    audioToSkip: interval,
+    metaBytesNeeded: 0,
+  };
+}
+
+/** Read one chunk unless the probe has spent its byte budget. */
+async function pullIcyChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  state: IcyReadState,
+  end: "by server" | "mid-block",
+  trace: IcyFetchOptions["onTrace"],
+): Promise<boolean> {
+  const budget = MAX_PROBE_BYTES - state.bytesRead;
+  if (budget <= 0) {
+    trace?.(`byte budget spent after ${state.bytesRead} bytes`);
+    state.outcome = "byte-limit";
+    return false;
+  }
+  const next = await reader.read();
+  if (next.done) {
+    trace?.(`stream ended ${end}`);
+    return false;
+  }
+  // Truncate rather than buffer past the budget: a chunked response can hand
+  // over an arbitrarily large array in one read.
+  const chunk = next.value.length > budget ? next.value.subarray(0, budget) : next.value;
+  state.bytesRead += chunk.length;
+  state.buffered = concatBytes(state.buffered, chunk);
+  return true;
+}
+
+/** Walk audio intervals and metadata blocks until the requested titles arrive. */
+async function readIcyTitles(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  state: IcyReadState,
+  interval: number,
+  maxTitles: number,
+  started: number,
+  trace: IcyFetchOptions["onTrace"],
+): Promise<void> {
+  trace?.(`pump start: audio interval ${interval} bytes, waiting for ${maxTitles} distinct titles`);
+  for (;;) {
+    if (state.titles.length >= maxTitles) break;
+    if (state.metaBytesNeeded === 0 && state.buffered.length < state.audioToSkip + 1) {
+      if (!(await pullIcyChunk(reader, state, "by server", trace))) break;
+      continue;
+    }
+    if (state.metaBytesNeeded === 0) {
+      state.buffered = state.buffered.slice(state.audioToSkip);
+      state.audioToSkip = interval;
+      const lengthByte = state.buffered[0];
+      state.buffered = state.buffered.slice(1);
+      state.metaBytesNeeded = lengthByte * 16;
+      if (state.metaBytesNeeded === 0) {
+        state.emptyBlocks += 1;
+        continue;
+      }
+    }
+    if (state.buffered.length < state.metaBytesNeeded) {
+      if (!(await pullIcyChunk(reader, state, "mid-block", trace))) break;
+      continue;
+    }
+    const block = state.buffered.slice(0, state.metaBytesNeeded);
+    state.buffered = state.buffered.slice(state.metaBytesNeeded);
+    state.metaBytesNeeded = 0;
+    const rawTitle = parseIcyBlock(block).StreamTitle;
+    const title = rawTitle === undefined ? undefined : normalizeStreamTitle(rawTitle);
+    if (title !== undefined && title !== "" && title !== state.titles.at(-1)?.title) {
+      state.titles.push({ at: (Date.now() - started) / 1000, title });
+      trace?.(`title: ${title}`);
+    } else {
+      state.emptyBlocks += 1;
+    }
+  }
+}
+
+/**
+ * Node aborts `AbortSignal.timeout()` with `TimeoutError`, manual
+ * `AbortController.abort()` with `AbortError` — both mean the window ended,
+ * not that the station is unreadable. Read `.name` without `instanceof`: a
+ * `DOMException` is not an `Error` in every runtime, and gating on it silently
+ * misclassifies both aborts as fetch-errors.
+ */
+function classifyIcyError(error: unknown): { outcome: IcyOutcome; cause: string } {
+  const name =
+    typeof error === "object" && error !== null && "name" in error && typeof error.name === "string" ? error.name : "";
+  const timedOut = name === "AbortError" || name === "TimeoutError";
+  return {
+    outcome: timedOut ? "timeout" : "fetch-error",
+    cause: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+  };
 }
 
 /**
@@ -185,115 +410,33 @@ export async function fetchIcyTitles(
   const started = Date.now();
   const titles: IcyTitle[] = [];
   let info: IcyStreamInfo | undefined = undefined;
-  let bytesRead = 0;
+  let state: IcyReadState | undefined = undefined;
   try {
-    // Inside `try` on purpose: the contract is "never rejects", and the
-    // AbortSignal combinators throw synchronously on older browsers rather
-    // than returning a rejected promise.
-    const timeout = AbortSignal.timeout(options?.timeoutMs ?? 30_000);
-    const signal = options?.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-    const headers: Record<string, string> = {};
-    if (options?.sendMetaHeader !== false) headers["Icy-MetaData"] = "1";
-    if (options?.userAgent !== undefined) headers["User-Agent"] = options.userAgent;
-    const response = await fetch(target, { headers, redirect: "follow", signal });
-    const metaint = Number(response.headers.get("icy-metaint"));
-    info = {
-      status: response.status,
-      finalUrl: response.url,
-      contentType: response.headers.get("content-type"),
-      icyName: response.headers.get("icy-name"),
-      icyGenre: response.headers.get("icy-genre"),
-      icyBr: response.headers.get("icy-br"),
-      metaint: Number.isInteger(metaint) && metaint > 0 ? metaint : null,
-    };
-    trace?.(`status ${info.status}, final ${info.finalUrl}`);
-    trace?.(
-      `content-type=${info.contentType ?? "(none)"} ` +
-        `icy-name=${info.icyName ?? "(none)"} ` +
-        `icy-metaint=${info.metaint ?? "(absent)"}`,
-    );
+    const opened = await openIcyStream(target, options);
+    info = opened.info;
+    const { response } = opened;
     if (!response.ok || info.metaint === null || response.body === null) {
       await response.body?.cancel().catch(() => {});
       return { outcome: response.ok ? "no-metaint" : "http-error", info, titles };
     }
     const interval: number = info.metaint;
     const reader = response.body.getReader();
-    let buffered: Uint8Array = new Uint8Array(0);
-    let audioToSkip = interval;
-    let metaBytesNeeded = 0;
-    let emptyBlocks = 0;
-    trace?.(`pump start: audio interval ${interval} bytes, waiting for ${maxTitles} distinct titles`);
+    state = createIcyReadState(interval, titles);
     try {
-      for (;;) {
-        if (titles.length >= maxTitles) break;
-        if (metaBytesNeeded === 0 && buffered.length < audioToSkip + 1) {
-          const next = await reader.read();
-          if (next.done) {
-            trace?.("stream ended by server");
-            break;
-          }
-          bytesRead += next.value.length;
-          buffered = concatBytes(buffered, next.value);
-          continue;
-        }
-        if (metaBytesNeeded === 0) {
-          buffered = buffered.slice(audioToSkip);
-          audioToSkip = interval;
-          const lengthByte = buffered[0];
-          buffered = buffered.slice(1);
-          metaBytesNeeded = lengthByte * 16;
-          if (metaBytesNeeded === 0) {
-            emptyBlocks += 1;
-            continue;
-          }
-        }
-        if (buffered.length < metaBytesNeeded) {
-          const next = await reader.read();
-          if (next.done) {
-            trace?.("stream ended mid-block");
-            break;
-          }
-          bytesRead += next.value.length;
-          buffered = concatBytes(buffered, next.value);
-          continue;
-        }
-        const block = buffered.slice(0, metaBytesNeeded);
-        buffered = buffered.slice(metaBytesNeeded);
-        metaBytesNeeded = 0;
-        const rawTitle = parseIcyBlock(block).StreamTitle;
-        const title = rawTitle === undefined ? undefined : normalizeStreamTitle(rawTitle);
-        if (title !== undefined && title !== "" && title !== titles.at(-1)?.title) {
-          titles.push({ at: (Date.now() - started) / 1000, title });
-          trace?.(`title: ${title}`);
-        } else {
-          emptyBlocks += 1;
-        }
-      }
+      await readIcyTitles(reader, state, interval, maxTitles, started, trace);
     } finally {
       await reader.cancel().catch(() => {});
     }
-    trace?.(`done: ${titles.length} distinct titles, ${emptyBlocks} empty/repeat blocks, ${bytesRead} bytes read`);
-    return { outcome: "complete", info, titles };
+    trace?.(
+      `done: ${titles.length} distinct titles, ${state.emptyBlocks} empty/repeat blocks, ${state.bytesRead} bytes read`,
+    );
+    return { outcome: state.outcome, info, titles };
   } catch (error) {
-    // Node aborts `AbortSignal.timeout()` with `TimeoutError`, manual
-    // `AbortController.abort()` with `AbortError` — both mean the window
-    // ended, not that the station is unreadable. Anything else is a real
-    // read failure. The distinction matters upstream: a timeout retries
-    // direct next poll, a fetch-error memoises the URL to the edge fallback.
-    //
-    // Read `.name` without `instanceof`: a `DOMException` is not an `Error`
-    // in every runtime, and gating on it silently misclassifies both aborts
-    // as fetch-errors.
-    const name =
-      typeof error === "object" && error !== null && "name" in error && typeof error.name === "string"
-        ? error.name
-        : "";
-    const timedOut = name === "AbortError" || name === "TimeoutError";
     // Surfaced (not swallowed): without the cause a mid-pump failure is
     // indistinguishable from a dead station — this is what the dev `/__icy`
     // trace and `onTrace` callers show.
-    const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    trace?.(`stopped: ${cause} (${bytesRead} bytes read)`);
-    return { outcome: timedOut ? "timeout" : "fetch-error", info, titles };
+    const { outcome, cause } = classifyIcyError(error);
+    trace?.(`stopped: ${cause} (${state?.bytesRead ?? 0} bytes read)`);
+    return { outcome, info, titles };
   }
 }

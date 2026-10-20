@@ -1,5 +1,5 @@
 // Pages Functions file-based routing: referenced by URL path, not by import.
-import { fetchIcyTitles } from "../../src/lib/radio/icy";
+import { fetchIcyTitles, isProbeableStreamUrl } from "../../src/lib/radio/icy";
 import { edgeCache, jsonResponse, type PagesContext } from "../../src/lib/edge-cache";
 
 /**
@@ -13,6 +13,15 @@ import { edgeCache, jsonResponse, type PagesContext } from "../../src/lib/edge-c
  * served without waking the probe or touching the station. Errors are
  * never cached.
  *
+ * The target is gated by `isProbeableStreamUrl`: plain `http(s)`, no
+ * credentials, no loopback/private literals, bounded length. The probe
+ * itself stops at an `icy-metaint` ceiling and a byte budget, so one call
+ * stays cheap even against a stream that never sends a title. No host
+ * allowlist is possible here — stations come from a live third-party
+ * directory and the client may hold a resolved variant — and per-IP
+ * throttling needs account-level state, so it belongs in a Cloudflare
+ * rate-limit rule rather than in this function.
+ *
  * The TTL matches the client's ICY poll interval, so a poll almost always
  * finds an expired entry rather than re-reading a verdict it already has.
  * This is the fallback path only — the page reads the stream itself where
@@ -21,8 +30,8 @@ import { edgeCache, jsonResponse, type PagesContext } from "../../src/lib/edge-c
 
 export async function onRequestGet({ request }: PagesContext): Promise<Response> {
   const target = new URL(request.url).searchParams.get("url") ?? "";
-  if (!target.startsWith("http://") && !target.startsWith("https://")) {
-    return jsonResponse({ ok: false, reason: "http(s)-only", titles: [] }, { status: 400 });
+  if (!isProbeableStreamUrl(target)) {
+    return jsonResponse({ ok: false, reason: "invalid-target", titles: [] }, { status: 400 });
   }
   const cache = edgeCache();
   if (cache !== null) {
