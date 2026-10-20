@@ -18,14 +18,7 @@ import {
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
 import type { TrackKind } from "@/lib/radio/store";
-import { bbcNextPollDelayMs, bbcServiceIdForStation } from "@/lib/radio/bbc";
-import { directIcyRoute, fetchIcyTitles, type IcyOutcome, type IcyTitle } from "@/lib/radio/icy";
-import { loadDirectUnsupported, recordDirectUnsupported } from "@/lib/radio/direct-support";
-import { fetchRadioliseTitle } from "@/lib/radio/radiolise";
-import { subscribeRadioliseTitle, type RadioliseSubscription } from "@/lib/radio/radiolise-socket";
-import { normaliseTrackTitle, readTitlesEnabled } from "@/lib/radio/titles";
-import { siteConfig } from "@/lib/site";
-import { envString, isRecord } from "@/lib/utils";
+import { normaliseTrackTitle } from "@/lib/radio/titles";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
 import {
   HLS_UNSUPPORTED_MESSAGE,
@@ -39,6 +32,7 @@ import {
 import { buildLevelingGraph, type LevelingGraph } from "@/lib/player/leveling-graph";
 import { PLAY_FADE_MS, TRANSPORT_FADE_MS, rampElement, runFadeRamp } from "@/lib/player/fades";
 import { armSleepTimer, disarmSleepTimer } from "@/lib/player/sleep-timer";
+import { armTitleProbe, clearTitleProbe, type TitleProbeHooks } from "@/lib/player/title-probe";
 import {
   INSECURE_HTTP_MESSAGE,
   buildSkipPlaylist,
@@ -72,7 +66,6 @@ import {
 import { readCarRefreshEnabled, writeCarRefreshEnabled } from "@/lib/radio/car-refresh";
 import {
   canonicalStreamUrl,
-  isHlsUrl,
   isHttpsUpgradeHost,
   isInsecureHttpStream,
   pickPlayableUrl,
@@ -94,80 +87,6 @@ import { wsrvArtworkUrl } from "@/lib/radio/artwork";
 
 let audio: HTMLAudioElement | null = null;
 let playToken = 0;
-/** Aborts the in-flight ICY title probe when a new play supersedes it. */
-let icyProbeController: AbortController | null = null;
-/** Re-probes the live title while playing; cleared on stop/pause/supersede. */
-let icyPollTimer: ReturnType<typeof globalThis.setInterval> | null = null;
-/**
- * Adaptive BBC poll chain (timeout, rescheduled from every verdict —
- * tracks poll hot, programmes back off to their boundary). Cleared with
- * the rest of the probe state.
- */
-let bbcPollTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-/**
- * Fresh titles are polled this often; the edge function caches for the same
- * window, so a poll almost always finds an expired entry rather than
- * re-reading a verdict it already has.
- */
-const ICY_TITLE_POLL_MS = 20_000;
-/**
- * Ceiling for a direct read, kept under the poll interval so a slow station
- * plus the edge fallback still fit inside one tick.
- */
-const ICY_DIRECT_TIMEOUT_MS = 10_000;
-/**
- * Ceiling for the shared Radiolise lookup. Warm stations answer in <1s;
- * cold ones hang until their first title, so this must stay a fraction of
- * the poll interval — anything slower falls through to the in-page read.
- */
-const RADIOLISE_TIMEOUT_MS = 5000;
-/**
- * Stream URLs this browser could not read directly. A refused `icy-metadata`
- * preflight surfaces as a `TypeError`, indistinguishable from a network
- * error, and the browser logs it un-catchably — so we memoise the URL and go
- * straight to the edge function. Seeded from storage (a week of memory, so a
- * repeat visit never replays the failure); session misses are recorded back.
- */
-const directIcyUnsupported: Set<string> = loadDirectUnsupported();
-/** Guards against a slow refresh overlapping the next interval tick. */
-let icyProbeBusy = false;
-/** Push subscription owning continual updates for the current play, if any. */
-let radioliseSub: RadioliseSubscription | null = null;
-/** Reconnect timer after an unexpected push drop; cleared with the probe. */
-let radioliseRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
-/** Consecutive push reconnects; resets on the first pushed title. */
-let radioliseRetries = 0;
-/**
- * Consecutive push failures (unexpected drops). At the cap the socket stays
- * shut for the session and polling carries the titles — a dead backend
- * should cost fallback requests, not a console error per retry. Reset on
- * each play and on the first pushed title.
- */
-let radiolisePushFailures = 0;
-const RADIOLISE_MAX_FAILURES = 3;
-/** Backoff between push reconnects: fast first retry, then patience. */
-const RADIOLISE_RETRY_MS = [2000, 5000, 10_000, 30_000];
-
-function clearIcyProbe(): void {
-  icyProbeController?.abort();
-  icyProbeController = null;
-  icyProbeBusy = false;
-  radioliseSub?.unsubscribe();
-  radioliseSub = null;
-  radioliseRetries = 0;
-  if (radioliseRetryTimer !== null) {
-    globalThis.clearTimeout(radioliseRetryTimer);
-    radioliseRetryTimer = null;
-  }
-  if (icyPollTimer !== null) {
-    globalThis.clearInterval(icyPollTimer);
-    icyPollTimer = null;
-  }
-  if (bbcPollTimer !== null) {
-    globalThis.clearTimeout(bbcPollTimer);
-    bbcPollTimer = null;
-  }
-}
 
 /**
  * Transport handlers behind the lock-screen / headset / car MediaSession
@@ -303,289 +222,23 @@ function publishSessionTrack(track: string | null): void {
   updateMediaSession(station, sessionHandlers(), track);
 }
 
-/**
- * Track the live StreamTitle for the player subtitle. Probes once
- * immediately (fast first paint, even while loading) then re-polls while
- * playing so track changes replace the subtitle instead of going stale.
- * Chain on web: shared Radiolise lookup, in-page read, edge fallback — with
- * a push subscription over their WebSocket owning continual updates while
- * it is healthy, so the poll loop stands down. Silent everywhere metadata
- * is unavailable.
- */
 function armIcyProbe(station: Station, url: string): void {
-  clearIcyProbe();
-  radiolisePushFailures = 0;
-  // BBC RMS probing is always on (web + native): the 30s edge verdict is
-  // globally cached, so one listener costs nothing extra. Raw ICY probing
-  // stays opt-in on web (each pull hits the station) and bridge-driven on
-  // native (ExoPlayer decodes it for free).
-  const bbcService = bbcServiceIdForStation(station);
-  if (bbcService === null && !readTitlesEnabled()) return;
-  // HLS playlists carry no ICY StreamTitle (and a bridged element's own
-  // `src` is a `blob:` MediaSource) — probing either just burns a request
-  // per play and per poll for a title that can't be there. BBC HLS feeds
-  // are exempt: they run their own RMS-backed chain below.
-  if (bbcService === null && (!/^https?:/i.test(url) || isHlsUrl(url))) return;
-  const probeController = new AbortController();
-  icyProbeController = probeController;
   const probeToken = playToken;
-  const isCurrent = (): boolean => probeToken === playToken && snapshot.station?.stationuuid === station.stationuuid;
-  const applyProbedTitle = (raw: string, kind: TrackKind = "icy"): string | null => {
-    if (!isCurrent()) return null;
-    // Normalised before comparing: stations re-send the same title with
-    // varying padding, and the raw strings never match (see titles.ts).
-    const normalised = normaliseTrackTitle(raw);
-    const title = normalised === "" ? null : normalised;
-    if (title === snapshot.track) {
-      if (import.meta.env.DEV) console.log("[icy-probe] subtitle (unchanged):", title);
-      return null;
-    }
-    emit({ track: title });
-    publishSessionTrack(title);
-    // Song history for the detail sheet: changed titles only (this return
-    // is the single funnel for every probe tier, so repeats never bank).
-    if (title !== null) bankTrackTitle(station.stationuuid, title, kind);
-    if (import.meta.env.DEV) console.log("[icy-probe] subtitle:", title);
-    return title;
+  const hooks: TitleProbeHooks = {
+    isCurrent: () => probeToken === playToken && snapshot.station?.stationuuid === station.stationuuid,
+    currentTrack: () => snapshot.track,
+    isNative: () => usingNative,
+    isPlaying: () => snapshot.status === "playing",
+    applyTitle: (title, kind) => {
+      emit({ track: title });
+      publishSessionTrack(title);
+      if (title !== null) bankTrackTitle(station.stationuuid, title, kind);
+    },
+    publishNativeTitle: (title) => {
+      void nativePublishTrackTitle(title).catch(() => {});
+    },
   };
-  /**
-   * Push continual updates over the Radiolise WebSocket (web only — native
-   * has ExoPlayer, BBC has no ICY to push). A healthy subscription stands
-   * the poll loop down; an unexpected drop reconnects with backoff while
-   * the fallback chain covers the gap; a station-level error ends the
-   * subscription and leaves polling to carry it.
-   */
-  const connectRadiolisePush = (): void => {
-    if (usingNative || bbcService !== null) return;
-    // Eager on purpose: supersede/stop/pause tear the socket down through
-    // clearIcyProbe, so a play that never starts costs one handshake.
-    // Gating on `playing` instead would delay the subscription a full tick
-    // on slow loads (status is still `loading` at arm time).
-    if (!isCurrent()) return;
-    if (radiolisePushFailures >= RADIOLISE_MAX_FAILURES) return;
-    // Offline: every tier needs the network, and each would log its own
-    // un-catchable failure. Stay quiet; the tick below revives the socket
-    // when the network returns.
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    if (radioliseSub !== null) return;
-    radioliseSub = subscribeRadioliseTitle(url, {
-      onTitle: (title) => {
-        if (!isCurrent()) return;
-        radioliseRetries = 0;
-        radiolisePushFailures = 0;
-        applyProbedTitle(title);
-      },
-      onStationError: (type) => {
-        if (!isCurrent()) return;
-        if (import.meta.env.DEV) console.log("[icy-probe] push station error:", type);
-        // Stable per-station verdict — exhaust the budget so this play
-        // stops opening sockets and polling carries it.
-        radiolisePushFailures = RADIOLISE_MAX_FAILURES;
-        radioliseSub?.unsubscribe();
-        radioliseSub = null;
-      },
-      onClose: (expected) => {
-        radioliseSub = null;
-        if (expected || !isCurrent() || snapshot.status !== "playing") return;
-        radiolisePushFailures += 1;
-        if (radiolisePushFailures >= RADIOLISE_MAX_FAILURES) return;
-        const delay = RADIOLISE_RETRY_MS[Math.min(radioliseRetries, RADIOLISE_RETRY_MS.length - 1)] ?? 30_000;
-        radioliseRetries += 1;
-        if (radioliseRetryTimer !== null) globalThis.clearTimeout(radioliseRetryTimer);
-        radioliseRetryTimer = globalThis.setTimeout(() => {
-          radioliseRetryTimer = null;
-          connectRadiolisePush();
-        }, delay);
-      },
-    });
-  };
-  const refreshBbcTitle = async (service: string): Promise<Record<string, unknown> | null> => {
-    // Same endpoint shape as the ICY chain (dev middleware, edge function,
-    // absolute URL on native) but RMS-backed. A non-ok verdict means "no
-    // data right now" — the subtitle keeps its fallback until the next poll.
-    // Returns the verdict so the caller can schedule a programme-boundary
-    // re-probe from its `end`.
-    const query = `service=${encodeURIComponent(service)}`;
-    let endpoint: string | null = null;
-    if (import.meta.env.DEV) {
-      endpoint = `/__bbc/probe?${query}`;
-    } else {
-      // Dynamic import: @capacitor/core must never load at module scope
-      // (node/unit-test contexts have no native bridge).
-      const { isNative } = await import("@/lib/capacitor");
-      if (isNative()) {
-        // APK builds bake no VITE_CANONICAL_URL (CI sets no Vite env and
-        // wrangler vars never reach the client), so use the hardcoded site
-        // URL instead. Without this the endpoint stays null and BBC titles
-        // never leave the device.
-        // oxlint-disable-next-line typescript/prefer-nullish-coalescing -- empty env var counts as unset and falls through to the hardcoded site URL
-        const canonical = envString("VITE_CANONICAL_URL") || siteConfig.url;
-        endpoint = `${canonical.replace(/\/+$/, "")}/api/bbc-title?${query}`;
-      } else {
-        endpoint = `/api/bbc-title?${query}`;
-      }
-    }
-    if (endpoint === null) return null;
-    try {
-      const response = await fetch(endpoint, { signal: probeController.signal });
-      if (!response.ok) return null;
-      const data: unknown = await response.json();
-      if (isRecord(data) && typeof data.title === "string" && data.title.trim() !== "") {
-        const kind: TrackKind = data.kind === "programme" ? "programme" : "track";
-        const applied = applyProbedTitle(data.title, kind);
-        if (import.meta.env.DEV) console.log("[bbc-probe] subtitle:", data.title);
-        // Native owns audio on the APK but decodes no titles from BBC HLS —
-        // hand the probed one to the session (notification, lock, car) down
-        // the same in-place path the metadata listener uses. Deduped here
-        // (changed titles only) and again service-side; the web MediaSession
-        // above already covers the browser.
-        if (applied !== null && usingNative) void nativePublishTrackTitle(applied).catch(() => {});
-        return data;
-      }
-      return null;
-    } catch {
-      // Aborted or endpoint unreachable — next poll retries.
-      return null;
-    }
-  };
-  /**
-   * Next BBC poll from the verdict just applied: tracks (or nothing yet)
-   * stay on the hot loop, programmes back off to their boundary one-shot
-   * (or the 3-minute net when the window gives no usable end). One timer
-   * does both jobs — no separate interval. Cleared on supersede/pause/
-   * stop with the rest of the probe state.
-   */
-  const scheduleBbcNext = (verdict: Record<string, unknown> | null): void => {
-    if (bbcPollTimer !== null) {
-      globalThis.clearTimeout(bbcPollTimer);
-      bbcPollTimer = null;
-    }
-    bbcPollTimer = globalThis.setTimeout(() => {
-      bbcPollTimer = null;
-      if (!isCurrent() || snapshot.status !== "playing") return;
-      refreshOnce();
-    }, bbcNextPollDelayMs(verdict));
-  };
-  const refreshOnce = (): void => {
-    // Offline: every tier needs the network and each would log its own
-    // un-catchable failure. The snapshot keeps its last title meanwhile.
-    if (typeof navigator !== "undefined" && !navigator.onLine) return;
-    // A push subscription owns continual updates while healthy — polling
-    // underneath it only burns requests for titles dedupe would drop.
-    if (radioliseSub?.isOpen() === true) return;
-    // Revive a missing socket (post-offline recovery). A subscribed socket
-    // still connecting, a pending backoff retry, and an exhausted budget
-    // all say no inside; only a clean miss reconnects.
-    if (radioliseSub === null && radioliseRetryTimer === null) connectRadiolisePush();
-    // A direct read plus an edge fallback can outlast the interval; skip the
-    // tick rather than run two probes on one controller.
-    if (icyProbeBusy) return;
-    icyProbeBusy = true;
-    void (async () => {
-      try {
-        // BBC feeds carry no ICY blocks and RMS sends browsers no CORS
-        // headers, so BBC stations probe the RMS-backed endpoint instead
-        // (dev middleware, edge function). No push subscription either: it
-        // carries the same ICY their HLS feeds lack. Every other station
-        // keeps the chain below.
-        if (bbcService !== null) {
-          scheduleBbcNext(await refreshBbcTitle(bbcService));
-          return;
-        }
-        // Chain order on web: shared Radiolise lookup, in-page read, edge
-        // fallback — reached only while no push subscription is healthy (see
-        // above). Radiolise holds upstream ICY connections open across
-        // callers, so a warm station answers in <1s with no audio bytes
-        // pulled by anyone — but a cold one hangs until its first title,
-        // hence the tight cap and unconditional fall-through. The in-page
-        // read is next (realtime where the browser allows it, memoised
-        // where it does not), then the edge function. Native keeps the
-        // endpoint-first order: ExoPlayer already reports titles over the
-        // bridge, so this chain is not what titles depend on there.
-        if (!usingNative) {
-          const shared = await fetchRadioliseTitle(url, {
-            signal: probeController.signal,
-            timeoutMs: RADIOLISE_TIMEOUT_MS,
-          });
-          if (shared.outcome === "ok" && shared.title !== undefined) {
-            applyProbedTitle(shared.title);
-            return;
-          }
-        }
-        if (!usingNative && !directIcyUnsupported.has(url)) {
-          // `fetchIcyTitles` promises never to reject, but if it does the
-          // edge fallback below is still worth trying — never skip it.
-          const direct = await fetchIcyTitles(url, {
-            maxTitles: 1,
-            signal: probeController.signal,
-            timeoutMs: ICY_DIRECT_TIMEOUT_MS,
-          }).catch((): { outcome: IcyOutcome; titles: IcyTitle[] } => ({ outcome: "fetch-error", titles: [] }));
-          const route = directIcyRoute(direct.outcome, direct.titles);
-          if (route.kind === "apply") {
-            applyProbedTitle(route.title);
-            return;
-          }
-          if (route.kind === "stop") return;
-          if (route.memo) {
-            directIcyUnsupported.add(url);
-            recordDirectUnsupported(url);
-          }
-        }
-        // Fallback: dev probes server-side through the vite-only /__icy
-        // endpoint (no CORS limits, follows redirects); prod web and APK
-        // call the edge-cached /api/icy-title function (absolute URL on
-        // native, where relative would hit the local shell).
-        const probePath = `/api/icy-title?url=${encodeURIComponent(url)}&titles=1`;
-        let endpoint: string | null = null;
-        if (import.meta.env.DEV) {
-          endpoint = `/__icy/probe?url=${encodeURIComponent(url)}&titles=1`;
-        } else {
-          // Dynamic import: @capacitor/core must never load at module scope
-          // (node/unit-test contexts have no native bridge).
-          const { isNative } = await import("@/lib/capacitor");
-          if (isNative()) {
-            const canonical = envString("VITE_CANONICAL_URL");
-            endpoint =
-              canonical === undefined
-                ? null
-                : `${canonical.replace(/\/+$/, "")}/api/icy-title?url=${encodeURIComponent(url)}`;
-          } else {
-            endpoint = probePath;
-          }
-        }
-        if (endpoint === null) return;
-        try {
-          const response = await fetch(endpoint, { signal: probeController.signal });
-          if (!response.ok) return;
-          const data: unknown = await response.json();
-          if (isRecord(data) && Array.isArray(data.titles)) {
-            const first: unknown = data.titles[0];
-            if (isRecord(first) && typeof first.title === "string" && first.title.trim() !== "") {
-              applyProbedTitle(first.title);
-            }
-          }
-        } catch {
-          // Endpoint unreachable or aborted — the next poll retries.
-        }
-      } finally {
-        icyProbeBusy = false;
-      }
-    })();
-  };
-  // The service id is fixed for this arming: the hoisted `bbcService`
-  // above keeps the branch in agreement. ICY stations ride a fixed
-  // ICY_TITLE_POLL_MS interval (stood down while the push subscription is
-  // healthy); BBC stations chain adaptive timeouts off each verdict
-  // (scheduleBbcNext), so there is no interval to start for them — the
-  // initial refreshOnce below arms the chain.
-  connectRadiolisePush();
-  refreshOnce();
-  if (bbcService === null) {
-    icyPollTimer = globalThis.setInterval(() => {
-      if (!isCurrent() || snapshot.status !== "playing") return;
-      refreshOnce();
-    }, ICY_TITLE_POLL_MS);
-  }
+  armTitleProbe(station, url, hooks);
 }
 
 /**
@@ -595,7 +248,7 @@ function armIcyProbe(station: Station, url: string): void {
  */
 export function setIcyProbing(enabled: boolean): void {
   if (!enabled) {
-    clearIcyProbe();
+    clearTitleProbe();
     return;
   }
   const station = snapshot.station;
@@ -1865,7 +1518,7 @@ function pauseNow(): void {
   // A staged handoff dies with the pause — the user took over. Take the
   // title poller down too; resume re-arms it on restart.
   killIncoming();
-  clearIcyProbe();
+  clearTitleProbe();
   // Manual pauses take over from the retry loop too.
   cancelReconnect();
   if (usingNative) {
@@ -1998,7 +1651,7 @@ function stopNow(): void {
   fadeToken += 1;
   // A staged handoff dies with the stop — the user took over.
   killIncoming();
-  clearIcyProbe();
+  clearTitleProbe();
   // A manual stop takes over from the retry loop too.
   cancelReconnect();
   const wasNative = usingNative;

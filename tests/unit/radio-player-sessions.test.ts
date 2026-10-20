@@ -71,6 +71,22 @@ async function flush(): Promise<void> {
   await sleep(25);
 }
 
+/**
+ * Poll the listening store until the expected totals land. A pause on
+ * audible playback fades for 250 ms before it parks and emits, and the bank
+ * write is a dynamic import, so a fixed wait races both.
+ */
+async function expectListening(totalSeconds: number, plays: number): Promise<void> {
+  await vi.waitFor(
+    async () => {
+      const summary = await summarizeListening();
+      expect(summary.totalSeconds).toBe(totalSeconds);
+      expect(summary.plays).toBe(plays);
+    },
+    { timeout: 2000, interval: 50 },
+  );
+}
+
 beforeEach(async () => {
   nowMs = T0;
   vi.spyOn(Date, "now").mockImplementation(() => nowMs);
@@ -108,9 +124,8 @@ describe("listening sessions", () => {
     nowMs = T0 + 10_000;
     pause();
     await flush();
+    await expectListening(10, 1);
     const summary = await summarizeListening();
-    expect(summary.totalSeconds).toBe(10);
-    expect(summary.plays).toBe(1);
     expect(summary.stations[0]).toMatchObject({ stationuuid: "session-1", name: "Session FM" });
   });
 
@@ -121,9 +136,7 @@ describe("listening sessions", () => {
     nowMs = T0 + 3000;
     pause();
     await flush();
-    const summary = await summarizeListening();
-    expect(summary.totalSeconds).toBe(0);
-    expect(summary.plays).toBe(0);
+    await expectListening(0, 0);
   });
 
   it("checkpoints without ending so background time keeps counting", async () => {
@@ -136,8 +149,6 @@ describe("listening sessions", () => {
     nowMs = T0 + 15_000;
     pause();
     await flush();
-    const summary = await summarizeListening();
-    expect(summary.totalSeconds).toBe(15);
-    expect(summary.plays).toBe(2);
+    await expectListening(15, 2);
   });
 });
