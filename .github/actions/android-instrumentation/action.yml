@@ -1,0 +1,77 @@
+name: Android instrumentation
+description: Build the native web assets and run the instrumented tests on an emulator.
+
+outputs:
+  emulator-outcome:
+    description: The outcome of the emulator step, success or failure.
+    value: ${{ steps.emulator.outcome }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v6
+      with:
+        run_install: false
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v6
+      with:
+        node-version: 24
+        cache: pnpm
+
+    - name: Setup Java
+      uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: "21"
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v4
+
+    - name: Install SDK packages
+      run: |
+        yes | sdkmanager --licenses > /dev/null
+        sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Build native web assets
+      run: |
+        pnpm cap:android
+        pnpm cap:version
+
+    # Acceleration is a bonus, not a requirement. The rule gives the runner
+    # user access to /dev/kvm when the host exposes it; when it does not, the
+    # ATD image still boots, just in software.
+    - name: Enable KVM access
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo modprobe kvm 2>/dev/null || true
+        sudo udevadm trigger --name-match=kvm 2>/dev/null || true
+        if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+          echo "KVM is available: $(ls -l /dev/kvm)"
+        else
+          echo "::warning::This runner has no usable /dev/kvm; the emulator will boot in software."
+          ls -l /dev/kvm 2>&1 || echo "/dev/kvm is missing"
+        fi
+
+    # The ATD image carries no Google services, which the suite does not need,
+    # and it boots in a fraction of the time of a full system image. The step
+    # reports its outcome instead of failing the job, so the caller can decide
+    # whether a second runner gets a turn.
+    - name: Run instrumented tests on an emulator
+      id: emulator
+      continue-on-error: true
+      uses: reactivecircus/android-emulator-runner@v2
+      with:
+        api-level: 34
+        target: aosp_atd
+        arch: x86_64
+        profile: pixel_6
+        emulator-boot-timeout: 900
+        disable-animations: true
+        emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+        script: cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon

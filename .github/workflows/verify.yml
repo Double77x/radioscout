@@ -189,13 +189,3 @@ jobs:
     needs: changes
     if: needs.changes.outputs.android == 'true'
     uses: ./.github/workflows/android-instrumentation.yml
-    continue-on-error: true
-
-  # Hosted runners do not all expose /dev/kvm, and a runner without it cannot
-  # boot an emulator inside the timeout. The first attempt is tolerated so a
-  # second runner gets a turn; only that second failure blocks the release.
-  android-instrumentation-retry:
-    name: Android instrumentation (second runner)
-    needs: [changes, android-instrumentation]
-    if: always() && needs.changes.outputs.android == 'true' && needs.android-instrumentation.result == 'failure'
-    uses: ./.github/workflows/android-instrumentation.yml
