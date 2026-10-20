@@ -7,55 +7,18 @@ import { togglePlay, usePlayer } from "@/hooks/use-player";
 import { FAVOURITES_KEY, useFavourites, useToggleFavourite } from "@/hooks/use-radio";
 import { useOpenStationDetail } from "@/hooks/use-station-detail";
 import { queryClient } from "@/lib/query-client";
+import {
+  DRAG_THRESHOLD_PX,
+  ROW_GAP,
+  TOUCH_HOLD_MS,
+  overIndexFor,
+  preventTouchScroll,
+  resolveDrop,
+  rowOuterStyle,
+  type DragState,
+  type PendingDrag,
+} from "@/lib/radio/drag-reorder";
 import { cn } from "@/lib/utils";
-
-/** Gap between rows — must match the list `gap-2`. */
-const ROW_GAP = 8;
-
-/** Pointer travel before a row press becomes a drag (clicks stay clicks). */
-const DRAG_THRESHOLD_PX = 8;
-
-/** Hold-still delay before a touch press becomes a drag (shorter moves scroll). */
-const TOUCH_HOLD_MS = 400;
-
-interface DragState {
-  id: string;
-  fromIndex: number;
-  startY: number;
-  /** Uuid order at grab time. */
-  ids: string[];
-  /** Top of every row relative to the list, in grab-time display order. */
-  tops: number[];
-  /** Height of every row in grab-time display order. */
-  heights: number[];
-}
-
-interface PendingDrag {
-  uuid: string;
-  element: HTMLElement;
-  pointerId: number;
-  startX: number;
-  startY: number;
-  touch: boolean;
-  timer: ReturnType<typeof globalThis.setTimeout> | null;
-}
-
-/** Landing index for a pointer height against grab-time geometry (rows only
- * translate mid-drag, so tops stay valid): first row whose middle sits below
- * the pointer, falling past the end when below every row. */
-function overIndexFor(pointerY: number, listTop: number, state: DragState, count: number): number {
-  const y = pointerY - listTop;
-  let over = count;
-  for (const [index, top] of state.tops.entries()) {
-    const height = state.heights[index] ?? 0;
-    if (index === state.fromIndex) continue;
-    if (y < top + height / 2) {
-      over = index > state.fromIndex ? index + 1 : index;
-      break;
-    }
-  }
-  return over;
-}
 
 /** Rendered drag visuals: lifted row, gap, optimistic order, settle-back. */
 interface DragVisualState {
@@ -121,21 +84,6 @@ function dragVisualReducer(state: DragVisualState, action: DragVisualAction): Dr
       return state;
     }
   }
-}
-
-/** Non-passive scroll lock while a touch drag is live (owned by AbortController). */
-function preventTouchScroll(event: TouchEvent): void {
-  event.preventDefault();
-}
-
-/** Move one id within an order, clamping the landing gap into range. */
-function arrayMoveId(ids: string[], from: number, gap: number): string[] {
-  const to = Math.max(0, Math.min(ids.length - (from < gap ? 1 : 0), gap - (from < gap ? 1 : 0)));
-  const next = [...ids];
-  const [item] = next.splice(from, 1);
-  if (item === undefined) return ids;
-  next.splice(to, 0, item);
-  return next;
 }
 
 /** Persist a committed uuid order, then refresh the list (no-op on failure). */
@@ -223,7 +171,6 @@ export function SavedStations() {
 
   const stopDrag = (commit: boolean, releaseY?: number) => {
     const state = dragState.current;
-    const list = listRef.current;
     const over = overRef.current;
     dragState.current = null;
     overRef.current = null;
@@ -238,20 +185,18 @@ export function SavedStations() {
       // frame behind the finger, so settling from them jumps the row (up on
       // a fast downward drop) before it glides home. Recompute both from the
       // release coordinates — one consistent pair, no jump.
-      const dropOver =
-        releaseY === undefined || !list
-          ? over
-          : overIndexFor(releaseY, list.getBoundingClientRect().top, state, displayIds.length);
-      const dropDy = releaseY === undefined ? dyRef.current : releaseY - state.startY;
-      const ids = displayIds;
-      const from = ids.indexOf(state.id);
-      const originTop = from === -1 ? undefined : state.tops[from];
-      if (from !== -1 && originTop !== undefined) {
-        const next = arrayMoveId(ids, from, dropOver);
+      const drop = resolveDrop(
+        state,
+        releaseY,
+        listRef.current?.getBoundingClientRect().top ?? null,
+        displayIds,
+        over,
+        dyRef.current,
+      );
+      if (drop) {
         // Settle animation: the dragged row keeps a transform from its
         // release point to its committed home, then relaxes to none.
-        const newTop = topOfOrder(next, state.id, state);
-        dispatch({ type: "commit", order: next, settle: { id: state.id, dy: originTop + dropDy - newTop } });
+        dispatch({ type: "commit", order: drop.order, settle: { id: state.id, dy: drop.settleDy } });
         if (settleRaf.current !== 0) globalThis.cancelAnimationFrame(settleRaf.current);
         settleRaf.current = globalThis.requestAnimationFrame(() => {
           globalThis.requestAnimationFrame(() => {
@@ -259,7 +204,7 @@ export function SavedStations() {
             dispatch({ type: "settle-done" });
           });
         });
-        persistOrder(next);
+        persistOrder(drop.order);
         // A real drag just ended: swallow the click landing on the row so a
         // drop over a button can't trigger it. Plain taps never set this.
         suppressClickRef.current = true;
@@ -482,62 +427,4 @@ export function SavedStations() {
       })}
     </ul>
   );
-}
-
-/** Top of one id inside an order, from grab-time measurements. */
-function topOfOrder(order: string[], id: string, state: DragState): number {
-  const heightById = new Map(state.ids.map((rowId, index) => [rowId, state.heights[index] ?? 0] as const));
-  let top = 0;
-  for (const rowId of order) {
-    if (rowId === id) return top;
-    top += (heightById.get(rowId) ?? 0) + ROW_GAP;
-  }
-  return top;
-}
-
-interface RowStyle {
-  dragging: boolean;
-  dragDy: number;
-  settleDy: number | null;
-  shift: number;
-  /**
-   * True for the two frames between drop-commit and glide start. Every row
-   * lands frame-exact with transitions off: shifted siblings snap into their
-   * new slots (their shift already equals the slot move, so snapping is
-   * continuous) and the dragged row snaps to the release-exact offset. Then
-   * `settle-done` clears the freeze and the dragged row alone glides home.
-   * Without the freeze, each shifted sibling jumps a full row and glides
-   * back — the "secondary slide" on every drop.
-   */
-  frozen: boolean;
-}
-
-/** Inline style per row state. Uses the independent `translate` property (not
- * `transform`) so drag motion never fights transforms. Dragged follows
- * instantly, shifts ease — except on the frozen commit frame, where every
- * row snaps transition-free. */
-function rowOuterStyle({ dragging, dragDy, settleDy, shift, frozen }: RowStyle): React.CSSProperties | undefined {
-  if (dragging) {
-    return {
-      translate: `0 ${dragDy}px`,
-      transitionProperty: "box-shadow",
-      transitionDuration: "250ms",
-      zIndex: 10,
-      position: "relative",
-    };
-  }
-  if (settleDy !== null) {
-    // Frozen: exact release spot, lifted stacking kept so overlapped
-    // siblings can't flash above mid-glide. Shadow already dropped at
-    // commit (reads as landing contact).
-    return {
-      translate: `0 ${settleDy}px`,
-      transitionProperty: "none",
-      zIndex: 10,
-      position: "relative",
-    };
-  }
-  if (shift !== 0) return { translate: `0 ${shift}px` };
-  if (frozen) return { transitionProperty: "none" };
-  return undefined;
 }
