@@ -391,6 +391,14 @@ test.describe("RadioScout home", () => {
   });
 
   test("opening details keeps the list scroll position", async ({ page }) => {
+    // Warm-up open/close: the first sheet open forces hydration and absorbs
+    // the router's one-time initial scroll restoration, which can otherwise
+    // land mid-test on a loaded suite and pull the list back to the top.
+    const dialog = page.getByRole("dialog");
+    await page.getByRole("button", { name: "Details for Test Jazz FM" }).click();
+    await expect(dialog.getByRole("button", { name: "Play Test Jazz FM" })).toBeVisible();
+    await dialog.getByRole("button", { name: "Close details" }).click();
+    await expect(dialog).toBeHidden();
     // Instant (not smooth): the app enables smooth scrolling on fine-pointer
     // desktops, which animates scrollTo asynchronously — setup must land
     // synchronously or the read below races the animation.
@@ -414,16 +422,15 @@ test.describe("RadioScout home", () => {
     }
     expect(target).not.toBeNull();
     await target?.click();
-    const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: "Play Test Jazz FM" })).toBeVisible();
     await expect(page).toHaveURL(/station=/);
-    // Let the navigation's scroll restoration run before measuring.
-    await page.waitForTimeout(250);
-    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+    // The router restores scroll asynchronously; poll rather than racing a
+    // fixed wait. The header's mount autofocus uses preventScroll, so focus
+    // alone cannot pull the list back to the top.
+    await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 3000 }).toBe(y);
     await dialog.getByRole("button", { name: "Close details" }).click();
     await expect(dialog).toBeHidden();
-    await page.waitForTimeout(250);
-    expect(await page.evaluate(() => window.scrollY)).toBe(y);
+    await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 3000 }).toBe(y);
   });
 });
 

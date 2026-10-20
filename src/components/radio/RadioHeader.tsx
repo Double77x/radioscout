@@ -75,7 +75,13 @@ export function RadioHeader({
   // events (dock Browse button). A focus subscription by nature.
   // eslint-disable-next-line react-doctor/effect-needs-cleanup
   useEffect(() => {
-    if (autoFocus && globalThis.matchMedia?.("(pointer: fine)").matches) searchRef.current?.focus();
+    // `preventScroll` on the mount autofocus: hydration can be slow enough
+    // that this effect runs after the reader has already scrolled, and a
+    // plain focus would yank the page back to the header. The event path
+    // below keeps the scroll — Browse is meant to bring search into view.
+    if (autoFocus && globalThis.matchMedia?.("(pointer: fine)").matches) {
+      searchRef.current?.focus({ preventScroll: true });
+    }
     const onFocusSearch = () => searchRef.current?.focus();
     globalThis.addEventListener(FOCUS_RADIO_SEARCH_EVENT, onFocusSearch);
     return () => {
