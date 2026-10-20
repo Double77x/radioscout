@@ -28,8 +28,6 @@ import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
-import com.getcapacitor.annotation.Permission;
-import com.getcapacitor.annotation.PermissionCallback;
 import com.google.common.util.concurrent.ListenableFuture;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -45,15 +43,14 @@ import org.json.JSONObject;
  * <p>Every call degrades gracefully: when the service is unreachable the
  * method rejects and the web layer falls back to {@code <audio>}.
  */
-@CapacitorPlugin(
-        name = "NativeAudio",
-        permissions = {@Permission(alias = "notifications", strings = {Manifest.permission.POST_NOTIFICATIONS})})
+@CapacitorPlugin(name = "NativeAudio")
 public class NativeAudioPlugin extends Plugin {
 
     private static final String EVENT_STATUS = "playbackStatus";
     private static final String EVENT_TRACK = "trackUpdate";
     private static final String EVENT_STATION_CHANGE = "stationChange";
     private static final String LOG_TAG = "RadioPlayback";
+    private static final int NOTIFICATION_PERMISSION_REQUEST = 0x4e4f;
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private MediaController controller;
@@ -454,21 +451,11 @@ public class NativeAudioPlugin extends Plugin {
 
     private void emitStatus(Player player, String errorOverride) {
         if (player == null) return;
-        String status;
-        if (errorOverride != null) {
-            status = "error";
-        } else if (player.getPlaybackState() == Player.STATE_BUFFERING) {
-            status = "loading";
-        } else if (player.getPlayWhenReady()
-                && player.getPlaybackState() == Player.STATE_READY) {
-            status = "playing";
-        } else if (player.isLoading()) {
-            status = "loading";
-        } else {
-            // READY-paused, ENDED, and IDLE-without-media all read as paused
-            // to the dock; stop() clears the web station separately.
-            status = "paused";
-        }
+        String status = PlaybackStatus.resolve(
+                player.getPlaybackState(),
+                player.getPlayWhenReady(),
+                player.isLoading(),
+                errorOverride != null);
         if (status.equals(lastStatus) && errorOverride == null) return;
         lastStatus = status;
         JSObject data = new JSObject();
@@ -484,18 +471,49 @@ public class NativeAudioPlugin extends Plugin {
         boolean needsPermission = needsNotificationPermission();
         Log.i(LOG_TAG, "play: notifications=" + (needsPermission ? "not granted" : "granted"));
         if (needsPermission) {
-            // First playback on Android 13+: ask for the notification
-            // permission in context, then start regardless — denied just
-            // means no lock-screen/shade UI, audio still plays.
-            requestPermissionForAlias("notifications", call, "startPlayAfterPermission");
+            // The notification permission is optional: denied means no
+            // lock-screen/shade UI, but audio must still play. Ask in context
+            // and start immediately. Waiting for a permission callback leaves
+            // every station on “Tuning in…” when the prompt cannot be shown
+            // or the callback never returns — the exact fail-open case this
+            // method is meant to prevent.
+            requestNotificationPermission();
+            startPlay(call);
             return;
         }
         startPlay(call);
     }
 
-    @PermissionCallback
-    private void startPlayAfterPermission(PluginCall call) {
-        startPlay(call);
+    /**
+     * Request POST_NOTIFICATIONS directly rather than through Capacitor's
+     * permission alias. The alias is annotation-driven and was absent in the
+     * release-shaped build, so the prompt never appeared there. Playback has
+     * already started by the time the user answers; the result only decides
+     * whether the media notification is visible.
+     */
+    private void requestNotificationPermission() {
+        try {
+            if (getActivity() == null) return;
+            getActivity()
+                    .runOnUiThread(
+                            () -> {
+                                try {
+                                    getActivity()
+                                            .requestPermissions(
+                                                    new String[] {
+                                                        Manifest.permission.POST_NOTIFICATIONS
+                                                    },
+                                                    NOTIFICATION_PERMISSION_REQUEST);
+                                } catch (Exception error) {
+                                    Log.w(
+                                            LOG_TAG,
+                                            "notification permission request failed: "
+                                                    + error.getMessage());
+                                }
+                            });
+        } catch (Exception error) {
+            Log.w(LOG_TAG, "notification permission request failed: " + error.getMessage());
+        }
     }
 
     /**
@@ -505,18 +523,28 @@ public class NativeAudioPlugin extends Plugin {
      * not enough. Fail-open to playback if the plumbing is unavailable.
      */
     private boolean needsNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false;
         try {
             // Capacitor can return null for a declared permission alias on
             // some installed APKs even when Android has already granted it.
             // Treating null as denied sends play() into a permission request
             // that never calls back, leaving every station stuck tuning.
-            return ContextCompat.checkSelfPermission(
-                            getContext(), Manifest.permission.POST_NOTIFICATIONS)
-                    != android.content.pm.PackageManager.PERMISSION_GRANTED;
+            boolean granted =
+                    ContextCompat.checkSelfPermission(
+                                    getContext(), Manifest.permission.POST_NOTIFICATIONS)
+                            == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            return notificationPermissionRequired(Build.VERSION.SDK_INT, granted);
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * Android 13+ needs a runtime grant for the media notification. Kept
+     * static so the JVM and device tests can cover the decision without a
+     * live plugin/context.
+     */
+    static boolean notificationPermissionRequired(int sdkInt, boolean granted) {
+        return sdkInt >= 33 && !granted;
     }
 
     private void startPlay(PluginCall call) {
