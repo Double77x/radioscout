@@ -13,7 +13,11 @@ export interface PlayerPrefs {
 
 export function loadVolume(): number {
   try {
-    const value = Number(globalThis.localStorage?.getItem(VOLUME_KEY));
+    const raw = globalThis.localStorage?.getItem(VOLUME_KEY);
+    // An absent or empty key is not a stored 0 (`Number(null)` is 0), which
+    // would start a fresh install silent.
+    if (!raw) return DEFAULT_VOLUME;
+    const value = Number(raw);
     return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : DEFAULT_VOLUME;
   } catch {
     return DEFAULT_VOLUME;
