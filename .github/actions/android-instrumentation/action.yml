@@ -32,7 +32,10 @@ runs:
     - name: Install SDK packages
       shell: bash
       run: |
-        yes | sdkmanager --licenses > /dev/null
+        # `yes` dies on a broken pipe once sdkmanager has what it needs, and
+        # the composite shell runs with pipefail, so the licence step is
+        # explicitly allowed to fail.
+        yes | sdkmanager --licenses > /dev/null || true
         sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
     - name: Install dependencies
@@ -53,8 +56,8 @@ runs:
       id: kvm
       shell: bash
       run: |
-        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-        sudo udevadm control --reload-rules
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules > /dev/null || true
+        sudo udevadm control --reload-rules || true
         sudo modprobe kvm 2>/dev/null || true
         sudo udevadm trigger --name-match=kvm 2>/dev/null || true
         {

@@ -220,6 +220,7 @@ Signals that look conclusive and are not. Each has already produced a wrong conc
 - **A WebView animation can hang `uiautomator dump` on its idle wait.** The permission-denial smoke therefore leaves the system dialog open and checks playback through `dumpsys media_session`; it does not drive the dialog through UIAutomator. Use `dumpsys window`/`dumpsys activity` when you need to know whether the dialog is open. (`docs/lineage.md`, 2026-10-20)
 - **Treat a hosted runner without `/dev/kvm` as a runner property, not a build failure.** Hardware acceleration is not guaranteed across the hosted fleet, so the emulator suite must boot without it and may retry on a second runner before it blocks a release. (`docs/lineage.md`, 2026-10-20)
 - **Check the workflow files with actionlint before pushing them.** A reusable workflow call may not carry `continue-on-error`, and a composite action `run:` step needs an explicit `shell:`; GitHub finds both only when a run fails. (`docs/lineage.md`, 2026-10-20)
+- **Remember that a composite action shell runs with `pipefail`.** `shell: bash` in a composite action means `bash -eo pipefail`, while a workflow step's default shell does not. A pipeline such as `yes | sdkmanager --licenses` dies on a broken pipe there, so it has to tolerate the failure. (`docs/lineage.md`, 2026-10-20)
 
 ## 16. Tool & MCP Usage
 

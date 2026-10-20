@@ -445,3 +445,7 @@ The cost is a slower boot on a runner without KVM and a suite that no longer run
 Two of the release-day failures were workflow syntax that only GitHub could see: a job that calls a reusable workflow carrying `continue-on-error`, and a composite action `run:` step without a `shell`. Both were found by a failed run, not by a check.
 
 Verify now runs actionlint, the standard checker for workflow files, in the web job. The shellcheck and pyflakes integrations stay off because they flag pre-existing style in the F-Droid workflow, and a style gate is not what a release needs. actionlint does not read composite action metadata, so the composite action keeps its own shape and a `shell:` on every `run:` step. The self-hosted `android` label is declared in `.github/actionlint.yaml` so the check knows it is not a typo.
+
+### 2026-10-20 · A composite action shell is not a workflow shell
+
+A composite action step that declares `shell: bash` runs as `bash --noprofile --norc -e -o pipefail`, while a workflow step's default shell is `bash -e`. The extra pipefail turned `yes | sdkmanager --licenses` into a broken pipe: `yes` was killed once sdkmanager had what it needed, and the step died before the emulator ever started. The licence step now tolerates the broken pipe in every workflow, and the composite action treats each acceleration command as optional, because the host may expose no `/dev/kvm` at all.
