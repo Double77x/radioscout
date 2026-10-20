@@ -1,7 +1,7 @@
-import { useId, useMemo, useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { useId, useMemo, useState } from "react";
+import { ChevronDown, X } from "lucide-react";
 import { CountryFlag } from "@/components/radio/CountryFlag";
+import { PickerPanel } from "@/components/radio/PickerPanel";
 import { useIsClient } from "@/hooks/use-is-client";
 import { usePersistentStrings } from "@/hooks/use-persistent-state";
 import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
@@ -63,7 +63,6 @@ export function LocationPicker() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [directory, setDirectory] = useState<DirectoryCountry[] | null>(null);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
   const searchId = useId();
   const panelId = useId();
 
@@ -112,13 +111,6 @@ export function LocationPicker() {
     });
     return [...popular, ...rest];
   }, [directory, popularNames, trimmed]);
-
-  const virtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => 44,
-    overscan: 8,
-  });
 
   if (!isClient) {
     return <div aria-hidden='true' className='h-24 animate-pulse rounded-2xl bg-muted' />;
@@ -170,79 +162,36 @@ export function LocationPicker() {
         />
       </button>
 
-      {open ? (
-        <div id={panelId} className='mt-2 animate-dropdown-in rounded-2xl border border-border bg-card p-2'>
-          <div className='relative'>
-            <Search
-              aria-hidden='true'
-              className='pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground'
-            />
-            <label htmlFor={searchId} className='sr-only'>
-              Search countries
-            </label>
-            <input
-              id={searchId}
-              type='search'
-              autoComplete='off'
-              value={query}
-              onChange={(event) => {
-                onQuery(event.target.value);
-              }}
-              placeholder='Search 200+ countries…'
-              className='h-10 w-full rounded-full border border-border bg-card pr-3 pl-9 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-search-cancel-button]:hidden'
-            />
-          </div>
-
-          <fieldset className='m-0 mt-1 min-w-0 border-0 p-0'>
-            <legend className='sr-only'>Choose countries</legend>
-            <div ref={scrollRef} className='h-60 overflow-y-auto overscroll-contain rounded-xl'>
-              {rows.length === 0 ? (
-                <p className='p-3 text-xs text-muted-foreground'>Nothing matches that.</p>
-              ) : (
-                <div style={{ height: virtualizer.getTotalSize(), position: "relative", width: "100%" }}>
-                  {virtualizer.getVirtualItems().map((item) => {
-                    const country = rows[item.index];
-                    if (!country) return null;
-                    const active = selected.has(country.name);
-                    return (
-                      <button
-                        key={country.name}
-                        type='button'
-                        aria-pressed={active}
-                        onClick={() => {
-                          select(toggleMembership(countries, country.name));
-                        }}
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: 0,
-                          width: "100%",
-                          height: item.size,
-                          transform: `translateY(${item.start}px)`,
-                        }}
-                        className={cn(
-                          "flex items-center gap-2 px-2 text-left text-xs transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none",
-                          active ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground",
-                        )}>
-                        <CountryFlag code={country.iso} name={displayCountryName(country.name)} />
-                        <span className='min-w-0 flex-1 truncate'>{displayCountryName(country.name)}</span>
-                        {active ? <Check className='size-3.5 shrink-0' /> : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </fieldset>
-          <p className='px-2 pt-1.5 text-xs text-muted-foreground' aria-live='polite'>
-            {trimmed === ""
-              ? "Top countries — type to search 200+ countries"
-              : directory === null
-                ? "Searching the full directory…"
-                : `${rows.length} match${rows.length === 1 ? "" : "es"}`}
-          </p>
-        </div>
-      ) : null}
+      <PickerPanel
+        open={open}
+        panelId={panelId}
+        searchId={searchId}
+        query={query}
+        onQuery={onQuery}
+        searchLabel='Search countries'
+        placeholder='Search 200+ countries…'
+        legend='Choose countries'
+        rows={rows}
+        rowKey={(country) => country.name}
+        rowName={(country) => country.name}
+        selected={selected}
+        onToggle={(name) => {
+          select(toggleMembership(countries, name));
+        }}
+        renderRow={(country) => (
+          <>
+            <CountryFlag code={country.iso} name={displayCountryName(country.name)} />
+            <span className='min-w-0 flex-1 truncate'>{displayCountryName(country.name)}</span>
+          </>
+        )}
+        footer={
+          trimmed === ""
+            ? "Top countries — type to search 200+ countries"
+            : directory === null
+              ? "Searching the full directory…"
+              : `${rows.length} match${rows.length === 1 ? "" : "es"}`
+        }
+      />
     </div>
   );
 }
