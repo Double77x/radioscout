@@ -1,6 +1,9 @@
-# Every push to main and every pull request runs the deterministic checks.
-# Device-only checks live in `android-device-smoke.yml`: they need a real
-# Android runtime and must not block a normal pull request.
+# Every push to main and every pull request runs the web checks. The native
+# suite is expensive and only matters when the APK can change, so it runs on a
+# release tag or when a change touches the Android shell, its build inputs or
+# a native Capacitor dependency. Device-only checks live in
+# `android-device-smoke.yml`: they need a real Android runtime and must not
+# block a normal pull request.
 name: Verify
 
 on:
@@ -19,6 +22,66 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Native change detection
+    runs-on: ubuntu-24.04
+    outputs:
+      android: ${{ steps.detect.outputs.android }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Detect native changes
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # A release tag always builds an APK. A manual dispatch is a
+          # deliberate full check, so it takes the same path.
+          if [[ "$GITHUB_REF_TYPE" == "tag" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "android=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            range="origin/${{ github.base_ref }}...HEAD"
+          else
+            before="${{ github.event.before }}"
+            if [[ -z "$before" || "$before" =~ ^0+$ ]]; then
+              range="HEAD^"
+            else
+              range="$before...HEAD"
+            fi
+          fi
+
+          if ! files="$(git diff --name-only "$range")"; then
+            # If the range cannot be resolved, run the suite rather than
+            # silently treating a native change as web-only.
+            echo "android=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          native=false
+          if grep -Eq '^(android/|assets/|capacitor\.config\.|scripts/(cap-version\.js|strip-sw\.mjs|generate-native-assets\.mjs))' <<<"$files"; then
+            native=true
+          fi
+
+          # A change to the workflow that runs the native gate must exercise it.
+          if grep -Eq '^\.github/workflows/(verify|release-apk)\.yml$' <<<"$files"; then
+            native=true
+          fi
+
+          # Package and lockfile bumps are web-only unless they move a
+          # Capacitor/Capgo package, which changes the native shell.
+          if git diff "$range" -- package.json pnpm-lock.yaml | grep -Eq '^[+-].*(@capacitor|@capgo)'; then
+            native=true
+          fi
+
+          echo "android=$native" >> "$GITHUB_OUTPUT"
+
   web:
     name: Web, unit and e2e
     runs-on: ubuntu-24.04
@@ -69,6 +132,8 @@ jobs:
 
   android-jvm:
     name: Native JVM tests and R8 build
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -109,7 +174,7 @@ jobs:
           pnpm cap:version
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: JVM tests
         working-directory: android
@@ -121,6 +186,8 @@ jobs:
 
   android-instrumentation:
     name: Android instrumentation
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -160,6 +227,17 @@ jobs:
           pnpm cap:android
           pnpm cap:version
 
+      # The runner has /dev/kvm, but the runner user cannot open it until udev
+      # grants the kvm group access. Without this the emulator silently falls
+      # back to TCG and spends the whole boot timeout emulating x86 in software.
+      - name: Enable KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+
       - name: Run instrumented tests on an emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -169,5 +247,5 @@ jobs:
           profile: pixel_6
           emulator-boot-timeout: 900
           disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -accel on
           script: cd android && ./gradlew :app:connectedDebugAndroidTest --no-daemon

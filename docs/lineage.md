@@ -411,3 +411,17 @@ Dependabot's default three-day cooldown opened update pull requests while the ne
 The npm update config now waits seven days before opening a version-update pull request, so the lockfile it generates satisfies the gate. Security updates bypass Dependabot's cooldown; if one lands inside the window, add the package to `minimumReleaseAgeExclude` deliberately rather than lowering the gate. Pull requests created before this change keep their old lockfiles and stay red until their package clears the window.
 
 The same pass moved CI to `pnpm/action-setup@v6` (pnpm 12 and Node 24), pinned hosted jobs to `ubuntu-24.04` instead of `ubuntu-latest` while the latter moves to 26.04, and raised `actions/upload-artifact` to v6 for the Node runtime.
+
+### 2026-10-20 · Native verification follows native changes
+
+Verify ran the native JVM and instrumentation jobs for every pull request because `release-apk.yml` reuses the same workflow as its tag preflight. That is correct for a release gate and wrong for a web dependency bump: Dependabot updates to React, jsdom or TanStack spent an emulator boot on a shell they cannot change.
+
+A `changes` job now classifies the diff before the native jobs start. A release tag and a manual dispatch force the full suite. Pull requests and pushes to main run native checks only when the diff touches `android/`, `capacitor.config.*`, native build scripts, `assets/`, the workflow that runs the gate, or moves a `@capacitor`/`@capgo` package in `package.json` or `pnpm-lock.yaml`. If the range cannot be resolved, the gate runs the suite rather than treating a native change as web-only. Web checks still run on every event.
+
+The trade-off is deliberate: a web-only pull request no longer proves an APK builds. The tag preflight still does, and a native dependency bump counts as native. `@capgo/capacitor-updater` is the reason for the dependency rule; it is a native module even though Dependabot files it under npm.
+
+### 2026-10-20 · Android emulator needs KVM, not a longer timeout
+
+The 0.4.5 release preflight failed with `Timeout waiting for emulator to boot`, and the log carried QEMU's TCG warnings (`CPUID.01H:ECX.avx`). The emulator was not using hardware acceleration because the runner user could not open `/dev/kvm`; the workflow had assumed the action handled permissions on its own. Disabling snapshots, raising the timeout and pinning `ubuntu-24.04` all left the same software-emulation loop.
+
+The job now writes the KVM udev rule, reloads udev, checks that `/dev/kvm` is readable and writable, and passes `-accel on`. If acceleration is missing the job fails with a permission error instead of burning the full boot timeout. The 900-second timeout stays as a safety net, not as the fix. `gradle/actions/setup-gradle` moves to v6 in the same pass to clear the Node 20 deprecation warning.

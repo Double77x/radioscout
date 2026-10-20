@@ -141,6 +141,8 @@ Append a new entry to `docs/lineage.md` and add its line here. Do not put the re
 - 2026-10-20 — APK smoke finds native pause status; device checks become repeatable
 - 2026-10-20 — Native release gates: fixture smoke, R8, permission fail-open
 - 2026-10-20 — Dependabot cooldown matches pnpm's release age
+- 2026-10-20 — Native verification follows native changes
+- 2026-10-20 — Android emulator needs KVM, not a longer timeout
 
 ## UI Primitives
 
