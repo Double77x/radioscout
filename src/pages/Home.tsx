@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, getRouteApi } from "@tanstack/react-router";
+import { getRouteApi } from "@tanstack/react-router";
 import { isRecord } from "@/lib/utils";
-import { ChartColumn, Heart, SearchX, Star, TextAlignStart, Trash2 } from "lucide-react";
+import { ChartColumn, Heart, Star, TextAlignStart, Trash2 } from "lucide-react";
 import { SEO } from "@/components/Seo";
 import { AppShell } from "@/components/scout/AppShell";
+import { HomeFilterSummary } from "@/components/scout/HomeFilterSummary";
+import { HomeSearchResults } from "@/components/scout/HomeSearchResults";
+import { HomeSectionTrigger } from "@/components/scout/HomeSectionTrigger";
 import { ListeningStats } from "@/components/radio/ListeningStats";
-import { CountryFlag, hasCountryFlag } from "@/components/radio/CountryFlag";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
 import { BestOfBritish } from "@/components/radio/BestOfBritish";
 import { RadioHeader } from "@/components/radio/RadioHeader";
 import { SavedStations } from "@/components/radio/SavedStations";
 import { StationCard } from "@/components/radio/StationCard";
 import { StationListSkeleton } from "@/components/radio/StationSkeleton";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Accordion, AccordionContent, AccordionItem } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useIsClient } from "@/hooks/use-is-client";
@@ -23,7 +25,6 @@ import { isNative } from "@/lib/capacitor";
 import { formatListeningTime, formatTags } from "@/lib/radio/format";
 import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
-import { POPULAR_COUNTRIES } from "@/lib/radio/country-popular";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import {
   useClearHistory,
@@ -40,24 +41,6 @@ import type { Station } from "@/lib/radio/types";
 
 const routeApi = getRouteApi("/");
 
-/** Selected countries as flag icons (display name text when no flag ships). */
-function CountryFilterFlags({ countries }: { countries: string[] }) {
-  return (
-    <span className='flex shrink-0 items-center gap-1'>
-      {countries.map((name) => {
-        const iso = POPULAR_ISO_BY_NAME.get(name) ?? "";
-        return iso !== "" && hasCountryFlag(iso) ? (
-          <CountryFlag key={name} code={iso} name={displayCountryName(name)} />
-        ) : (
-          <span key={name} className='whitespace-nowrap'>
-            {displayCountryName(name)}
-          </span>
-        );
-      })}
-    </span>
-  );
-}
-
 const HOME_SECTIONS_KEY = "radioscout:home-sections";
 const HOME_SECTIONS_DEFAULT = ["saved", "top", "british"];
 const HOME_SECTION_IDS = new Set(["saved", "top", "british", "recent", "stats"]);
@@ -65,8 +48,6 @@ const HOME_SECTION_IDS = new Set(["saved", "top", "british", "recent", "stats"])
 const LANGUAGES_FALLBACK: string[] = [];
 const COUNTRIES_FALLBACK: string[] = [];
 const QUALITY_FALLBACK = "0";
-/** Exact directory name → bundled-flag ISO (selections outside the popular list show their name). */
-const POPULAR_ISO_BY_NAME = new Map(POPULAR_COUNTRIES.map((country) => [country.name, country.iso] as const));
 
 export default function HomePage() {
   const { q = "", tag = "all" } = routeApi.useSearch();
@@ -165,73 +146,43 @@ export default function HomePage() {
         <RadioHeader query={q} genre={tag} totalStations={stats.data?.stations} saved={favourites.data.length} />
 
         {filtering ? (
-          <section aria-label='Search results' aria-busy={!search.data} className='scroll-mt-4 px-4 pt-5'>
-            <div className='flex items-baseline justify-between'>
-              <h2 className='text-lg font-semibold tracking-tight'>Results</h2>
-              <p className='text-xs font-medium text-muted-foreground'>
-                {search.data
-                  ? `${search.data.length} found${languageLabel ? ` · ${languageLabel}` : ""}${countryLabel ? ` · ${countryLabel}` : ""}`
-                  : "Searching…"}
-              </p>
-            </div>
-            {search.data ? (
-              search.data.length > 0 ? (
-                <ul className='mt-3 flex flex-col gap-2'>{search.data.map((station) => renderRow(station))}</ul>
-              ) : (
-                <div className='mt-3 flex flex-col items-center rounded-scout-card border border-dashed border-border bg-card px-6 py-10 text-center'>
-                  <span className='grid size-12 place-items-center rounded-full bg-muted text-muted-foreground'>
-                    <SearchX className='size-6' />
-                  </span>
-                  <p className='mt-3 font-semibold'>Nothing matches that</p>
-                  <p className='mt-1 text-sm text-muted-foreground'>Try a different word, or clear the filters.</p>
-                  <Link to='/' replace search={(prev) => ({ ...prev, q: undefined, tag: undefined })} className='mt-4'>
-                    <Button className='h-12 rounded-full px-6'>Clear search</Button>
-                  </Link>
-                </div>
-              )
-            ) : (
-              <StationListSkeleton rows={4} className='mt-3' />
-            )}
-          </section>
+          <HomeSearchResults
+            stations={search.data}
+            languageLabel={languageLabel}
+            countryLabel={countryLabel}
+            renderRow={renderRow}
+          />
         ) : (
           <>
             <Accordion multiple value={visibleSections} onValueChange={setOpenSections} className='px-4'>
               <AccordionItem value='saved' id='home-section-saved' className='border-0'>
-                <AccordionTrigger className='py-4 hover:no-underline'>
-                  <span className='flex items-center gap-3'>
-                    <span
-                      aria-hidden='true'
-                      className='grid size-10 place-items-center rounded-2xl bg-scout-butter text-scout-coal'>
-                      <Star className='size-5' />
-                    </span>
-                    <span className='text-lg font-semibold tracking-tight'>Saved</span>
-                    {favourites.data.length > 0 ? <Badge variant='secondary'>{favourites.data.length}</Badge> : null}
-                  </span>
-                </AccordionTrigger>
+                <HomeSectionTrigger
+                  icon={<Star className='size-5' />}
+                  tone='bg-scout-butter text-scout-coal'
+                  title='Saved'
+                  badge={
+                    favourites.data.length > 0 ? <Badge variant='secondary'>{favourites.data.length}</Badge> : undefined
+                  }
+                />
                 <AccordionContent>
                   <SavedStations />
                 </AccordionContent>
               </AccordionItem>
 
               <AccordionItem value='top' id='home-section-top' className='border-0'>
-                <AccordionTrigger className='py-4 hover:no-underline'>
-                  <span className='flex items-center gap-3'>
-                    <span
-                      aria-hidden='true'
-                      className='grid size-10 place-items-center rounded-2xl bg-scout-blush text-scout-coal'>
-                      <Heart className='size-5' />
-                    </span>
-                    <span className='text-lg font-semibold tracking-tight'>Most loved</span>
-                    {top.data ? <Badge variant='secondary'>{top.data.length}</Badge> : null}
-                    {languageLabel || countries.length > 0 || qualitySetting ? (
-                      <span className='flex min-w-0 items-center gap-1.5 truncate text-xs font-medium text-muted-foreground'>
-                        {languageLabel ? <span className='min-w-0 truncate'>{languageLabel}</span> : null}
-                        {countries.length > 0 ? <CountryFilterFlags countries={countries} /> : null}
-                        {qualitySetting ? <span className='shrink-0'>{qualitySetting}</span> : null}
-                      </span>
-                    ) : null}
-                  </span>
-                </AccordionTrigger>
+                <HomeSectionTrigger
+                  icon={<Heart className='size-5' />}
+                  tone='bg-scout-blush text-scout-coal'
+                  title='Most loved'
+                  badge={top.data ? <Badge variant='secondary'>{top.data.length}</Badge> : undefined}
+                  detail={
+                    <HomeFilterSummary
+                      languageLabel={languageLabel}
+                      countries={countries}
+                      qualitySetting={qualitySetting}
+                    />
+                  }
+                />
                 <AccordionContent aria-busy={!top.data && !top.isError}>
                   {top.data ? (
                     <ul className='flex flex-col gap-2'>{top.data.map((station) => renderRow(station))}</ul>
@@ -249,17 +200,12 @@ export default function HomePage() {
 
               {history.data.length > 0 ? (
                 <AccordionItem value='recent' id='home-section-recent' className='border-0'>
-                  <AccordionTrigger className='py-4 hover:no-underline'>
-                    <span className='flex items-center gap-3'>
-                      <span
-                        aria-hidden='true'
-                        className='grid size-10 place-items-center rounded-2xl bg-scout-sky text-scout-coal'>
-                        <TextAlignStart className='size-5' />
-                      </span>
-                      <span className='text-lg font-semibold tracking-tight'>Recently played</span>
-                      <Badge variant='secondary'>{Math.min(history.data.length, 10)}</Badge>
-                    </span>
-                  </AccordionTrigger>
+                  <HomeSectionTrigger
+                    icon={<TextAlignStart className='size-5' />}
+                    tone='bg-scout-sky text-scout-coal'
+                    title='Recently played'
+                    badge={<Badge variant='secondary'>{Math.min(history.data.length, 10)}</Badge>}
+                  />
                   <AccordionContent>
                     <ul className='flex flex-col gap-2'>
                       {history.data
@@ -303,19 +249,16 @@ export default function HomePage() {
 
               {listening.data.totalSeconds > 0 ? (
                 <AccordionItem value='stats' id='home-section-stats' className='border-0'>
-                  <AccordionTrigger className='py-4 hover:no-underline'>
-                    <span className='flex items-center gap-3'>
-                      <span
-                        aria-hidden='true'
-                        className='grid size-10 place-items-center rounded-2xl bg-scout-mint text-scout-coal'>
-                        <ChartColumn className='size-5' />
-                      </span>
-                      <span className='text-lg font-semibold tracking-tight'>Listening</span>
+                  <HomeSectionTrigger
+                    icon={<ChartColumn className='size-5' />}
+                    tone='bg-scout-mint text-scout-coal'
+                    title='Listening'
+                    detail={
                       <span className='truncate text-xs font-medium text-muted-foreground'>
                         {formatListeningTime(listening.data.totalSeconds)}
                       </span>
-                    </span>
-                  </AccordionTrigger>
+                    }
+                  />
                   <AccordionContent>
                     <ListeningStats />
                   </AccordionContent>
