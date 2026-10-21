@@ -26,16 +26,22 @@ export default defineConfig(({ mode }) => {
           // postbuild scripts are separate cached stages in one chain.
           // `cap:android` consumes this task, so keep the full chain here.
           // The service worker is web-only: `generate-sw.mjs` honors
-          // CAPACITOR_BUILD, but the `vp` task cache replays outputs without
-          // re-running — so native pipelines strip unconditionally via
+          // CAPACITOR_BUILD — so native pipelines strip unconditionally via
           // `strip-sw.mjs` right before consuming dist (see `cap:android`,
           // `release-apk.yml`, `publish-ota.mjs`). That step is the real
           // guarantee; the env flag just documents intent.
           command:
             "vp build && tsc -b && node scripts/generate-sitemap.js && node scripts/apply-header-policy.js && node scripts/generate-sw.mjs && node scripts/check-doc-pointers.js",
-          cache: {
-            output: ["dist/**"],
-          },
+          // Never cache the build. Vite+ archives `dist/**` and restores it on
+          // a cache hit, which drops the previous build's prerendered HTML back
+          // over the fresh one: `dist/client/index.html` then references the
+          // old entry chunk, so `wrangler pages deploy ./dist/client` ships a
+          // site that keeps serving the previous bundle while the new chunks
+          // sit unused. The prerender itself is fine — it rewrites every HTML
+          // file — it is only the restore that is stale. An uncached build
+          // takes ~22s and also drops the dead chunks the restore leaves
+          // behind, so correctness is worth the 20s.
+          cache: false,
         },
       },
     },
