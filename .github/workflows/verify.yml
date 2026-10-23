@@ -111,14 +111,11 @@ jobs:
         with:
           args: -color -shellcheck= -pyflakes=
 
-      - name: Verify (lint, format, unit, build, Fallow)
-        run: pnpm verify
-
       - name: Install Playwright Chromium
         run: pnpm exec playwright install --with-deps chromium
 
-      - name: End-to-end tests
-        run: pnpm test:e2e
+      - name: Verify (lint, format, unit + e2e, build, Fallow)
+        run: pnpm verify
 
   android-jvm:
     name: Native JVM tests and R8 build

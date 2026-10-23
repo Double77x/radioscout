@@ -100,7 +100,6 @@ export function StationCard({
       />
       <button
         type='button'
-        aria-label={`Details for ${station.name}`}
         onClick={() => {
           onOpenDetail(station);
         }}

@@ -261,8 +261,8 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
             onClick={() => {
               setOpen(false);
             }}
-            aria-label={`Changelog for version ${appVersion}`}
-            className='underline underline-offset-4 hover:text-foreground'>
+            aria-label={`Changelog for version v${appVersion}`}
+            className='inline-flex min-h-6 min-w-6 items-center justify-center underline underline-offset-4 hover:text-foreground'>
             v{appVersion}
           </Link>{" "}
           · Built By ❤️ Dan

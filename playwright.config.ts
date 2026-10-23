@@ -22,6 +22,6 @@ export default defineConfig({
     command: "pnpm dev --port 8081",
     url: "http://localhost:8081",
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    timeout: 60_000,
   },
 });

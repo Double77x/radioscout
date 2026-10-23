@@ -279,15 +279,16 @@ worth reading as worked examples:
 Gates to pass once, when the change is complete, before opening a pull request:
 
 ```bash
-pnpm verify                          # lint, format, unit, build + prerender, Fallow
-pnpm test:e2e                        # playwright + axe, when the change reaches the radio UI
+pnpm verify                          # lint, format, unit + e2e, build + prerender, Fallow
+pnpm test:e2e                        # playwright + axe alone, while iterating
 ```
 
-`pnpm verify` is the single gate CI runs as one step; CI also runs actionlint
-and Playwright. Passing verify locally covers the same web checks apart from
-those two. Commits format their staged files through the Vite+ pre-commit hook
-(`.vite-hooks/pre-commit`); `pnpm verify` includes `pnpm format:check` for a
-commit made with `VP_GIT_HOOKS=0`.
+`pnpm verify` is the single gate CI runs as one step; CI also runs actionlint.
+Playwright starts its own dev server on port 8081, so leave that port free.
+Commits run the full test suite and format their staged files through the Vite+
+pre-commit hook (`.vite-hooks/pre-commit`). Playwright starts its own dev server
+on port 8081, so leave that port free. `pnpm verify` also includes
+`pnpm format:check` for a commit made with `VP_GIT_HOOKS=0`.
 
 `fallow.toml` holds the baseline for `dead-code`, `dupes` and `health`. Run
 `fallow dead-code --trace src/file:export` before deleting a flagged export; the

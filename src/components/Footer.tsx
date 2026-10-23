@@ -108,8 +108,8 @@ const Footer = () => {
           <p className='flex items-center gap-2 text-xs text-muted-foreground'>
             <Link
               to='/legal/changelog'
-              aria-label={`Changelog for version ${appVersion}`}
-              className='transition-colors hover:text-foreground'>
+              aria-label={`Changelog for version v${appVersion}`}
+              className='inline-flex min-h-6 min-w-6 items-center justify-center transition-colors hover:text-foreground'>
               v{appVersion}
             </Link>
             <span aria-hidden='true'>·</span>

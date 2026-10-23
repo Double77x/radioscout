@@ -34,7 +34,7 @@
     "test:ui": "playwright test --ui",
     "test:unit": "vp test run",
     "test:unit:watch": "vp test",
-    "verify": "pnpm lint && pnpm format:check && pnpm test:unit && pnpm exec vp run build && pnpm fallow"
+    "verify": "pnpm lint && pnpm format:check && pnpm test && pnpm exec vp run build && pnpm fallow"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

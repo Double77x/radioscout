@@ -91,6 +91,8 @@ step with the headings below, so an entry without a line here fails the build.
 - 2026-10-22 — Formatter moves to the pre-commit hook; gates scale with the change
 - 2026-10-22 — One verify gate, progressive standards, and a lint rule for effects
 - 2026-10-23 — Spectrum wings: width sets the bands, paint reuses its skin
+- 2026-10-23 — One gate includes e2e, and the hook runs unit tests
+- 2026-10-23 — Pre-commit runs both test suites
 ## How this fits the other docs
 
 Current truth has two homes: the code, and the module contract its file header
@@ -610,3 +612,15 @@ The review before commit found two things the feature had been hiding. The reade
 The paint path also allocated about a hundred short-lived objects per frame — four gradients, two closures, a lifted colour array and a colour string per spark — for a layer that only changes when the tint or the wing's size does. The tint and gradients now live in a per-wing skin, spark alphas ride `globalAlpha` rather than new colour strings, and the size is read once per frame and shared by both wings and the reader. Only the analyser read allocates nothing; the rest of the loop is now allocation-free.
 
 Spacing follows from the same fix: `barCountFor` caps the run at forty, and the step is `width / bars`, so a wide wing spreads its bars to the full width instead of stopping mid-fade at 41% opacity around 2050 px. The cost is a little more state — a skin per wing and a band count that can change on resize — and a reader that re-derives its edges when the width crosses a bar boundary: a few allocations on resize against a hundred per frame.
+
+### 2026-10-23 · One gate includes e2e, and the hook runs unit tests
+
+`pnpm verify` ran the unit suite and then stopped, so a green run said nothing about the Playwright specs. CI ran them as a second step and the docs told humans to remember `pnpm test:e2e` on their own. That gap was not theoretical: the first run of the widened gate failed nine a11y specs, all `target-size` on the `v{appVersion}` changelog link in the footer and the settings sheet, and no local gate had noticed. The link now carries `inline-flex min-h-6 min-w-6 items-center justify-center`, which clears WCAG 2.5.8 without changing the type.
+
+`verify` now calls `pnpm test` (both suites), CI installs Chromium before it and drops the separate e2e step, and the workflow step name follows. The pre-commit hook runs `pnpm test:unit` before `vp staged` rather than e2e, because the specs need a dev server and a commit should not start one. Docs that described verify as unit-only are updated in the same change, and `CODING_STANDARDS.md` §15's Playwright note now scopes the risk to a scoped `vp test` run.
+
+The cost is time: verify is about two minutes longer and needs port 8081 free, so a running dev server on that port is reused while a stale one is a hang. A commit is also a unit-suite run now. Both are cheaper than shipping a broken accessible name because the gate that would have caught it lived in a separate command.
+
+### 2026-10-23 · Pre-commit runs both test suites
+
+The first version of the hook added only the unit suite because Playwright needs a dev server. That left commits able to skip the E2E suite even though `pnpm test` already runs both suites and Playwright manages its server on port 8081. The hook now runs `pnpm test` before formatting staged files, matching the user's expectation that commit verification covers the full suite. The cost is longer commits and a requirement that port 8081 be available (or have a reusable local server).

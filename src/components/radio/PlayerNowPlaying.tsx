@@ -59,7 +59,7 @@ export function PlayerNowPlaying({ station, status, track, error, sleepSuffix, o
     <>
       <button
         type='button'
-        aria-label={`Details for ${station.name}`}
+        aria-label={station.name}
         onClick={() => {
           onOpenDetail(station);
         }}
@@ -74,7 +74,7 @@ export function PlayerNowPlaying({ station, status, track, error, sleepSuffix, o
 
       <button
         type='button'
-        aria-label={`Details for ${station.name}`}
+        aria-label={station.name}
         onClick={() => {
           onOpenDetail(station);
         }}

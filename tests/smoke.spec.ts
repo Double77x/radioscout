@@ -363,7 +363,7 @@ test.describe("RadioScout home", () => {
   });
 
   test("station details open in a bottom sheet", async ({ page }) => {
-    await page.getByRole("button", { name: "Details for Test Jazz FM" }).first().click();
+    await page.getByRole("button", { name: /^Test Jazz FM/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Test Jazz FM").first()).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Play Test Jazz FM" })).toBeVisible();
@@ -373,7 +373,7 @@ test.describe("RadioScout home", () => {
   });
 
   test("voting bumps the count in the sheet", async ({ page }) => {
-    await page.getByRole("button", { name: "Details for Test Jazz FM" }).first().click();
+    await page.getByRole("button", { name: /^Test Jazz FM/ }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByText("Test Jazz FM").first()).toBeVisible();
     await expect(dialog.getByText("10", { exact: true })).toBeVisible();
@@ -395,7 +395,7 @@ test.describe("RadioScout home", () => {
     // the router's one-time initial scroll restoration, which can otherwise
     // land mid-test on a loaded suite and pull the list back to the top.
     const dialog = page.getByRole("dialog");
-    await page.getByRole("button", { name: "Details for Test Jazz FM" }).click();
+    await page.getByRole("button", { name: /^Test Jazz FM/ }).click();
     await expect(dialog.getByRole("button", { name: "Play Test Jazz FM" })).toBeVisible();
     await dialog.getByRole("button", { name: "Close details" }).click();
     await expect(dialog).toBeHidden();
@@ -409,7 +409,7 @@ test.describe("RadioScout home", () => {
     expect(y).toBeGreaterThan(0);
     // A button already fully in view, so the click itself moves nothing —
     // any scroll change comes from the navigation.
-    const details = page.getByRole("button", { name: /Details for Test/ });
+    const details = page.getByRole("button", { name: /^Test Jazz FM/ });
     const height = await page.evaluate(() => window.innerHeight);
     const count = await details.count();
     let target = null;

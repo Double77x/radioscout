@@ -1,4 +1,5 @@
 #!/bin/sh
-# Formats the staged files listed by `vp staged`. Installed by `vp config`
-# (run from `prepare`); skip a single commit with VP_GIT_HOOKS=0.
-exec vp staged
+# Full test suite, then the formatter for the staged files listed by `vp staged`.
+# Installed by `vp config` (run from `prepare`); skip a single commit with
+# VP_GIT_HOOKS=0. Playwright starts its own dev server on port 8081.
+pnpm test && exec vp staged
