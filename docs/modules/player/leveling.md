@@ -56,6 +56,16 @@ Pulling a stream through Web Audio needs CORS headers, and many stations do not 
 
 Because of this, `crossOrigin` must be set **before** any `src` assignment. It is load-time state, which is why routing happens at element build time in both the live and staged paths.
 
+## Spectrum tap
+
+The desktop visualiser reuses this graph instead of building its own: an element can only ever have one `MediaElementSource`, and the measurement branch is already the perceptual curve a meter wants (60 Hz high-pass, +4 dB presence shelf). `setSpectrumTap` makes routing worth doing on its own — the engine asks `normalizeOn || spectrumTap` — so a laptop gets an analyser with leveling off. The flag is read at element build, so flipping it never interrupts a stream that is already playing.
+
+That coupling is why the routing gate and the CORS rescue gate move together. A stream routed only for the visualiser still fails on a host without headers, so the rescue now fires on `audioRouted` alone rather than `audioRouted && normalizeOn`; without that, turning leveling off would have made a visualiser-only route break playback outright.
+
+The tap is opt-in (`radioscout:visualiser`, Settings → Audio, off by default), web only, and the component only mounts at `lg` and up. The wings exist while a station plays or loads and fade out otherwise; nothing mounts on the APK.
+
+`src/lib/player/spectrum.ts` reads `getFloatFrequencyData` and maps a −60…−10 dBFS window onto log-spaced bars. The byte API clamps at −30 dB, which pins loud bass bins at full scale and leaves the meter motionless. The wing's drawn bar count is also the band count, so 60 Hz–12 kHz spans whatever fits the width — nine bars at `lg`, forty on a wide desktop — instead of the first N bands of a fixed axis. Element volume sits before the graph, so the reader adds it back (`getSpectrumVolume`) — the same invariant the leveler uses — and the shared analyser runs `smoothingTimeConstant = 0`, since only the spectrum reads frequency data and its own attack/release supplies the smoothing. `src/components/scout/AppSpectrum.tsx` owns the wings, the frame loop, the `--primary` tint and the paint; its gradients and colour strings are built once per tint or size rather than per frame.
+
 ## Native twin
 
 `LevelingAudioProcessor.java` (Android, Media3) is a port, not a second design: same target, coefficients, K-weighting and limiter placement. Since 2026-10-17 it also runs this graph's stage-1 tap — the 60 Hz high-pass (Web Audio's dB Q) then the +4 dB / 1.5 kHz shelf — over the mono down-mix before the RMS read, and reads the K tap per frame with a mono stream's right channel as silence, matching what the analyser and the splitter feed the web taps. Two divergences are deliberate: the limiter is a native brickwall where the web drives `DynamicsCompressorNode`, and native windows are 400 ms of contiguous audio rather than ~2.3 s of tick-sampled snapshots, so its per-window easings carry the 400/2340 cadence factor. `LevelingAudioProcessorTest.java` pins the port against the browser-measured curves.
@@ -64,4 +74,4 @@ Because of this, `crossOrigin` must be set **before** any `src` assignment. It i
 
 `docs/lineage.md`, 2026-10-05 (Two-stage leveling + safety limiter) records the research, the rejected approaches and the known limits. The earlier clamp-only behaviour and the AGC split are described there rather than here, since this document describes what the code does now.
 
-Tests: `tests/unit/radio-normalize.test.ts`, `tests/unit/player-leveling.test.ts`.
+Tests: `tests/unit/radio-normalize.test.ts`, `tests/unit/player-leveling.test.ts`, `tests/unit/player-spectrum.test.ts`.

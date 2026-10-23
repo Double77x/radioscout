@@ -297,6 +297,8 @@ export function applyPlayerPrefs(prefs: PlayerPrefs): void {
 let warnedFallback = false;
 /** Leveling toggle (module-owned; synced by `setNormalization`). */
 let normalizeOn = readNormalizeEnabled();
+/** Visualiser wants a spectrum tap (desktop wings; read at element build). */
+let spectrumTap = false;
 /** Car-display refresh toggle (module-owned; synced by `setCarTitleRefresh`). */
 let carRefreshOn = readCarRefreshEnabled();
 /** Web Audio graph for the live element (null while playing direct). */
@@ -335,8 +337,9 @@ function ensureAudio(): HTMLAudioElement | null {
     audio.preload = "none";
     audio.volume = snapshot.muted ? 0 : snapshot.volume;
     audio.muted = snapshot.muted;
-    // Leveling routes through Web Audio — decided BEFORE any src assignment
-    // (`crossOrigin` is load-time state and the source node binds once).
+    // Analysis (leveling, spectrum) routes through Web Audio — decided BEFORE
+    // any src assignment (`crossOrigin` is load-time state and the source node
+    // binds once).
     maybeRouteAudio(audio);
     // Quick resume: point the fresh element at the restored station (no
     // fetch until play — preload stays "none"). Empty URL means the stored
@@ -417,7 +420,7 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
         // graph can only read CORS-clean streams). Rescue once per element:
         // remember the host, rebuild direct, replay — genuinely offline
         // stations just fail again with the standard error below.
-        if (audioRouted && normalizeOn && snapshot.station && !retriedDirect) {
+        if (audioRouted && snapshot.station && !retriedDirect) {
           retriedDirect = true;
           // A bridged element's `src` is an opaque `blob:` — the playlist
           // URL carries the host that must be marked unanalyzable.
@@ -473,19 +476,20 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
  * in `lib/player/leveling` — this wrapper supplies the session flags.
  */
 function canRouteStation(station: Station | null): boolean {
-  return canRouteLeveling(station, normalizeOn, blockedHosts);
+  return canRouteLeveling(station, normalizeOn || spectrumTap, blockedHosts);
 }
 
 /**
- * Route a fresh (sourceless) element through the leveling graph. Skipped
- * when the toggle is off, Web Audio is unavailable, or the pending station's
- * host already proved unanalysable this session. Run construction lives in
- * `lib/player/leveling` — the flags stay here.
+ * Route a fresh (sourceless) element through the analysis graph. Skipped when
+ * neither the leveler nor the visualiser wants analysis, Web Audio is
+ * unavailable, or the pending station's host already proved unanalysable this
+ * session. Run construction lives in `lib/player/leveling` — the flags stay
+ * here.
  */
 function maybeRouteAudio(element: HTMLAudioElement): void {
   audioRouted = false;
   retriedDirect = false;
-  const run = routeLevelingAudio(element, snapshot.station, normalizeOn, blockedHosts);
+  const run = routeLevelingAudio(element, snapshot.station, normalizeOn || spectrumTap, blockedHosts);
   if (!run) {
     audioRouted = false;
     return;
@@ -653,6 +657,29 @@ export function setCarTitleRefresh(enabled: boolean): void {
   carRefreshOn = enabled;
   if (!canUseNativeAudio()) return;
   void nativeSetCarTitleRefresh(enabled).catch(() => {});
+}
+
+/**
+ * Ask the engine to keep an analyser available for the desktop visualiser.
+ * Read at element build, so a change lands on the next station start rather
+ * than interrupting the stream that is already playing.
+ */
+export function setSpectrumTap(enabled: boolean): void {
+  spectrumTap = enabled;
+}
+
+/** Live spectrum tap (null while the element plays direct). */
+export function getSpectrumAnalyser(): AnalyserNode | null {
+  return audioRouted ? normAnalyser : null;
+}
+
+/**
+ * Element volume. It sits before the graph, so the spectrum reading needs to
+ * add it back — otherwise turning the slider down shrinks the meter. The
+ * leveler divides by it for the same reason.
+ */
+export function getSpectrumVolume(): number {
+  return audio?.volume ?? 1;
 }
 
 /**

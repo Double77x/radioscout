@@ -60,6 +60,11 @@ export function buildLevelingGraph(element: HTMLAudioElement): LevelingGraph | n
     presence.gain.value = 4;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
+    // Only the spectrum wings read frequency data, and they run their own
+    // attack/release envelope. The leveler reads time-domain samples, which
+    // smoothing never touches, so leaving it at the default would only lag
+    // the wings.
+    analyser.smoothingTimeConstant = 0;
     const whisper = ctx.createGain();
     whisper.gain.value = 0.001;
     source.connect(rumble);

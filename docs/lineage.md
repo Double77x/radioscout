@@ -9,6 +9,88 @@ code and in the module contracts under [`modules/`](modules/), and this file
 never describes the present, which is exactly what stops the two from
 contradicting each other.
 
+## Index
+
+One line per entry, oldest first. `scripts/check-doc-pointers.js` keeps this in
+step with the headings below, so an entry without a line here fails the build.
+
+- 2026-09-01 — TanStack Start CSS & Font Loading Architecture
+- 2026-09-01 — Font Metric Matching & Preload Strategy
+- 2026-09-01 — CSS Keyframe Animation Stability
+- 2026-09-01 — TanStack Start Root Layout Pattern
+- 2026-09-01 — TanStack Hotkeys & Quick Find Architecture
+- 2026-09-01 — Deterministic CSS Asset Naming
+- 2026-09-01 — Inline Adaptive SVG Logo Architecture
+- 2026-09-02 — Fallow Migration (knip -> fallow)
+- 2026-09-02 — Fallow Agentic Tidy Process
+- 2026-09-02 — TanStack Start Prerender Hang
+- 2026-09-20 — Stream URL Hygiene + HTTP-only Policy
+- 2026-09-23 — HTTP Upgrade Allowlist
+- 2026-09-21 — Console-Error Sweep (mixed content + favicon 402 + React #418)
+- 2026-09-20 — Launcher Artwork Source of Truth
+- 2026-09-24 — F-Droid Build Flavor
+- 2026-09-27 — Obtainium Listing
+- 2026-09-30 — Vite+ 1.0 Migration
+- 2026-10-01 — React Compiler via plugin Oxc transform
+- 2026-10-01 — Stream Titles (dock subtitle)
+- 2026-10-01 — Edge Caching via Cache API
+- 2026-10-01 — Post-Migration Fallout (types + CI)
+- 2026-10-02 — Stream titles reach the media session, not just the dock
+- 2026-10-02 — Car skip buttons loop Saved favourites
+- 2026-10-02 — Native favourites loop (skip that survives lock/doze)
+- 2026-10-04 — Car displays that freeze on the first song
+- 2026-10-04 — BBC live metadata (tracks for HLS streams)
+- 2026-10-04 — BBC titles on the APK
+- 2026-10-04 — Artwork proxy chain (third-party cookie fix, client-side only)
+- 2026-10-05 — BBC titles missing on APK builds (canonical fallback)
+- 2026-10-05 — Song history in the detail sheet
+- 2026-10-05 — Vote count alignment (sheet vs rows)
+- 2026-10-05 — Song-history duplicates (padding variants)
+- 2026-10-05 — Tabbed detail sheet (Info/Recent/Stats)
+- 2026-10-05 — Sheet refinements (fixed height, tab memory, compact ages)
+- 2026-10-05 — Inline sheet actions (Save/Play/Vote)
+- 2026-10-05 — Icon-only sheet actions everywhere
+- 2026-10-05 — Primary state colour + pop tween
+- 2026-10-05 — Song rollup, live ages, per-station clear
+- 2026-10-05 — Filtered-home back arrow
+- 2026-10-05 — Colour flavours (Gruvbox, Nord, Sunset, Catppuccin)
+- 2026-10-05 — Theme-aware logo tile
+- 2026-10-05 — PWA offline pass (web-only)
+- 2026-10-05 — F-Droid pipeline failures (schema + rewritemeta + check apk)
+- 2026-10-05 — Workers Logs for Pages Functions
+- 2026-10-05 — Two-stage leveling + safety limiter (broadcast chain)
+- 2026-10-05 — Settle symmetry + silence-budget fixes
+- 2026-10-06 — Artwork chain order is a safety decision
+- 2026-10-06 — CSP blocked the title socket; `aria-hidden` fought `inert`
+- 2026-10-06 — BBC host allowlist: one host added, one deliberately refused
+- 2026-10-06 — Leveling trim compounding and volume-slider decoupling
+- 2026-10-06 — Unfiltered charts page until full
+- 2026-10-06 — R8 shrinking enabled for release builds (F-Droid request)
+- 2026-10-07 — F-Droid review round 2: category, committed config, autoupdate
+- 2026-10-17 — Native leveling parity (tap, mono, anchor cadence, glide)
+- 2026-10-18 — Tablet-width app frame (600px step, `md` 768px, `xl` 896px)
+- 2026-10-18 — Android permission alias could strand playback
+- 2026-10-19 — Volume arrow keys on the web dock
+- 2026-10-19 — Fresh installs started silent (missing volume key read as 0)
+- 2026-10-19 — ICY probe: caller-supplied URLs gated, reads budgeted
+- 2026-10-19 — Player dock split out of one 480-line component
+- 2026-10-20 — Fallow health pass: probes, drag, store and sheet seams
+- 2026-10-20 — APK smoke finds native pause status; device checks become repeatable
+- 2026-10-20 — Native release gates: fixture smoke, R8, permission fail-open
+- 2026-10-20 — Dependabot cooldown matches pnpm's release age
+- 2026-10-20 — Native verification follows native changes
+- 2026-10-20 — Android emulator needs KVM, not a longer timeout
+- 2026-10-20 — Gradle stays on 8.x until AGP 9
+- 2026-10-20 — Hosted runners do not all expose KVM
+- 2026-10-20 — Workflow files are checked by actionlint
+- 2026-10-20 — A composite action shell is not a workflow shell
+- 2026-10-21 — Gates run once, at the end of a task
+- 2026-10-21 — Spectrum wings tap the leveling graph
+- 2026-10-21 — Spectrum wings: opt-in, primary tint, dBFS reading
+- 2026-10-22 — AGENTS.md is rules; the decision index moved beside its entries
+- 2026-10-22 — Formatter moves to the pre-commit hook; gates scale with the change
+- 2026-10-22 — One verify gate, progressive standards, and a lint rule for effects
+- 2026-10-23 — Spectrum wings: width sets the bands, paint reuses its skin
 ## How this fits the other docs
 
 Current truth has two homes: the code, and the module contract its file header
@@ -451,3 +533,80 @@ Verify now runs actionlint, the standard checker for workflow files, in the web 
 ### 2026-10-20 · A composite action shell is not a workflow shell
 
 A composite action step that declares `shell: bash` runs as `bash --noprofile --norc -e -o pipefail`, while a workflow step's default shell is `bash -e`. The extra pipefail turned `yes | sdkmanager --licenses` into a broken pipe: `yes` was killed once sdkmanager had what it needed, and the step died before the emulator ever started. The licence step now tolerates the broken pipe in every workflow, and the composite action treats each acceleration command as optional, because the host may expose no `/dev/kvm` at all.
+
+### 2026-10-21 · Gates run once, at the end of a task
+
+Agents were running lint, format, build and tests between increments of one feature. Nothing in force asked for it. Every gate instruction was worded "before finishing", "after each feature" or "before opening a pull request", and §17 branched only on the size of a change. The drift came from three things.
+
+`pnpm format` sat in build-gate lists even though it writes and belongs to the commit. Run mid-task it reformats files nobody has touched yet, so the diff stops showing the change and the reviewer reads reformatting instead. That is the noise `REFACTOR_ZERO_REGRESSION_GATES.md` names as the reason for the gate in the first place. It is out of the feature stack in `AGENTS.md` and §17 now; the README pull-request list keeps `pnpm format:check`, which is what `verify.yml` runs.
+
+§17's small-change tier pointed at `lint-files`, a script that does not exist. An agent that found a stale pointer took the expensive branch and ran the full `pnpm lint`, then did the same for the next file. The tier now names `pnpm exec vp lint <files>`, which `vp lint --help` confirms takes a path list.
+
+"after each feature" and "as they land gated" read as "per increment" once a feature has increments. §17 opens with the cadence now, and keeps the two exceptions that are real: pulling a UI primitive (one file, and the point is proving no dead exports) and a move-only refactor slice, where a red gate means revert rather than fix-forward.
+
+The cost is that nothing checks a half-built feature, so a mid-task break surfaces at the end with more code to search. That is the trade: one unambiguous red run against the finished change, instead of several green runs against states nobody ships.
+
+
+### 2026-10-21 · Spectrum wings tap the leveling graph
+
+The desktop visualiser needed a spectrum from the real stream, not a decorative animation. There is only one way to read an `HTMLAudioElement` through Web Audio: `createMediaElementSource` binds once per element and throws on a second call, so the wings either share the leveling graph or build nothing. A parallel graph would have meant a second audio context and a second fetch of the same stream, and the graph already exposes the tap a meter wants — the 60 Hz high-pass and +4 dB presence shelf on the perceptual branch.
+
+Leveling defaults off, which was the crux: `readNormalizeEnabled` accepts only a stored "1", so on a fresh install there is no graph and the wings would have had nothing to read. Two options were on the table. Always route web playback through Web Audio, which removes the user's choice of the direct path and makes every station pay the CORS attempt. Or let the visualiser ask for routing on its own. The second confines the change: the engine now reads `normalizeOn || spectrumTap`, and the tap flag comes from a component that only mounts on the web at `lg` and up, so phones and the APK keep exactly the path they had.
+
+The flag is read at element build. Setting it does not rebuild the playing element, because a rebuild costs a moment of silence and the visualiser is not worth one; a session that starts at phone width and is resized on gets its spectrum at the next station. That limit is deliberate and visible in the source rather than worked around.
+
+The coupling exposed a real bug in the rescue. A routed stream without CORS headers fails its load, and the player rescues to direct playback once per element — but the rescue was gated on `audioRouted && normalizeOn`. Routing for the visualiser with leveling off would have hit that path with the gate closed and broken playback instead of falling back. The gate is now `audioRouted`: routing implies intent, whoever asked. The staged handoff already routed through `canRouteStation`, so it picked up the new flag for free.
+
+The cost is that a desktop now attempts Web Audio on hosts a phone plays direct, so the first play of a non-CORS station on a laptop costs one failed load and a replay. That is bounded by `blockedHosts`, which remembers the host for the session, and it is the only way to get a real spectrum without lying about what the audio is doing.
+
+### 2026-10-21 · Spectrum wings: opt-in, primary tint, dBFS reading
+
+The first cut was wrong in use on three counts. It mounted on every laptop, so every desktop paid the routing attempt the entry above calls bounded but real; it tinted with `--scout-moss`, a fixed green that ignored theme and flavour; and it read `getByteFrequencyData`, which maps −100…−30 dBFS and clamps louder bins, so the loudest bass sat pinned at 255 and the meter barely moved.
+
+The feature now has its own key, `radioscout:visualiser`, off by default and exposed as Settings → Audio on web only. The component reads the key, so a flip mounts the wings and asks the engine for the tap without a reload, and the default install keeps the direct path it had.
+
+The tint is `--primary`, which follows light/dark and every flavour. Only the default light palette pairs a pale mint with pale fog; blending that toward `--foreground` to gain contrast drained the hue into grey, so the pale case is darkened in HSL instead, which keeps the hue at a lightness that reads on the fog. Dark and the flavours already have contrast and pass through untouched.
+
+The reader takes `getFloatFrequencyData` over a −60…−10 dBFS window, so there is headroom above the loudest bin and hits read as hits rather than as a pinned wall. Element volume sits before the graph, so the reader adds it back — the same invariant the leveler enforces — because otherwise the meter shrank with the volume slider. `smoothingTimeConstant` drops to 0 on the shared analyser: the leveler reads time-domain samples, which smoothing never touches, and the wings run their own attack/release.
+
+The wings also only exist while a station plays or loads. Paused, idle and errored states fade the wrapper out and stop the frame loop, rather than resting at a floor that implied audio was still there.
+
+The cost is thirty lines of colour maths that a single `color-mix()` would have covered if canvas resolved one, and a spectrum that still waits for the next element build after the setting is flipped mid-stream.
+
+### 2026-10-22 · AGENTS.md is rules; the decision index moved beside its entries
+
+`AGENTS.md` carried 73 index lines for this log and an eleven-entry `useEffect` inventory. Neither is a rule for the next task: the index is wanted when browsing why, the inventory when adding an effect. Together they were 40% of a file the harness injects on every turn, which sat at 96% of its 12,000-byte budget, so a new rule had to displace something useful.
+
+The index now opens this file, beside the entries it names, and check 6 of `scripts/check-doc-pointers.js` holds it there — the same correspondence, moved with it. The `useEffect` inventory moved to `plans/REFACTOR_PERFORMANCE_USEEFFECT.md` §5 and was re-derived, because the old list had missed thirteen call sites; the rule stays in `standards/CODING_STANDARDS.md` §3.E and in shortened form in `AGENTS.md`. The UI primitive enumeration went entirely: it named `breadcrumb`, `select`, `table` and `tabs`, none of which exist, omitted `segmented-control`, and pointed at a `dialog.tsx` that the same paragraph said did not exist. A rule that enumerates files needs a check or nothing.
+
+The cost is that browsing decisions now opens this file instead of grepping the injected one. The index is still one grep away, `AGENTS.md` is down to 43% of its budget, and a rule added there no longer has to evict a history line to fit.
+
+### 2026-10-22 · Formatter moves to the pre-commit hook; gates scale with the change
+
+Agents were running `vp fmt` and the full gate stack between edits. Formatting is mechanical and belongs to the commit: run mid-task it rewrites files nobody is working on and buries the real diff in reformatting. The gates were the same instinct applied to tests, where a full run after each increment proves nothing about a state that is about to change again.
+
+The repository now uses Vite+'s hook dispatcher. `.vite-hooks/pre-commit` runs `vp staged`, which formats only the staged files through the `staged` block in `vite.config.ts`; `prepare` (`vp config --no-agent`) installs the dispatcher on a fresh clone, and `VP_GIT_HOOKS=0` skips it for one commit. The glob is explicit because `vp fmt` errors when every path it receives is unformattable, which a PNG-only commit would otherwise hit. CI keeps `pnpm format:check`, so a commit made with hooks disabled still fails the gate.
+
+The written rule is now magnitude-based: scoped lint, the failing test, and `tsc -b` only when a type crosses a boundary; the full stack when the change is large or about to be committed, run once at the end of the phase. The two per-step exceptions stay, because each means the next file builds on this one or a red gate means revert. The formatter leaves the gate lists in `AGENTS.md`, `CODING_STANDARDS.md` §17 and the README entirely.
+
+The cost is that a formatter failure now blocks a commit instead of being noticed later, and a commit that stages a large file set pays formatting time it did not before. Both are cheaper than the churn the old habit produced.
+
+### 2026-10-22 · One verify gate, progressive standards, and a lint rule for effects
+
+The workflow had two kinds of drift. `AGENTS.md` told an agent to read four standards before any task, which is cheap to say and expensive to do: most tasks touch one of them, and the instruction competed with the work itself. Separately, the definition of green lived in four places — `AGENTS.md`, `CODING_STANDARDS.md` §17, the README and a CI job that listed the same six commands — so an edit to one could leave the other three stale.
+
+`AGENTS.md` is now the only always-read file. A standard is opened when the task touches its area: `CODING_STANDARDS.md` for code (§15 always, plus the relevant section), `STYLE_GUIDE.md` for UI, `TECH_STACK.md` for the toolchain, `ARCHITECTURE.md` for structure. This is the trigger table the docs argued against, and that argument was right about the failure it saw: the old instruction read all of `docs/`, had no boundary, and stopped being obeyed. The new one is bounded by a folder, gated by `check-doc-pointers.js`, and keeps §15 unconditional for the work that can break the checkout. The evidence points the same way: a 12-line `AGENTS.md` beat a long one on an ambiguous task (27% less wall time, 24% fewer credits, 26% smaller diff), while an arXiv evaluation of context files found human-written ones bought about 4% success at 20% more cost and LLM-generated ones lost 3%.
+
+`pnpm verify` is now the gate: lint, format check, unit tests, the build (with `tsc -b`, prerender and the doc-pointer check) and Fallow. CI calls this script as one step instead of repeating the steps, so its contents cannot drift from CI; actionlint and Playwright stay separate. Scoped commands stay for iteration; the full script is for the end of a phase. The written rules also say to run one test rather than the suite, to change only what the task needs, and to quote evidence rather than claim a pass. A multi-file or behavioural change gets a fresh-context review of its diff, because the agent that wrote it is the worst reader of its own blind spots.
+
+The `useEffect` audit was a table with no enforcement. `scout/no-unjustified-effect`, a local Oxlint plugin in `lint/`, caps each file at its audited count (24 sites across 15 files). A new call fails lint; raising the quota is the mechanical half of adding a site and needs a row in the audit, so the count and the justification move together. The rule counts calls, not quality — it cannot tell a subscription from a state sync — but it makes the default path the one that needs a decision. Test integrity joins the standing prohibitions: never delete, skip, loosen or re-fixture a test to get a green gate.
+
+The cost is maintenance. A legitimate new effect now edits two places, and a file split or rename edits the quota map; the map is small enough to keep in `toolchain.config.ts` beside the rule. Progressive reading can miss a standard when a task's area is misjudged, which is why §15 and the pointer check stay unconditional. The evidence is directional rather than a guarantee: the benchmark that favoured the short file tested one ambiguous task, and the context-file study measured a different setting.
+
+### 2026-10-23 · Spectrum wings: width sets the bands, paint reuses its skin
+
+The review before commit found two things the feature had been hiding. The reader was built once with `MAX_BARS` bands — a fixed 60 Hz–12 kHz axis cut into forty slices — while each wing drew only the bars that fit: nineteen at 1440 px. Drawing a prefix of a fixed axis is not a narrower spectrum, it is a truncated one. A 19-bar wing showed 60–756 Hz and nothing above it, so presence and vocals never appeared, while the comments ("outer bars fade", "the loudest bin owns the bar") described a full-range meter it was not. The reader now takes the drawn band count from the wing, rebuilds its edges when that count changes, and clears the envelopes because the same index would otherwise map to a different frequency. `tests/unit/player-spectrum.test.ts` pins the top band with a single loud bin, which is the assertion the old code would have failed.
+
+The paint path also allocated about a hundred short-lived objects per frame — four gradients, two closures, a lifted colour array and a colour string per spark — for a layer that only changes when the tint or the wing's size does. The tint and gradients now live in a per-wing skin, spark alphas ride `globalAlpha` rather than new colour strings, and the size is read once per frame and shared by both wings and the reader. Only the analyser read allocates nothing; the rest of the loop is now allocation-free.
+
+Spacing follows from the same fix: `barCountFor` caps the run at forty, and the step is `width / bars`, so a wide wing spreads its bars to the full width instead of stopping mid-fade at 41% opacity around 2050 px. The cost is a little more state — a skin per wing and a band count that can change on resize — and a reader that re-derives its edges when the width crosses a bar boundary: a few allocations on resize against a hundred per frame.

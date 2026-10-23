@@ -12,6 +12,7 @@ import { LocationPicker } from "@/components/radio/LocationPicker";
 import { NormalizeSwitch } from "@/components/radio/NormalizeSwitch";
 import { CarRefreshSwitch } from "@/components/radio/CarRefreshSwitch";
 import { TitlesSwitch } from "@/components/radio/TitlesSwitch";
+import { SpectrumSwitch } from "@/components/radio/SpectrumSwitch";
 import { QualityPicker } from "@/components/radio/QualityPicker";
 import { SleepTimerPicker } from "@/components/radio/SleepTimerPicker";
 import { useSleepCountdown } from "@/hooks/use-sleep-countdown";
@@ -183,6 +184,9 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
               <>
                 <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
                   <TitlesSwitch />
+                </div>
+                <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
+                  <SpectrumSwitch />
                 </div>
                 <div className='mt-2 rounded-2xl border border-border bg-card p-3'>
                   <SleepTimerPicker />

@@ -32,16 +32,17 @@ import {
 import { pickPlayableUrl, type Station } from "@/lib/radio/types";
 
 /**
- * Whether a station's host can be routed through Web Audio (leveling needs
- * CORS headers; remembered-blocked hosts play direct). Pure lookup — the
- * caller decides what to do with a `false`.
+ * Whether a station's host can be routed through Web Audio. Routing serves
+ * the leveler and the visualiser's spectrum tap alike, and both need CORS
+ * headers; remembered-blocked hosts play direct. Pure lookup — the caller
+ * decides what to do with a `false`.
  */
 export function canRouteLeveling(
   station: Station | null,
-  normalizeOn: boolean,
+  routingOn: boolean,
   blockedHosts: ReadonlySet<string>,
 ): boolean {
-  if (!normalizeOn || typeof AudioContext === "undefined") return false;
+  if (!routingOn || typeof AudioContext === "undefined") return false;
   if (!station) return true;
   const host = hostOf(pickPlayableUrl(station));
   return host === null || !blockedHosts.has(host);
@@ -59,18 +60,18 @@ export interface LevelingRun {
 }
 
 /**
- * Build the leveling run for a fresh (sourceless) element. Null when the
- * toggle is off, Web Audio is unavailable, the host proved unanalysable, or
- * the graph build fails — every null plays direct. A fresh run starts at
- * unity in the fast settle phase.
+ * Build the leveling run for a fresh (sourceless) element. Null when routing
+ * is off, Web Audio is unavailable, the host proved unanalysable, or the graph
+ * build fails — every null plays direct. A fresh run starts at unity in the
+ * fast settle phase.
  */
 export function routeLevelingAudio(
   element: HTMLAudioElement,
   station: Station | null,
-  normalizeOn: boolean,
+  routingOn: boolean,
   blockedHosts: ReadonlySet<string>,
 ): LevelingRun | null {
-  if (!canRouteLeveling(station, normalizeOn, blockedHosts)) return null;
+  if (!canRouteLeveling(station, routingOn, blockedHosts)) return null;
   const graph = buildLevelingGraph(element);
   if (!graph) return null;
   return {

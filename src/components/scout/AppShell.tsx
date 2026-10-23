@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { AppSpectrum } from "./AppSpectrum";
 import { PlayerDock } from "../radio/PlayerDock";
 import { StationDetailSheet } from "../radio/StationDetailSheet";
 import { SwipeBack } from "./SwipeBack";
@@ -22,6 +23,9 @@ interface AppShellProps {
  * The top padding is the system status-bar inset (Android 15+ edge-to-edge,
  * iOS notch). It self-corrects: 0 on desktop browsers and pre-inset WebViews,
  * status-bar height where the WebView draws under the system bars.
+ *
+ * `AppSpectrum` renders outside the column, so the desktop wings sit on the
+ * fog in the gutters rather than inside the frame.
  */
 export function AppShell({ children }: AppShellProps) {
   const closeDetail = useCloseStationDetail();
@@ -46,6 +50,7 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className='min-h-dvh bg-scout-fog'>
+      <AppSpectrum />
       <div className='mx-auto flex min-h-dvh w-full max-w-107.5 flex-col bg-background pt-[env(safe-area-inset-top)] sm:border-x sm:border-border min-[600px]:max-w-2xl md:max-w-3xl xl:max-w-4xl'>
         <SwipeBack>
           {children}
