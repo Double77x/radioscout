@@ -111,18 +111,18 @@ crawls links to emit static HTML for every route into `dist/client`.
 
 ## Tooling
 
-| Area            | Choice                                                                                                                                                                                                                      |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Build           | Vite 8 with Rolldown (`minify: oxc`, `target: esnext`, `cssCodeSplit: true`)                                                                                                                                                |
-| Chunking        | Narrow `codeSplitting.groups` vendor chunks: react, tanstack, base-ui, lucide, sonner, fuse, zod, dexie, themes. `rollup-plugin-visualizer` writes `bundle-analysis-client.html`                                            |
-| Types           | TypeScript 7 with `tsc -b`. No `any`                                                                                                                                                                                        |
-| Styles          | Tailwind CSS v4 via `@tailwindcss/vite` and `@theme` in `src/styles/index.css`                                                                                                                                              |
-| Lint and format | `oxlint` and `oxfmt`, both on Rust via `oxc`, so they are fast enough to keep on save. Config in `.oxlintrc.json` and `.oxfmtrc.json`                                                                                       |
-| Hydration lint  | The `react-doctor` oxlint plugin flags `new Date()` in render, `crypto.randomUUID()` in initial state, `useEffect(setState)` cascades, missing `aria-label`, `blur-2xl` and `transition-all`. Full list in `.oxlintrc.json` |
-| Unit tests      | Vitest 5 in `tests/unit`, with `@testing-library/react` and `jest-dom`                                                                                                                                                      |
-| e2e and a11y    | Playwright with `@axe-core/playwright`. `pnpm test` runs both suites                                                                                                                                                        |
-| UI primitives   | Base UI styled with shadcn patterns. Add one with `pnpm dlx shadcn@latest add <name> --yes`, then rewire `@radix-ui/*` to `@base-ui/react/*`                                                                                |
-| Dead code       | Fallow, configured in `fallow.toml`. `npx fallow audit --format json --quiet` is the gate: 0 clean, 1 findings, 2 error envelope                                                                                            |
+| Area            | Choice                                                                                                                                                                                                                           |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build           | Vite 8 with Rolldown (`minify: oxc`, `target: esnext`, `cssCodeSplit: true`)                                                                                                                                                     |
+| Chunking        | Narrow `codeSplitting.groups` vendor chunks: react, tanstack, base-ui, lucide, sonner, fuse, zod, dexie, themes. `rollup-plugin-visualizer` writes `bundle-analysis-client.html`                                                 |
+| Types           | TypeScript 7 with `tsc -b`. No `any`                                                                                                                                                                                             |
+| Styles          | Tailwind CSS v4 via `@tailwindcss/vite` and `@theme` in `src/styles/index.css`                                                                                                                                                   |
+| Lint and format | `oxlint` and `oxfmt`, both on Rust via `oxc`, so they are fast enough to keep on save. Config in `toolchain.config.ts`                                                                                                           |
+| Hydration lint  | The `react-doctor` oxlint plugin flags `new Date()` in render, `crypto.randomUUID()` in initial state, `useEffect(setState)` cascades, missing `aria-label`, `blur-2xl` and `transition-all`. Full list in `toolchain.config.ts` |
+| Unit tests      | Vitest 5 in `tests/unit`, with `@testing-library/react` and `jest-dom`                                                                                                                                                           |
+| e2e and a11y    | Playwright with `@axe-core/playwright`. `pnpm test` runs both suites                                                                                                                                                             |
+| UI primitives   | Base UI styled with shadcn patterns. Add one with `pnpm dlx shadcn@latest add <name> --yes`, then rewire `@radix-ui/*` to `@base-ui/react/*`                                                                                     |
+| Dead code       | Fallow, configured in `fallow.toml`. `npx fallow audit --format json --quiet` is the gate: 0 clean, 1 gate fail, 2 error envelope                                                                                                |
 
 ## Project structure
 
@@ -255,11 +255,11 @@ If you know a station that upgrades cleanly:
 
 ## For agents
 
-Start at [`docs/README.md`](docs/README.md). It maps the tiers and names the
-trigger for each one. The short version:
+Start at [`AGENTS.md`](AGENTS.md). It carries the rules and points at each
+standard; open one when the task touches its area:
 
-1. `docs/standards/CODING_STANDARDS.md` — the rules, and the only file required
-   on every task
+1. `docs/standards/CODING_STANDARDS.md` — any code change; §15 always, plus the
+   section for the area
 2. `docs/standards/STYLE_GUIDE.md` — if the change touches UI
 3. `docs/standards/TECH_STACK.md` — if the change touches dependencies, the build
    or CI
@@ -276,18 +276,18 @@ worth reading as worked examples:
 - `src/components/scout/SwipeBack.tsx` and `src/lib/animated-back.ts` — gesture
   and OS-back coordination
 
-Gates to pass before opening a pull request:
+Gates to pass once, when the change is complete, before opening a pull request:
 
 ```bash
-pnpm lint                            # vp lint (oxlint)
-pnpm format                          # vp fmt
-npx tsc -b --noEmit                  # typecheck
-pnpm exec vp run build               # must prerender 9 routes
-npx fallow audit --format json --quiet 2>/dev/null
-# 0 = clean, 1 = findings, 2 = error envelope
-pnpm test:unit                       # vp test (vitest)
-pnpm test                            # playwright + axe
+pnpm verify                          # lint, format, unit, build + prerender, Fallow
+pnpm test:e2e                        # playwright + axe, when the change reaches the radio UI
 ```
+
+`pnpm verify` is the single gate CI runs as one step; CI also runs actionlint
+and Playwright. Passing verify locally covers the same web checks apart from
+those two. Commits format their staged files through the Vite+ pre-commit hook
+(`.vite-hooks/pre-commit`); `pnpm verify` includes `pnpm format:check` for a
+commit made with `VP_GIT_HOOKS=0`.
 
 `fallow.toml` holds the baseline for `dead-code`, `dupes` and `health`. Run
 `fallow dead-code --trace src/file:export` before deleting a flagged export; the
@@ -299,10 +299,12 @@ Tailwind and oxlint plugins produce false positives. See
 [`docs/README.md`](docs/README.md) is the index. The folders split by _when_ you
 read them:
 
-- `docs/standards/` — **read all of it, every task.** `CODING_STANDARDS.md` (hooks,
-  state, performance, a11y, Fallow, comments and docs), `STYLE_GUIDE.md` (tokens,
-  layout, motion), `TECH_STACK.md` (versions and rationale), `ARCHITECTURE.md`
-  (system map, routing, SSG lifecycle, data flow, native shell)
+- `docs/standards/` — open the standard the task needs. `CODING_STANDARDS.md`
+  (hooks, state, performance, a11y, Fallow, comments and docs) for any code
+  change, §15 always; `STYLE_GUIDE.md` (tokens, layout, motion) for UI;
+  `TECH_STACK.md` (versions and rationale) for dependencies or the build;
+  `ARCHITECTURE.md` (system map, routing, SSG lifecycle, data flow, native
+  shell) for structure
 - `docs/modules/` — per-module contracts, paths mirroring `src/`
 - `docs/lineage.md` — append-only decision log: what was chosen, why, and what it
   cost. Search this first when tracing a problem
@@ -336,12 +338,7 @@ GitHub repository.
 2. Keep the gates green:
 
    ```bash
-   pnpm lint
-   pnpm format
-   npx tsc -b --noEmit
-   pnpm exec vp run build
-   npx fallow audit --format json --quiet 2>/dev/null
-   pnpm test:unit
+   pnpm verify
    ```
 
 3. Add tests for new hooks or anything in `src/lib`. Pure functions are the

@@ -130,3 +130,8 @@ blob-report/
 # Local LLM / Agent Context
 GEMINI.md
 .fallow/
+
+# -----------------------------------------------------------------------------
+# Vite+ hooks (generated dispatcher; project hooks in .vite-hooks/ are tracked)
+# -----------------------------------------------------------------------------
+.vite-hooks/_

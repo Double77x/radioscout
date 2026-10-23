@@ -2,16 +2,18 @@
 
 This is the entry point for AI coding agents in this repo. Human docs: `README.md`.
 
+It carries rules, pointers and the facts a task needs on every run. Reasoning, history and audits belong in `docs/`; a fact that is only useful once belongs there rather than here.
+
 ## Read first
 
-Read **all four** of these before any task. They are the contractual and procedural surface of the codebase, and together they are small enough to read every time:
+`AGENTS.md` is the only file to read before every task. Open a standard when the task touches its area (all four live in `docs/standards/`):
 
-- `docs/standards/CODING_STANDARDS.md` — the rules: hooks, state, performance, a11y, Fallow, comments and docs, plus the standing prohibitions and verification traps in §15
-- `docs/standards/STYLE_GUIDE.md` — tokens, layout and motion
-- `docs/standards/TECH_STACK.md` — what is installed, and why
-- `docs/standards/ARCHITECTURE.md` — the system map: modules, routing and the SSG lifecycle, data flow, native shell
+- `CODING_STANDARDS.md` — any code change; §15 (prohibitions and traps) always, plus the section for the area you touch
+- `STYLE_GUIDE.md` — UI, layout, motion and tokens
+- `TECH_STACK.md` — dependencies, build or toolchain changes
+- `ARCHITECTURE.md` — modules, routing, the SSG lifecycle, data flow or native shell
 
-`scripts/check-doc-pointers.js` fails the build if a file lands in `docs/standards/` without appearing in this list, so adding a standard means adding it here.
+`scripts/check-doc-pointers.js` fails the build if a file lands in `docs/standards/` without appearing in this list, so adding a standard means adding it here. It also holds this file to a 12,000-byte budget, so a new rule has to displace one.
 
 Everything else is on demand. [`docs/README.md`](docs/README.md) is the map for the rest.
 
@@ -21,173 +23,37 @@ Scout is a TanStack Start (SSG) starter on Cloudflare Pages — `radioscout.page
 
 ## Decision log
 
-One line per decision, oldest first. The full text lives in `docs/lineage.md`: what was chosen, why, and what it cost. That file is append-only and never describes current behaviour, so search it when you need to know `why` something ended up the way it does. Nine of the decisions have a long-form plan, and each entry links to its own from there.
+`docs/lineage.md` is the append-only record of what was decided, why, and what it cost. It opens with an index of every entry, so search it when you need to know _why_ something is the way it is; it never describes current behaviour. Standing prohibitions and verification traps are rules in force, so they live in `docs/standards/CODING_STANDARDS.md` §15 instead.
 
-Standing prohibitions and verification traps are not in the log, because they are rules in force rather than history. They live in `docs/standards/CODING_STANDARDS.md` §15.
-
-Append a new entry to `docs/lineage.md` and add its line here. Do not put the reasoning back into this file; that regrowth is what this split exists to prevent.
-
-- 2026-09-01 — TanStack Start CSS & Font Loading Architecture
-
-- 2026-09-01 — Font Metric Matching & Preload Strategy
-
-- 2026-09-01 — CSS Keyframe Animation Stability
-
-- 2026-09-01 — TanStack Start Root Layout Pattern
-
-- 2026-09-01 — TanStack Hotkeys & Quick Find Architecture
-
-- 2026-09-01 — Deterministic CSS Asset Naming
-
-- 2026-09-01 — Inline Adaptive SVG Logo Architecture
-
-- 2026-09-02 — Fallow Migration (knip -> fallow)
-
-- 2026-09-02 — Fallow Agentic Tidy Process
-
-- 2026-09-02 — TanStack Start Prerender Hang
-
-- 2026-09-20 — Stream URL Hygiene + HTTP-only Policy
-
-- 2026-09-23 — HTTP Upgrade Allowlist
-
-- 2026-09-21 — Console-Error Sweep (mixed content + favicon 402 + React #418)
-
-- 2026-09-20 — Launcher Artwork Source of Truth
-
-- 2026-09-24 — F-Droid Build Flavor
-
-- 2026-09-27 — Obtainium Listing
-
-- 2026-09-30 — Vite+ 1.0 Migration
-
-- 2026-10-01 — React Compiler via plugin Oxc transform
-
-- 2026-10-01 — Stream Titles (dock subtitle)
-
-- 2026-10-01 — Edge Caching via Cache API
-
-- 2026-10-01 — Post-Migration Fallout (types + CI)
-
-- 2026-10-02 — Stream titles reach the media session, not just the dock
-
-- 2026-10-02 — Car skip buttons loop Saved favourites
-
-- 2026-10-02 — Native favourites loop (skip that survives lock/doze)
-
-- 2026-10-04 — Car displays that freeze on the first song
-
-- 2026-10-04 — BBC live metadata (tracks for HLS streams)
-
-- 2026-10-04 — BBC titles on the APK
-
-- 2026-10-04 — Artwork proxy chain (third-party cookie fix, client-side only)
-
-- 2026-10-05 — BBC titles missing on APK builds (canonical fallback)
-
-- 2026-10-05 — Song history in the detail sheet
-
-- 2026-10-05 — Vote count alignment (sheet vs rows)
-
-- 2026-10-05 — Song-history duplicates (padding variants)
-
-- 2026-10-05 — Tabbed detail sheet (Info/Recent/Stats)
-
-- 2026-10-05 — Sheet refinements (fixed height, tab memory, compact ages)
-
-- 2026-10-05 — Inline sheet actions (Save/Play/Vote)
-
-- 2026-10-05 — Icon-only sheet actions everywhere
-
-- 2026-10-05 — Primary state colour + pop tween
-
-- 2026-10-05 — Song rollup, live ages, per-station clear
-
-- 2026-10-05 — Filtered-home back arrow
-
-- 2026-10-05 — Colour flavours (Gruvbox, Nord, Sunset, Catppuccin)
-
-- 2026-10-05 — Theme-aware logo tile
-
-- 2026-10-05 — PWA offline pass (web-only)
-
-- 2026-10-05 — F-Droid pipeline failures (schema + rewritemeta + check apk)
-
-- 2026-10-05 — Workers Logs for Pages Functions
-
-- 2026-10-05 — Two-stage leveling + safety limiter (broadcast chain)
-- 2026-10-05 — Settle symmetry + silence-budget fixes
-- 2026-10-06 — Artwork chain order is a safety decision
-- 2026-10-06 — CSP blocked the title socket; `aria-hidden` fought `inert`
-- 2026-10-06 — BBC host allowlist: one host added, one deliberately refused
-- 2026-10-06 — Leveling trim compounding and volume-slider decoupling
-- 2026-10-06 — Unfiltered charts page until full
-- 2026-10-06 — R8 shrinking enabled for release builds (F-Droid request)
-- 2026-10-07 — F-Droid review round 2: category, committed config, autoupdate
-
-- 2026-10-17 — Native leveling parity (tap, mono, anchor cadence, glide)
-- 2026-10-18 — Tablet-width app frame (600px step, `md` 768px, `xl` 896px)
-- 2026-10-18 — Android permission alias could strand playback
-
-- 2026-10-19 — Volume arrow keys on the web dock
-
-- 2026-10-19 — Fresh installs started silent (missing volume key read as 0)
-
-- 2026-10-19 — ICY probe: caller-supplied URLs gated, reads budgeted
-
-- 2026-10-19 — Player dock split out of one 480-line component
-
-- 2026-10-20 — Fallow health pass: probes, drag, store and sheet seams
-- 2026-10-20 — APK smoke finds native pause status; device checks become repeatable
-- 2026-10-20 — Native release gates: fixture smoke, R8, permission fail-open
-- 2026-10-20 — Dependabot cooldown matches pnpm's release age
-- 2026-10-20 — Native verification follows native changes
-- 2026-10-20 — Android emulator needs KVM, not a longer timeout
-- 2026-10-20 — Gradle stays on 8.x until AGP 9
-- 2026-10-20 — Hosted runners do not all expose KVM
-- 2026-10-20 — Workflow files are checked by actionlint
-- 2026-10-20 — A composite action shell is not a workflow shell
+Append an entry there and add its line to the index. Do not put the reasoning back into this file.
 
 ## UI Primitives
 
-`src/components/ui/*` holds Base UI + shadcn primitives: `accordion`, `badge`, `breadcrumb`, `button`, `input`, `popover`, `select`, `sonner`, `table`, `tabs`, `tooltip` (plus `button-variants`/`badge-variants`). Dialogs use `@base-ui/react/dialog` directly (no wrapper file). When you need another primitive, re-add the Base UI + shadcn version, not Radix:
+`src/components/ui/*` holds the Base UI + shadcn primitives. Check what is already there before adding one; when you need another, pull it and rewire its primitives from `@radix-ui/*` to `@base-ui/react/*`:
 
 ```bash
 pnpm dlx shadcn@latest add <primitive> --yes
-# e.g. pnpm dlx shadcn@latest add alert label scroll-area select separator slider switch tabs textarea --yes
 ```
 
-Then rewire the generated file from `@radix-ui/*` to `@base-ui/react/*` (see `src/components/ui/dialog.tsx` as reference) and run `pnpm lint` + `npx fallow dead-code --trace src/components/ui/<primitive>.tsx:Export` to confirm no dead code. Fallow is silenced for primitives via `fallow.toml:ignorePatterns` — remove the entry when the file is re-added.
+Dialogs use `@base-ui/react/dialog` directly — there is no wrapper file. After adding a primitive, run `pnpm exec vp lint src/components/ui/<primitive>.tsx` and `npx fallow dead-code --trace src/components/ui/<primitive>.tsx:Export`; Fallow is silenced for primitives via `fallow.toml:ignorePatterns`, so remove the entry when the file is re-added. The acquisition strategy is `docs/standards/CODING_STANDARDS.md` §2.
 
 ## Working Agreements
 
+- Search with the `grep`/`glob` tools, or `git grep` with an explicit path. Never recurse from the repo root: `node_modules`, `dist` and `android` turn a 60 ms search into a timeout.
 - Prefer `edit`/`read`/`grep`/`glob` over shell; use `skill` when a task matches a skill (Humanizer, Cloudflare, etc.).
 - Use TanStack Query (`useQuery` + `keepPreviousData`) — no `useEffect` fetch. Use Router search for URL state.
-- Run `pnpm lint`, `pnpm format`, `pnpm exec vp run build` before finishing; check `fallow audit` for dead code. Run `pnpm fdroid:check` whenever Android versioning or F-Droid listing metadata changes.
+- Scope gates to the change, then widen. Start with `pnpm exec vp lint <files>` and the failing test; reach for `tsc -b`, the build, Fallow and the full suite when the change is large or you are about to commit. Most changes never need the full stack; match the gate to the magnitude, and run it at the end of the phase rather than after every edit.
+- At the end of a phase, `pnpm verify` is the gate: lint, format check, unit tests, the build (with `tsc -b`, prerender and the doc-pointer check) and Fallow. CI runs the same script, alongside actionlint and Playwright; run `pnpm test:e2e` when an accessible name, role or radio route changes.
+- Run one test while iterating: `pnpm exec vp test tests/unit/<file>.test.ts -t "<name>"`. The full unit suite belongs to `pnpm verify`.
+- Change only what the task needs. No drive-by refactors, renames, formatting sweeps or dependency bumps; a smaller diff is faster to review and cheaper to verify.
+- Done means evidence. Quote the command and its result instead of claiming it passed. For a multi-file or behavioural change, review the diff in a fresh-context subagent before finishing.
+- Formatting is the pre-commit hook's job. `.vite-hooks/pre-commit` runs `vp staged` (`vp fmt`) on the files in the commit, installed by `prepare`. Do not run the formatter mid-task; if hooks are disabled, run `pnpm format` before committing. `pnpm verify` runs `pnpm format:check` as part of the gate.
+- `fallow audit` is a per-feature gate, not a per-file one; run `fallow dead-code --trace` before deleting anything it flags. Run `pnpm fdroid:check` whenever Android versioning or F-Droid listing metadata changes.
 - Before finishing, ask whether your change made a document wrong: behaviour a module doc describes means that doc gets updated in the same change, and a decision or a new constraint means a `docs/lineage.md` entry or a §15 rule. The table is in `docs/standards/CODING_STANDARDS.md` §24.
 - Git commits from a non-interactive shell must pass `-m` (or `GIT_EDITOR=true`): `core.editor` is VS Code `--wait`, so a commit without a message waits on an editor tab forever.
 
-## useEffect Discipline (2026-09-10)
+## useEffect Discipline
 
-`useEffect` is a last resort, not a lifecycle tool. Reach for these first, in order:
+`useEffect` is a last resort. Reach for these first, in order: derive in render or `useMemo`; `on*` props on the element that owns the interaction; `@tanstack/react-hotkeys` rather than a hand-rolled keydown listener; TanStack Query for async data; Router search params for shareable state; refs written alongside their setters.
 
-1. Derive in render / `useMemo` — never sync state with an effect.
-2. `on*` props on the element that owns the interaction — a focused dialog's keys bubble through its popup (`CommandPalette.tsx`), no `document.addEventListener` needed.
-3. `@tanstack/react-hotkeys` (`useHotkey` + `enabled`) — never hand-roll global keydown listeners.
-4. TanStack Query for async data, Router search params for shareable state.
-5. Write refs alongside their state setters when every writer is known.
-
-New `useEffect` calls need a justification comment and an entry below. The audited
-inventory (all load-bearing, no declarative alternative found 2026-09-10):
-
-- `CommandPalette.tsx:144` — search-input focus timer (dialog focus trap settles after mount; `autoFocus` loses the race).
-- `CommandPalette.tsx:154` — `open-command-palette` global event subscription (cross-component signal without prop drilling).
-- `NativeShell.tsx` — Capacitor StatusBar/Splash imperative APIs + App back-button and OTA update subscriptions (native bridge, client-only by construction).
-- `SavedStations.tsx` — unmount mid-drag aborts the gesture listeners (they own no state).
-- `RadioHeader.tsx` — search-input focus subscription (`focus-radio-search` event + fine-pointer autofocus on mount; no declarative alternative for cross-component focus).
-- `SwipeBack.tsx:81` — back-animator registration/cleanup (subscription by nature).
-- `NativeShell.tsx` OTA check — one-shot native boot check with an AbortController-owned fetch (not reactive data; Query would add a subscription lifecycle to a fire-and-forget bridge call).
-- `Home.tsx` — `open-home-section` global event subscription (command palette lives outside Home; expands the accordion section before scrolling it into view).
-- `RadioHeader.tsx` — search-box draft adoption (URL writes come from typing, chips, clear, back/forward and palette jumps; adopting a still-committing navigation while focused is what yanked the cursor mid-word).
-- `RecentTracks.tsx` — 30s interval re-render so wall-clock song ages stay honest between title banks (time has no reactive source; unmount clears it). Moved out of `StationDetailSheet.tsx` in the 2026-10-20 split.
-- `use-dock-volume.ts` — volume overlay auto-hide timer cleanup (the handle is imperative; unmount must cancel a staged close). Moved out of `PlayerDock.tsx` in the 2026-10-19 split.
+A new effect needs a justification comment at the call site and a line in the audit. `scout/no-unjustified-effect` caps each file at the count in `toolchain.config.ts`, so the call that exceeds it fails lint; raising the count is the mechanical half of adding a site and needs an audit row. The full rule is `docs/standards/CODING_STANDARDS.md` §3.E, and the audited exceptions are `docs/plans/REFACTOR_PERFORMANCE_USEEFFECT.md` — re-derive them with `grep -rn "useEffect(" src`, because the table's line numbers are a snapshot.

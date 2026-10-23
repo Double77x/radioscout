@@ -63,6 +63,7 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
   - **URL state:** use **TanStack Router** search params.
   - **Derived values / state synchronization:** compute in the render body or use `useMemo`/`useReducer` (see C above).
 - **When it is acceptable:** only for genuinely imperative, browser-integration work with no declarative API — e.g. imperative DOM/scroll/library integrations, subscriptions, or event listeners — and even then keep it minimal, scoped, and side-effect-only.
+- **The audited exceptions:** every call site in `src` is listed in `docs/plans/REFACTOR_PERFORMANCE_USEEFFECT.md` with what makes it imperative. A new effect needs a justification comment at the call site and a line in that audit; re-derive the list with `grep -rn "useEffect(" src` before trusting the line numbers, which move.
 
 ## 4. Logic Isolation & structure
 
@@ -182,7 +183,7 @@ When a feature requires a new UI element (e.g., Progress Bar, Command Menu, etc.
 
 ## 15. AI Agent Protocol
 
-- **Context First:** Read every file in `docs/standards/` before any task — `CODING_STANDARDS.md` (this file), `STYLE_GUIDE.md`, `TECH_STACK.md` and `ARCHITECTURE.md`. `AGENTS.md` lists them and `scripts/check-doc-pointers.js` fails the build if a standard is added without appearing there. The rest of `docs/` is on demand: `docs/README.md` is the map, a module's own file header points at its contract, and `docs/lineage.md` answers *why* something is the way it is.
+- **Context First:** `AGENTS.md` is the only always-read file. Open a standard when the task touches its area: `CODING_STANDARDS.md` for any code change (this file; §15 always, plus the section for the area), `STYLE_GUIDE.md` for UI, layout, motion and tokens, `TECH_STACK.md` for dependencies, build or toolchain changes, and `ARCHITECTURE.md` for modules, routing, the SSG lifecycle, data flow or the native shell. `AGENTS.md` lists them and `scripts/check-doc-pointers.js` fails the build if a standard is added without appearing there. The rest of `docs/` is on demand: `docs/README.md` is the map, a module's own file header points at its contract, and `docs/lineage.md` answers *why* something is the way it is.
 - **Adherence:** Strictly follow the standards defined in `CODING_STANDARDS.md`.
 - **Memory:** Update `ROADMAP.md` or `ARCHITECTURE.md` if you make significant structural changes.
 
@@ -200,6 +201,7 @@ In force now, not history. Each exists because breaking it causes damage that is
 - **Never commit a fixture private key, or trust a committed test CA in production.** Generate the Android smoke CA and server certificate on demand, keep the PKCS#12 out of Git, and merge only the public CA into debug/releaseTest resources. The release network-security config stays on the main config. A committed key turns a debug-only trust exception into a reusable MITM credential; a generated key keeps the boundary local. (`docs/lineage.md`, 2026-10-20)
 - **Never widen `/api/icy-title` past `isProbeableStreamUrl`, or remove the probe's interval/byte caps.** The function fetches a caller-supplied URL, so scheme, embedded credentials, loopback/private literals and URL length are checked before any request, and `fetchIcyTitles` stops at a metadata-interval ceiling and a byte budget. A host allowlist is not the fix (the directory is third-party and the client may hold a resolved variant); per-IP throttling belongs in a Cloudflare rate-limit rule. (`docs/lineage.md`, 2026-10-19)
 - **Keep the npm Dependabot cooldown at least as long as `minimumReleaseAge`.** A shorter cooldown opens version-update pull requests for packages pnpm then rejects, so the install fails before any check runs. Security updates bypass Dependabot's cooldown; if one lands inside the seven-day window, add an explicit `minimumReleaseAgeExclude` rather than lowering the gate. (`docs/lineage.md`, 2026-10-20)
+- **Never weaken a test to get a green gate.** Deleting a test, adding `.skip`, loosening an assertion, widening a matcher or editing a fixture so the old behaviour passes hides the regression the test exists to catch. Fix the code; when the test encoded the wrong contract, change it deliberately and say why in the diff.
 
 ### Verification traps
 
@@ -231,14 +233,21 @@ Signals that look conclusive and are not. Each has already produced a wrong conc
 
 ## 17. Verification & Quality Control
 
-- **Small Changes (Components/Logic):**
-  - Perform a targeted lint check on all modified files using `lint-files`.
-- **Large Features or Overhauls:**
-  - **Linting:** Run a full project lint using `pnpm run lint` or `npx oxlint .`.
-  - **Type Checking:** Run a full type check using `npx tsc -b`.
-  - **Build Check:** Run `pnpm run build` to ensure the Vite build completes without errors.
-  - **Dead Code & Health:** Run `npx fallow audit --format json --quiet` (or `fallow dead-code`/`fallow health`) to identify dead code, duplication, and complexity hotspots. For agents/scripts, handle exit codes: `0` = clean, `1` = findings (success), `2` = real error (JSON envelope on stdout). Always use `2>/dev/null` (or `2>$null` on pwsh) to silence progress on stderr.
-  - **Tests:** Run `pnpm run test:unit` (vitest) and `pnpm test` (playwright) as appropriate.
+### Gate cadence
+
+- **Scope first, then widen with the change.** Lint the files you touched (`pnpm exec vp lint <files>`), run the one failing test (`pnpm exec vp test tests/unit/<file>.test.ts -t "<name>"`), add `npx tsc -b` when a type crosses a module boundary. The full stack is for a large or cross-cutting change, and for the moment before a commit or pull request. Most changes never need it; match the gate to the magnitude rather than running the suite by reflex.
+- **Gate at the end of a phase — `pnpm verify`.** Make all the edits, then run the one script: lint, format check, unit tests, the build (which includes `tsc -b`, prerender and the doc-pointer check) and Fallow. CI runs this script as one step, so its contents cannot drift from CI; actionlint and Playwright stay separate. A green run on an increment you are about to edit again proves nothing and makes it harder to tell which change broke what.
+- **Formatting is not a gate.** `.vite-hooks/pre-commit` runs `vp staged` (`vp fmt`) on the staged files; `prepare` installs the dispatcher (`vp config --no-agent`). Do not run the formatter by hand. `pnpm verify` runs `pnpm format:check` for a commit made with `VP_GIT_HOOKS=0`.
+- **Two cases still verify as they land.** A pulled UI primitive (§2) gets its own lint and `fallow dead-code --trace` before the next file. A move-only refactor slice gates per slice, because a red gate there means revert rather than fix-forward (`plans/REFACTOR_ZERO_REGRESSION_GATES.md`).
+
+### The stack
+
+- **Small change (one component or pure function):** `pnpm exec vp lint <files>`. Add `npx tsc -b` when a type crosses a module boundary.
+- **Large or cross-cutting change (before commit or PR):** `pnpm verify` — lint, format check, unit tests, the build and Fallow, in that order. It is the same command CI runs.
+  - **Build:** `pnpm exec vp run build` must print `Prerendered 9 pages` and exit.
+  - **Dead Code & Health:** Fallow's `audit` gates the changed files; exit `0` is clean, `1` is a fail verdict, `2` is a real error (JSON envelope on stdout). Run `npx fallow audit --format json --quiet 2>/dev/null` (or `2>$null` on pwsh) when you need the machine-readable result.
+- **Tests beyond the unit suite:** `pnpm test:e2e` when the change reaches accessible names, roles or routing in the radio UI. `pnpm test` runs both unit and e2e.
+- **Android or F-Droid change:** `pnpm fdroid:check` when versioning or listing metadata moves, and the native smokes in §15 when the player or the plugin changed.
 - **Fail First:** If any verification step fails, the task is not considered complete until the issue is resolved.
 
 ## 18. Accessibility (A11y)
@@ -257,10 +266,10 @@ Signals that look conclusive and are not. Each has already produced a wrong conc
 
 - **Standard Tool:** Use **Fallow** (`npx fallow dead-code`, `npx fallow dupes`, `npx fallow health`, `npx fallow audit --format json --quiet`) to maintain a clean codebase. Config lives in `fallow.toml` (migrated from `knip.ts`).
 - **False Positive Awareness:**
-  - **BE CAREFUL:** Fallow (like knip) can report false positives for dependencies used strictly in CSS (`tailwindcss-animate` via `@import` in `src/styles/index.css`), config-only plugins (`react-doctor`/`eslint-plugin-react-doctor` via `.oxlintrc.json` `jsPlugins`), or dynamically generated routes.
+  - **BE CAREFUL:** Fallow (like knip) can report false positives for dependencies used strictly in CSS (`tailwindcss-animate` via `@import` in `src/styles/index.css`), config-only plugins (`react-doctor`/`eslint-plugin-react-doctor` via `toolchain.config.ts` `jsPlugins`), or dynamically generated routes.
   - **Verification:** Before deleting any file or dependency flagged by Fallow, **manually search the codebase** for references (especially in `*.css`, `tailwind.config.*`, `vite.config.ts`, or `oxlint` configs) and use `fallow dead-code --trace <file>:<export>` or `--trace-dependency <name>` to verify.
     - **Ignore List:** If a tool/dependency is confirmed as necessary but flagged, add it to `ignoreDependencies` or `ignorePatterns` in `fallow.toml` (e.g., `tailwindcss-animate`, `@tanstack/react-query` kept for future use, `tailwindcss` build-time via `@tailwindcss/vite`, `react-doctor` via oxlint). See `fallow.toml:6` for current ignores and https://docs.fallow.tools/migration/from-knip.
-  - **Agentic Workflow:** For AI agents and scripts, run `npx fallow audit --format json --quiet 2>/dev/null` and treat exit `0`/`1` as success (`1` = findings), `2` as real error (JSON envelope on stdout). Use `fallow` as the tidy gate before commit/PR (`fallow audit`), for refactoring prioritization (`fallow health --hotspots`), and for guard checks (`fallow guard <files>`).
+  - **Agentic Workflow:** For AI agents and scripts, run `npx fallow audit --format json --quiet 2>/dev/null`: exit `0` is clean, `1` is a failing gate (findings introduced by the change), `2` is a real error (JSON envelope on stdout). The individual reports (`dead-code`, `health`) use `1` for findings without failing a gate, so read the subcommand in context. Use `fallow audit` as the tidy gate before commit/PR, `fallow health --hotspots` for refactoring prioritisation, and `fallow guard <files>` for guard checks.
   - **Regression Baseline:** CI uses embedded `regression.baseline` in `fallow.toml` (populated via `npx fallow --save-regression-baseline`). Run with `--fail-on-regression` to block count increases. Keep Fallow as part of the agentic process to keep the codebase tidy — run `audit` after each feature, and `dead-code --trace` before deleting any flagged export/file.
 
 ## 20. Layout Abstraction
@@ -309,7 +318,7 @@ Signals that look conclusive and are not. Each has already produced a wrong conc
   - **TSDoc on an export** is the contract for its caller. Short, present tense, and it never restates the module doc.
   - **`docs/modules/`** holds per-module contracts in present tense. The path mirrors `src/`, so `src/lib/player/engine.ts` is documented by `modules/player/engine.md`. A module doc that starts needing a History section is telling you the content belongs in `plans/`, so link out.
   - **`docs/plans/`** holds dated decision records. These are append-only: add entries, never edit them. That is exactly what makes them safe, because a record nobody rewrites cannot end up contradicting the code it describes.
-  - **`AGENTS.md`** is the one-line index into all of the above.
+  - **`AGENTS.md`** carries the rules and the pointers, nothing else. The decision index lives at the top of `lineage.md`, beside the entries it names.
 - **Pointers must resolve.** Every path a source file names has to exist, every module doc has to be reachable from a source header or from `docs/README.md`, and every document has to be named by the index. `scripts/check-doc-pointers.js` runs all three in the build chain, so a moved doc fails the build instead of quietly rotting.
 
 ### When you change code
@@ -319,7 +328,7 @@ The rules above cover what to write. This covers what to update, which is the ha
 | Your change | Also do this |
 | :---- | :---- |
 | Behaviour a module doc describes | Update that doc in the same change. A doc that outlives its code is worse than none |
-| A decision — a trade-off made, an approach rejected | Append a `docs/lineage.md` entry and an index line in `AGENTS.md` |
+| A decision — a trade-off made, an approach rejected | Append a `docs/lineage.md` entry and add its line to the index at the top of that file |
 | A constraint future work must respect | Promote it to §15. If it can damage the repo, it does not belong in history |
 | A dependency or its version | `standards/TECH_STACK.md` |
 | A design token or layout rule | `standards/STYLE_GUIDE.md` |

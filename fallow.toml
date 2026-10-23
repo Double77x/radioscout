@@ -4,6 +4,7 @@
 ignorePatterns = [
   "**/*.d.ts",
   "scripts/**", # invoked by package.json scripts / docs, not by import
+  "lint/**", # loaded by Oxlint from a jsPlugins path, not imported
   "src/routeTree.gen.ts",
   "src/components/ui/**", # shadcn registry files, replaced wholesale by `shadcn add`
   "public/**", # runtime-loaded workers/service-worker, never imported

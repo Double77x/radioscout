@@ -151,31 +151,40 @@ if (agentsBytes > AGENTS_BUDGET) {
   );
 }
 
-// 5. Every standard is on the always-read list. The mandatory set is the whole
-//    of docs/standards, and AGENTS.md has to name each file so an agent knows
-//    what to read before it decides what the task involves. A standard nobody
-//    is told to read is how STYLE_GUIDE.md spent months describing a different
-//    application, so the two lists are held together mechanically rather than by
-//    whoever remembers to update the instruction.
+// 5. Every standard is named in AGENTS.md. The mandatory set is the whole of
+//    docs/standards, and AGENTS.md has to say when each one is opened, so an
+//    agent can find the file the task needs. A standard nobody is told to read
+//    is how STYLE_GUIDE.md spent months describing a different application, so
+//    the folder and the pointer list are held together mechanically rather than
+//    by whoever remembers to update the instruction.
 const agents = fs.readFileSync(path.resolve(ROOT, "AGENTS.md"), "utf8");
 for (const doc of markdownFiles("docs/standards")) {
-  if (!agents.includes(basenameOf(doc))) failures.push(`standard not on the AGENTS.md always-read list: ${doc}`);
+  if (!agents.includes(basenameOf(doc))) failures.push(`standard not named in AGENTS.md: ${doc}`);
 }
 
-// 6. Every lineage entry has an index line in AGENTS.md. AGENTS.md carries one
-//    line per decision so the log is scannable without opening lineage.md, and
-//    that correspondence is the thing worth checking — not the count, which
-//    drifts every time either file is edited by hand.
+// 6. Every lineage entry appears in the log's own index. The index sits at the
+//    top of lineage.md rather than in AGENTS.md: it belongs beside the entries
+//    it names, and the file an agent reads on every turn should carry rules and
+//    pointers, not a table of contents. Membership catches a renamed entry; the
+//    count catches a deleted one, which would otherwise leave a stale line that
+//    membership never sees.
 const lineage = fs.readFileSync(path.resolve(ROOT, "docs", "lineage.md"), "utf8");
+const indexMatch = /(?:^|\n)## Index\s*\n(?<index>[\s\S]*?)(?=\n## |$)/.exec(lineage);
+const indexText = indexMatch?.groups?.index ?? "";
+if (indexText === "") failures.push("docs/lineage.md has no ## Index section");
 const entryRx = /^### (?<date>\d{4}-\d{2}-\d{2}) · (?<title>.+)$/gm;
 let entryCount = 0;
 for (let entry = entryRx.exec(lineage); entry !== null; entry = entryRx.exec(lineage)) {
   entryCount += 1;
   const { date, title } = entry.groups ?? {};
   if (date === undefined || title === undefined) continue;
-  if (!agents.includes(`- ${date} — ${title}`)) {
-    failures.push(`lineage entry not indexed in AGENTS.md: ${date} — ${title}`);
+  if (!indexText.includes(`- ${date} — ${title}`)) {
+    failures.push(`lineage entry missing from the ## Index in docs/lineage.md: ${date} — ${title}`);
   }
+}
+const indexCount = (indexText.match(/^- \d{4}-\d{2}-\d{2} — .+$/gm) ?? []).length;
+if (indexCount !== entryCount) {
+  failures.push(`lineage index has ${indexCount} lines for ${entryCount} entries in docs/lineage.md`);
 }
 
 if (failures.length > 0) {
@@ -185,6 +194,6 @@ if (failures.length > 0) {
 } else {
   const pct = Math.round((agentsBytes / AGENTS_BUDGET) * 100);
   console.log(
-    `✅ Doc pointers (${files.length} files, ${allDocs.size} docs, ${markdownFiles("docs/standards").length} standards always-read, ${entryCount} lineage entries indexed, AGENTS.md ${agentsBytes}/${AGENTS_BUDGET} bytes = ${pct}%)`,
+    `✅ Doc pointers (${files.length} files, ${allDocs.size} docs, ${markdownFiles("docs/standards").length} standards named, ${entryCount} lineage entries indexed, AGENTS.md ${agentsBytes}/${AGENTS_BUDGET} bytes = ${pct}%)`,
   );
 }

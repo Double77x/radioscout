@@ -6,6 +6,7 @@ export default {
   lint: {
     plugins: ["react", "typescript", "jsx-a11y", "unicorn"],
     jsPlugins: [
+      "./lint/no-unjustified-effect.js",
       "eslint-plugin-better-tailwindcss",
       "eslint-plugin-react-refresh",
       "eslint-plugin-react-doctor",
@@ -30,6 +31,7 @@ export default {
       ".tanstack/**",
       "src/routeTree.gen.ts",
       "src/components/ui/map.tsx",
+      "lint/**", // Oxlint plugins; type-aware rules misread untyped JS, RuleTester covers them
     ],
     categories: {
       correctness: "error",
@@ -39,6 +41,31 @@ export default {
       style: "warn",
     },
     rules: {
+      // The mechanical half of the useEffect audit. Counts match
+      // docs/plans/REFACTOR_PERFORMANCE_USEEFFECT.md §5; raising one is a
+      // decision that needs a row there, not a way to silence this error.
+      "scout/no-unjustified-effect": [
+        "error",
+        {
+          allow: {
+            "src/components/CommandPalette.tsx": 2,
+            "src/components/NativeShell.tsx": 4,
+            "src/components/radio/RadioHeader.tsx": 2,
+            "src/components/radio/RecentTracks.tsx": 1,
+            "src/components/radio/SavedStations.tsx": 1,
+            "src/components/radio/TrackTicker.tsx": 2,
+            "src/components/scout/AppShell.tsx": 2,
+            "src/components/scout/AppSpectrum.tsx": 2,
+            "src/components/scout/SettingsMenu.tsx": 1,
+            "src/components/scout/SwipeBack.tsx": 1,
+            "src/components/theme.tsx": 2,
+            "src/hooks/use-agentic-play.ts": 1,
+            "src/hooks/use-dock-volume.ts": 1,
+            "src/hooks/use-sleep-countdown.ts": 1,
+            "src/pages/Home.tsx": 1,
+          },
+        },
+      ],
       "react-doctor/no-hydration-branch-on-browser-global": "error",
       "react-doctor/no-locale-format-in-render": "error",
       "react-doctor/no-fetch-in-effect": "error",

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Formats the staged files listed by `vp staged`. Installed by `vp config`
+# (run from `prepare`); skip a single commit with VP_GIT_HOOKS=0.
+exec vp staged

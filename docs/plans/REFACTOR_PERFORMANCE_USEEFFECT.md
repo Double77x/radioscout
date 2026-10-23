@@ -39,3 +39,29 @@ No data fetching in any effect (TanStack Query owns it: `use-radio.ts` with `ena
 - [x] No static import of `@/lib/radio/store` (Dexie) or `@/lib/radio/api` added to engine modules — dynamic imports intact.
 - [x] `emit()` call count per user gesture unchanged (play/pause/switch/sleep-fire paths).
 - [x] Prerender still emits skeletons only; `pnpm build` prints `Prerendered 9 pages` with no hang (the `query-client.ts:19` `gcTime: 0` server guard stays intact).
+
+## 5. Re-audit 2026-10-22 (24 call sites, 15 files)
+
+`grep -rn "useEffect(" src` finds 24 call sites, up from the 12 this plan recorded at landing; the table in §1 is that snapshot and its line numbers have moved. Every site below is a subscription, a timer, an imperative browser/bridge call or a canvas paint. None fetches data, and none syncs state that could be derived.
+
+| File | Sites | Why it is imperative |
+|------|-------|----------------------|
+| `components/radio/RadioHeader.tsx` | 2 | Fine-pointer mount autofocus (focus versus scroll timing), URL-to-draft adoption while the field is not focused |
+| `components/radio/RecentTracks.tsx` | 1 | 30 s tick so wall-clock song ages stay honest between title banks |
+| `components/radio/SavedStations.tsx` | 1 | Unmount abort of drag listeners, rAF and pending timer |
+| `components/radio/TrackTicker.tsx` | 2 | `matchMedia` and `ResizeObserver` subscriptions |
+| `components/scout/AppShell.tsx` | 2 | Page-lifecycle flush arm/disarm, service-worker registration |
+| `components/scout/AppSpectrum.tsx` | 2 | Tap handshake with the engine before it builds an element, rAF canvas paint |
+| `components/scout/SettingsMenu.tsx` | 1 | `open-settings` global event subscription |
+| `components/scout/SwipeBack.tsx` | 1 | Back-animator registration |
+| `components/CommandPalette.tsx` | 2 | Focus timer once the dialog's trap settles, `open-command-palette` subscription |
+| `components/NativeShell.tsx` | 4 | StatusBar/splash, App back-button, `appStateChange` resubscription, OTA check behind an AbortController |
+| `components/theme.tsx` | 2 | `documentElement` class and attribute writes, `storage` subscription |
+| `hooks/use-agentic-play.ts` | 1 | One-shot `?play=` handling |
+| `hooks/use-dock-volume.ts` | 1 | Autohide timer cleanup |
+| `hooks/use-sleep-countdown.ts` | 1 | 20 s countdown tick |
+| `pages/Home.tsx` | 1 | `open-home-section` subscription |
+
+The rule still holds: no new call site without a justification comment and a line in this audit.
+
+The counts are enforced by `scout/no-unjustified-effect` (`lint/no-unjustified-effect.js`, configured in `toolchain.config.ts`): the call that exceeds a file's count fails lint, so a new site has to add its audit row and raise the count in the same change. The rule cannot judge whether an existing site is still needed, which is why the table is re-derived rather than trusted.

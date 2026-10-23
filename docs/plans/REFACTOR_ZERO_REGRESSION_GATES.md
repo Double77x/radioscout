@@ -61,3 +61,7 @@ Baseline to record on the clean tree **before Phase 1a** (paste outputs into the
 - New `fallow audit` finding (duplicate block ≥40 lines from copy-paste instead of move).
 - Playwright timing change (fade/crossfade/watchdog durations differ from 900/250/3000/1000 ms / 20 s).
 - Bundle analysis shows `use-player` chunk duplicated (dynamic `import("@/lib/radio/store")` / `import("@/lib/radio/api")` converted to static imports during the move).
+
+## 6. Correction 2026-10-22: gate 8 moved to the pre-commit hook
+
+Formatting is no longer a slice gate. `vp fmt` rewrites every file it touches, which is the diff noise gate 8 exists to prevent when it runs mid-task; it now runs on the staged files at commit time through `.vite-hooks/pre-commit` (`vp staged`), and CI's `pnpm format:check` covers a commit made with `VP_GIT_HOOKS=0`. The other seven gates are unchanged.

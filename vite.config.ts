@@ -16,6 +16,14 @@ export default defineConfig(({ mode }) => {
     // default export.
     lint: toolchain.lint,
     fmt: toolchain.fmt,
+    // Pre-commit formatting: only the staged files, through the hook in
+    // `.vite-hooks/pre-commit`. The glob is explicit because `vp fmt` errors
+    // when every argument is an unformattable type (a PNG-only commit), and
+    // `--no-error-on-unmatched-pattern` covers a docs-only commit, where every
+    // staged markdown file is excluded by the `docs/**` fmt ignore.
+    staged: {
+      "*.{ts,tsx,js,jsx,mjs,cjs,json,jsonc,md,mdx,css,yml}": "vp fmt --no-error-on-unmatched-pattern",
+    },
     // Tasks: a name may live here OR in package.json, never both.
     run: {
       // Cache everything; Vite+ auto-excludes tasks that read and write the same paths.
