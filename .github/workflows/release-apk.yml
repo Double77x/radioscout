@@ -206,6 +206,14 @@ jobs:
       # The publish step above rewrote the (tracked) manifest, so the tree is
       # dirty by design — autostash it across the rebase.
       - name: Commit manifest back
+        env:
+          # The pre-commit hook runs the full test suite (pnpm test + Playwright)
+          # which requires a display, browsers, and port 8081 — none of which are
+          # available in this stripped-down CI step. The manifest commit is a
+          # machine-generated, verified artifact (URL + checksum checked above),
+          # not developer code, so the hook adds no value and reliably fails.
+          # VP_GIT_HOOKS=0 is the documented bypass (see .vite-hooks/pre-commit).
+          VP_GIT_HOOKS: "0"
         run: |
           MANIFEST="public/ota/production.json"
           VERSION="$(node -p "require('./$MANIFEST').versions[0].version")"
