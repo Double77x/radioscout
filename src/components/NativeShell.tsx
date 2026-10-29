@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { isNative, getPlatform } from "@/lib/capacitor";
 import { runOtaUpdateCheck } from "@/lib/native-ota";
 import { playBackTransition } from "@/lib/animated-back";
+import { runBackHandlers } from "@/lib/native-back";
 import { checkpointListeningSession } from "@/lib/player/store";
 import { syncNativeStation } from "@/hooks/use-player";
 
@@ -54,6 +55,9 @@ export function NativeShell() {
       await SplashScreen.hide();
       if (cancelled || getPlatform() !== "android") return;
       const listener = await App.addListener("backButton", () => {
+        // An open overlay (settings flyout) closes before navigation, so the
+        // press cannot leave the app from a menu the user can see.
+        if (runBackHandlers()) return;
         if (globalThis.history.length > 1) {
           // Animated when a SwipeBack frame is mounted; instant otherwise.
           playBackTransition(() => {

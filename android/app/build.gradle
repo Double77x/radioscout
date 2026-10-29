@@ -27,8 +27,8 @@ android {
         applicationId "io.github.double77x.radioscout"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 405
-        versionName "0.4.5"
+        versionCode 406
+        versionName "0.4.6"
         // Only the release-shaped test variant flips this on. Debug builds
         // already enable WebView debugging through Capacitor.
         buildConfigField "boolean", "WEBVIEW_DEBUG", "false"

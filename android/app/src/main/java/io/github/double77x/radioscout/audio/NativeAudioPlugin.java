@@ -3,12 +3,14 @@ package io.github.double77x.radioscout.audio;
 import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.media3.common.C;
 import androidx.media3.common.MediaItem;
@@ -51,6 +53,8 @@ public class NativeAudioPlugin extends Plugin {
     private static final String EVENT_STATION_CHANGE = "stationChange";
     private static final String LOG_TAG = "RadioPlayback";
     private static final int NOTIFICATION_PERMISSION_REQUEST = 0x4e4f;
+    private static final String PREFS_NAME = "radioscout_audio";
+    private static final String PREF_NOTIFICATION_ASKED = "notificationPermissionAsked";
 
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private MediaController controller;
@@ -64,6 +68,13 @@ public class NativeAudioPlugin extends Plugin {
      * the service, which dies with the process.
      */
     private boolean carTitleRefreshEnabled = false;
+    /**
+     * Set on the plugin thread before the permission dialog is posted and
+     * cleared only if the request fails. The plugin thread and the UI thread
+     * are different, so a burst of plays would otherwise see "unasked" twice
+     * and queue two dialogs.
+     */
+    private volatile boolean notificationRequestInFlight = false;
 
     /**
      * True overlapping station crossfade. A second ExoPlayer buffers the next
@@ -468,18 +479,29 @@ public class NativeAudioPlugin extends Plugin {
 
     @PluginMethod
     public void play(PluginCall call) {
-        boolean needsPermission = needsNotificationPermission();
-        Log.i(LOG_TAG, "play: notifications=" + (needsPermission ? "not granted" : "granted"));
-        if (needsPermission) {
-            // The notification permission is optional: denied means no
-            // lock-screen/shade UI, but audio must still play. Ask in context
-            // and start immediately. Waiting for a permission callback leaves
-            // every station on “Tuning in…” when the prompt cannot be shown
-            // or the callback never returns — the exact fail-open case this
-            // method is meant to prevent.
+        boolean granted = notificationPermissionGranted();
+        boolean needsPermission = notificationPermissionRequired(Build.VERSION.SDK_INT, granted);
+        // The in-flight flag closes the gap between this thread and the UI
+        // thread: a burst of plays (fast station switching) would otherwise
+        // queue a second dialog before the first answer is persisted.
+        boolean asked = notificationPermissionAsked() || notificationRequestInFlight;
+        boolean requestPermission =
+                notificationPermissionRequestNeeded(Build.VERSION.SDK_INT, granted, asked);
+        // Keep the "notifications=" prefix: the device smoke greps for it.
+        Log.i(
+                LOG_TAG,
+                "play: notifications="
+                        + (needsPermission ? "not granted" : "granted")
+                        + (requestPermission ? ", asking" : ""));
+        if (requestPermission) {
+            // Ask once, then remember the answer. A missing notification only
+            // costs the shade/lock-screen controls, so playback starts
+            // immediately either way; but re-asking on every play turns a
+            // deliberate "Don't allow" into a nag, and after two denials
+            // Android blocks the dialog without telling the user. The flag
+            // lives in SharedPreferences so it survives restarts.
+            notificationRequestInFlight = true;
             requestNotificationPermission();
-            startPlay(call);
-            return;
         }
         startPlay(call);
     }
@@ -493,7 +515,10 @@ public class NativeAudioPlugin extends Plugin {
      */
     private void requestNotificationPermission() {
         try {
-            if (getActivity() == null) return;
+            if (getActivity() == null) {
+                notificationRequestInFlight = false;
+                return;
+            }
             getActivity()
                     .runOnUiThread(
                             () -> {
@@ -504,7 +529,9 @@ public class NativeAudioPlugin extends Plugin {
                                                         Manifest.permission.POST_NOTIFICATIONS
                                                     },
                                                     NOTIFICATION_PERMISSION_REQUEST);
+                                    markNotificationPermissionAsked();
                                 } catch (Exception error) {
+                                    notificationRequestInFlight = false;
                                     Log.w(
                                             LOG_TAG,
                                             "notification permission request failed: "
@@ -512,6 +539,7 @@ public class NativeAudioPlugin extends Plugin {
                                 }
                             });
         } catch (Exception error) {
+            notificationRequestInFlight = false;
             Log.w(LOG_TAG, "notification permission request failed: " + error.getMessage());
         }
     }
@@ -522,19 +550,57 @@ public class NativeAudioPlugin extends Plugin {
      * POST_NOTIFICATIONS by default and the manifest declaration alone is
      * not enough. Fail-open to playback if the plumbing is unavailable.
      */
-    private boolean needsNotificationPermission() {
+    private boolean notificationPermissionGranted() {
         try {
             // Capacitor can return null for a declared permission alias on
             // some installed APKs even when Android has already granted it.
             // Treating null as denied sends play() into a permission request
             // that never calls back, leaving every station stuck tuning.
-            boolean granted =
-                    ContextCompat.checkSelfPermission(
-                                    getContext(), Manifest.permission.POST_NOTIFICATIONS)
-                            == android.content.pm.PackageManager.PERMISSION_GRANTED;
-            return notificationPermissionRequired(Build.VERSION.SDK_INT, granted);
+            return ContextCompat.checkSelfPermission(
+                            getContext(), Manifest.permission.POST_NOTIFICATIONS)
+                    == PackageManager.PERMISSION_GRANTED;
+        } catch (Exception e) {
+            // Unknown state: no prompt, and playback is unaffected.
+            return true;
+        }
+    }
+
+    /**
+     * True once the user has answered the prompt, so the request is not
+     * repeated. The persisted flag covers restarts; the rationale check also
+     * covers installs that denied before this flag existed (the system
+     * reports a rationale exactly when a previous request was denied).
+     */
+    private boolean notificationPermissionAsked() {
+        try {
+            Context context = getContext();
+            if (context != null
+                    && context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                            .getBoolean(PREF_NOTIFICATION_ASKED, false)) {
+                return true;
+            }
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "notification permission state unreadable: " + e.getMessage());
+        }
+        try {
+            if (getActivity() == null) return false;
+            return ActivityCompat.shouldShowRequestPermissionRationale(
+                    getActivity(), Manifest.permission.POST_NOTIFICATIONS);
         } catch (Exception e) {
             return false;
+        }
+    }
+
+    private void markNotificationPermissionAsked() {
+        try {
+            Context context = getContext();
+            if (context == null) return;
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit()
+                    .putBoolean(PREF_NOTIFICATION_ASKED, true)
+                    .apply();
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "notification permission state unwritable: " + e.getMessage());
         }
     }
 
@@ -545,6 +611,12 @@ public class NativeAudioPlugin extends Plugin {
      */
     static boolean notificationPermissionRequired(int sdkInt, boolean granted) {
         return sdkInt >= 33 && !granted;
+    }
+
+    /** Ask at most once: a missing grant is only re-requested while unanswered. */
+    static boolean notificationPermissionRequestNeeded(
+            int sdkInt, boolean granted, boolean asked) {
+        return notificationPermissionRequired(sdkInt, granted) && !asked;
     }
 
     private void startPlay(PluginCall call) {

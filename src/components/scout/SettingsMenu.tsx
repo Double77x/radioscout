@@ -21,6 +21,7 @@ import { LANGUAGES_KEY } from "@/lib/radio/languages";
 import { COUNTRIES_KEY, displayCountryName } from "@/lib/radio/countries";
 import { NORMALIZE_KEY, normalizeEnabled } from "@/lib/radio/normalize";
 import { isNative } from "@/lib/capacitor";
+import { registerBackHandler } from "@/lib/native-back";
 import { normalizeMinBitrate, QUALITY_KEY, qualityLabel } from "@/lib/radio/quality";
 import { Accordion } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
@@ -54,16 +55,29 @@ const LEVEL_OFF_FALLBACK = "0";
 /** Settings flyout: radio data plus style, one scroll view, no tabs. */
 export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) {
   const [open, setOpen] = useState(false);
+  // Mirrors `open` for the back handler, which lives in a mount-once effect
+  // and must not re-subscribe on every open/close.
+  const openRef = useRef(false);
   // Cross-component signal from the command palette (`open-settings`):
   // open the flyout from anywhere. A window event (not props) because the
-  // palette lives outside the shell that owns this menu.
+  // palette lives outside the shell that owns this menu. The same effect owns
+  // the hardware-back claim: while the flyout is open it closes it instead of
+  // letting the shell navigate or exit.
   useEffect(() => {
     const onOpenSettings = (): void => {
+      openRef.current = true;
       setOpen(true);
     };
     globalThis.addEventListener("open-settings", onOpenSettings);
+    const releaseBack = registerBackHandler(() => {
+      if (!openRef.current) return false;
+      openRef.current = false;
+      setOpen(false);
+      return true;
+    });
     return () => {
       globalThis.removeEventListener("open-settings", onOpenSettings);
+      releaseBack();
     };
   }, []);
   const { theme, setTheme, resolvedTheme, flavor, setFlavor } = useTheme();
@@ -91,6 +105,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
         ? displayCountryName(countries[0] ?? "")
         : `${displayCountryName(countries[0] ?? "")} +${countries.length - 1}`;
   const onOpenChange = (next: boolean) => {
+    openRef.current = next;
     if (next && variant === "tab") setNavAnchor(triggerRef.current?.closest("nav") ?? null);
     setOpen(next);
   };
@@ -259,7 +274,7 @@ export function SettingsMenu({ variant = "tab" }: { variant?: "tab" | "logo" }) 
           <Link
             to='/legal/changelog'
             onClick={() => {
-              setOpen(false);
+              onOpenChange(false);
             }}
             aria-label={`Changelog for version v${appVersion}`}
             className='inline-flex min-h-6 min-w-6 items-center justify-center underline underline-offset-4 hover:text-foreground'>

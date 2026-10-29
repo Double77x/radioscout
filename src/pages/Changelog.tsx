@@ -12,6 +12,16 @@ interface ChangelogEntry {
 /** Newest first. One entry per release — the markup below stays identical. */
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: "0.4.6",
+    title: "Back stays in the app, and one permission ask",
+    date: "October 2026",
+    points: [
+      "On Android, Back now closes the Settings panel instead of leaving the app. The hardware button and the system gesture both work, and the next press navigates or exits as it did before.",
+      "The notification permission is asked once. Denying it, or dismissing the dialog, no longer brings the prompt back on every station. Playback still starts either way, and notifications can be turned on later in Android Settings.",
+      "The F-Droid listing now names the services the app contacts: radio-browser for station data and votes, the two image proxies for station logos, the BBC and Radiolise metadata services, and the address of the web version.",
+    ],
+  },
+  {
     version: "0.4.5",
     title: "Volume keys and a lighter player",
     date: "October 2026",

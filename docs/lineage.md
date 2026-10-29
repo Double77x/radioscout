@@ -93,6 +93,7 @@ step with the headings below, so an entry without a line here fails the build.
 - 2026-10-23 — Spectrum wings: width sets the bands, paint reuses its skin
 - 2026-10-23 — One gate includes e2e, and the hook runs unit tests
 - 2026-10-23 — Pre-commit runs both test suites
+- 2026-10-29 — F-Droid review round 3: ask once, overlays own back
 ## How this fits the other docs
 
 Current truth has two homes: the code, and the module contract its file header
@@ -624,3 +625,14 @@ The cost is time: verify is about two minutes longer and needs port 8081 free, s
 ### 2026-10-23 · Pre-commit runs both test suites
 
 The first version of the hook added only the unit suite because Playwright needs a dev server. That left commits able to skip the E2E suite even though `pnpm test` already runs both suites and Playwright manages its server on port 8081. The hook now runs `pnpm test` before formatting staged files, matching the user's expectation that commit verification covers the full suite. The cost is longer commits and a requirement that port 8081 be available (or have a reusable local server).
+
+### 2026-10-29 · F-Droid review round 3: ask once, overlays own back
+
+Two reviewer observations were real, and both came from the same shape of mistake: a piece of UI assumed it was the only thing that could be happening.
+
+`NativeAudioPlugin.play()` requested `POST_NOTIFICATIONS` on every play while the grant was missing, so answering "Don't allow" bought the same dialog on the next station. The prompt is only worth one ask: after that, the answer belongs to the user, and Android hides the dialog after two denials without saying so. The plugin now records the ask in `radioscout_audio` SharedPreferences and also treats `shouldShowRequestPermissionRationale` as "already answered", which covers installs that denied before the flag existed. The decision stays a static function so JVM tests can pin it, and an in-flight flag stops a burst of plays from queueing two dialogs before the first answer is written. The device smoke still covers the denial path, where playback must start with the dialog open or absent.
+
+The hardware-back listener in `NativeShell` only knew about history and exit, so Back with the Settings flyout open left the app and took the menu with it. Station sheets were fine because they are routes; the flyout is local popover state the shell cannot see. Rather than teach the shell about every overlay, overlays claim the press themselves: `src/lib/native-back.ts` holds a stack of handlers, newest first, and the shell runs it before navigating. `SettingsMenu` registers while mounted and closes the popover when it is open. The registry is deliberately synchronous and small — an overlay that needs async work before closing is a dialog that should have been a route.
+
+The cost is a second, non-routing navigation stack to keep honest: a future overlay that forgets to register will still exit the app on Back, and the unit tests only prove ordering and cleanup, not that every overlay joined. The F-Droid description now also names the three services the reviewer flagged plus the BBC and Radiolise metadata endpoints, which makes the `NonFreeNet` anti-feature concrete instead of implied. None of that reaches the listing until the recipe's pinned commit moves past the description change.
+

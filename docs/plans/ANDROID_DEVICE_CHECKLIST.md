@@ -35,11 +35,12 @@ build hash with the result.
 
 ## Notification and lock screen
 
-- [ ] On Android 13+, first play shows the notification permission prompt.
-      Grant it and confirm a MediaStyle notification with artwork, station and
-      live track.
+- [ ] On Android 13+, the first play shows the notification permission prompt
+      once. Grant it and confirm a MediaStyle notification with artwork,
+      station and live track.
 - [ ] Deny the permission on a fresh install. Playback must still start; the
-      notification is absent; the app must not remain on “Tuning in…”.
+      notification is absent; the app must not remain on “Tuning in…”. Play a
+      second station: the prompt must not return.
 - [ ] Lock the screen. Controls are present and play/pause works from the lock
       screen.
 - [ ] Open the shade and pause/resume/stop from the notification.

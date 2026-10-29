@@ -1,0 +1,1 @@
+Android Back now closes the Settings panel instead of leaving the app. The notification permission is asked once: denying it no longer brings the prompt back on every station, and playback still starts either way. The store listing now names the online services the app uses.

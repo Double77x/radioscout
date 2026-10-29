@@ -77,10 +77,10 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   device, HTTPS `<audio>` path untouched as fallback.
 - [x] N2: foreground service + MediaSession (lock-screen controls, survives
   WebView death); OTA-safe (native-layer edits still need a full APK).
-  POST_NOTIFICATIONS is requested in-context on first native play
+  POST_NOTIFICATIONS is requested in-context on the first native play
   (Android 13+ denies it by default — without the grant the media
   notification, and with it all lock-screen/shade controls, never appears).
-  `NativeAudioPlugin.needsNotificationPermission()` reads the Android grant
+  `NativeAudioPlugin.notificationPermissionGranted()` reads the Android grant
   with `ContextCompat.checkSelfPermission()` for
   `Manifest.permission.POST_NOTIFICATIONS`. Do not use Capacitor's permission
   alias state: it can return `null` even when Android has granted the
@@ -89,6 +89,10 @@ N3 (HTTP allowlist vs proxy) and N4 (Auto/headset QA) remain.
   directly with `Activity.requestPermissions()` and start playback before the
   user answers. The prompt decides whether the notification is visible, never
   whether audio starts; a missing callback must not leave the dock tuning.
+  Ask once: `notificationPermissionAsked()` remembers the answer in
+  `radioscout_audio` SharedPreferences and treats an existing rationale as a
+  prior denial, so a deliberate "Don't allow" is not re-asked on every play
+  (and Android's two-denial block never turns into a silent no-op).
   `pnpm android:smoke:permission` covers the denied/fail-open path and the main
   smoke covers the granted/notification path.
 - [x] N3 (scoped): Dance Wave's https directory URL 302s to its http edge,

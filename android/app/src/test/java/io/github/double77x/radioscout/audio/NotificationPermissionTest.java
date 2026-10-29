@@ -29,4 +29,25 @@ public class NotificationPermissionTest {
         assertTrue(NativeAudioPlugin.notificationPermissionRequired(36, false));
         assertFalse(NativeAudioPlugin.notificationPermissionRequired(36, true));
     }
+
+    @Test
+    public void firstPlayAsksOnce() {
+        assertTrue(NativeAudioPlugin.notificationPermissionRequestNeeded(33, false, false));
+    }
+
+    @Test
+    public void deniedAnswerIsRemembered() {
+        assertFalse(NativeAudioPlugin.notificationPermissionRequestNeeded(33, false, true));
+    }
+
+    @Test
+    public void grantedPermissionIsNeverRequested() {
+        assertFalse(NativeAudioPlugin.notificationPermissionRequestNeeded(33, true, false));
+        assertFalse(NativeAudioPlugin.notificationPermissionRequestNeeded(33, true, true));
+    }
+
+    @Test
+    public void preTiramisuIsNeverRequestedEvenWhenUnanswered() {
+        assertFalse(NativeAudioPlugin.notificationPermissionRequestNeeded(32, false, false));
+    }
 }

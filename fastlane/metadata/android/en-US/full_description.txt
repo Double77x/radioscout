@@ -10,4 +10,6 @@ Features:
 - One-file backup export/import for moving between devices
 - Light/dark theme, quick-find palette, PWA install on desktop
 
+Network: station data and votes use the radio-browser API; station logos load through wsrv.nl and proxy.duckduckgo.com; BBC and Radiolise track titles resolve through rms.api.bbc.co.uk and backend.radiolise.com; and the web version lives at radioscout.pages.dev.
+
 Source, changelog and issue tracker on GitHub. MIT licensed.
