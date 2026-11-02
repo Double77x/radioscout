@@ -47,7 +47,7 @@
     "@capacitor/share": "^8.0.3",
     "@capacitor/splash-screen": "^8.0.2",
     "@capacitor/status-bar": "^8.0.4",
-    "@capgo/capacitor-updater": "^8.53.1",
+    "@capgo/capacitor-updater": "^8.54.0",
     "@tanstack/react-hotkeys": "^0.15.1",
     "@tanstack/react-query": "^5.105.0",
     "@tanstack/react-router": "1.170.45",
