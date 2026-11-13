@@ -87,7 +87,7 @@
     "eslint-plugin-react-doctor": "0.9.17",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
-    "fake-indexeddb": "^6.2.6",
+    "fake-indexeddb": "^6.2.7",
     "fallow": "^3.38.1",
     "jsdom": "^30.1.3",
     "oxc-transform-react": "^0.156.0",
