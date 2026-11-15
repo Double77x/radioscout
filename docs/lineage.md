@@ -94,6 +94,7 @@ step with the headings below, so an entry without a line here fails the build.
 - 2026-10-23 — One gate includes e2e, and the hook runs unit tests
 - 2026-10-23 — Pre-commit runs both test suites
 - 2026-10-29 — F-Droid review round 3: ask once, overlays own back
+- 2026-11-12 — Dependency refresh: age-gated, PRs superseded
 ## How this fits the other docs
 
 Current truth has two homes: the code, and the module contract its file header
@@ -636,3 +637,10 @@ The hardware-back listener in `NativeShell` only knew about history and exit, so
 
 The cost is a second, non-routing navigation stack to keep honest: a future overlay that forgets to register will still exit the app on Back, and the unit tests only prove ordering and cleanup, not that every overlay joined. The F-Droid description now also names the three services the reviewer flagged plus the BBC and Radiolise metadata endpoints, which makes the `NonFreeNet` anti-feature concrete instead of implied. None of that reaches the listing until the recipe's pinned commit moves past the description change.
 
+### 2026-11-12 · Dependency refresh: age-gated, PRs superseded
+
+Eleven Dependabot PRs had gone stale, so the whole dependency set was taken to the newest version that clears pnpm's seven-day `minimumReleaseAge` rather than to the version named in each PR. That gate, not Dependabot's cooldown, set the ceiling: `lucide-react` 1.69.0 against the PR's 1.66.0, `fallow` 3.39.0 against 3.38.1, `wrangler` 4.158.0 against 4.152.0, and `vite-plus` 1.6.0 rather than 1.4.0, since that family is already excluded from the gate because it publishes in lockstep with every release.
+
+Two majors went in alongside the minors: `jsdom` 30 → 31, which is the unit-test environment and touches no shipped code, and `@capacitor/assets` 3 → 4, which only launcher artwork runs through (`scripts/generate-native-assets.mjs`). `oxc-transform-react` stops at 0.157.0 because 0.158.0 is still inside the window, so it trails the `@oxc-project/types` pin bundled by `vite-plus` 1.6.0 — the two are separate packages and the React transform loads by name, so the mismatch is harmless. `jsdom` 31 has its own gate problem: it needs `parse5-parser-stream` 8.1.1, which is inside the window, so the lockfile is deduped to a single `parse5@8.1.0` instead — 8.1.0 declared `parse5 ^8.0.0`, resolved 8.0.1, and threw `tokenizer.flushCharacters is not a function` in every worker that built a JSDOM.
+
+The cost is the `vite-plus` 1.3 → 1.6 jump, which carries Vitest, Oxlint and Oxfmt with it: the whole `pnpm verify` chain — lint, both test suites, the prerender build and Fallow — is what judged it, and the lint and format configuration in `toolchain.config.ts` survived unchanged.
