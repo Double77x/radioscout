@@ -1,6 +1,6 @@
-F-Droid build: updates come from F-Droid only. Switching from the GitHub APK needs an uninstall + reinstall (different signature) — back up first via Settings → Data export, then import here.
+F-Droid build: updates come from F-Droid only. If you used the GitHub APK, you must uninstall it first. The two builds use different signatures. Back up your data before you uninstall. In Settings, open Data and select Export radio data. Then use Import radio data in this build.
 
-RadioScout is a free worldwide radio player. Discover top stations by votes, search the full directory, filter by genre, country, language or bitrate, save favourites, track recent plays and listening stats — all on-device, no accounts, no sync, no tracking.
+RadioScout is a free worldwide radio player. It plays stations from the community radio-browser directory. You can search the directory and filter stations by genre, country, language or bitrate. You can save favourites and track recent plays and listening stats. All your data stays on your device. The app needs no account. It has no sync and no tracking.
 
 Features:
 - 80,000+ stations from the community radio-browser directory (playable https streams only)
@@ -10,6 +10,6 @@ Features:
 - One-file backup export/import for moving between devices
 - Light/dark theme, quick-find palette, PWA install on desktop
 
-Network: station data and votes use the radio-browser API; station logos load through wsrv.nl and proxy.duckduckgo.com; BBC and Radiolise track titles resolve through rms.api.bbc.co.uk and backend.radiolise.com; and the web version lives at radioscout.pages.dev.
+Network: the app gets station data and sends votes through the radio-browser API. It loads station logos through wsrv.nl and proxy.duckduckgo.com. It plays audio directly from each station's own server. BBC track titles come from a companion web service at radioscout.pages.dev. That service fetches the title from rms.api.bbc.co.uk. The app never contacts the BBC directly. Radiolise track titles work in the web version only. The web version lives at radioscout.pages.dev.
 
 Source, changelog and issue tracker on GitHub. MIT licensed.
