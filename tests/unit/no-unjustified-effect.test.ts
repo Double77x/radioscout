@@ -31,7 +31,7 @@ ruleTester.run("no-unjustified-effect", rule, {
     {
       name: "a Windows absolute filename maps to the repo path",
       code: "useEffect(() => {}, []);",
-      filename: "C:\\repo\\src\\components\\theme.tsx",
+      filename: String.raw`C:\repo\src\components\theme.tsx`,
       options: [{ allow: { "src/components/theme.tsx": 1 } }],
     },
     {

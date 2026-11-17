@@ -88,7 +88,7 @@ function scannedFiles() {
  */
 function readForScan(file) {
   const raw = fs.readFileSync(file, "utf8");
-  return file.endsWith(".md") ? raw.replace(FENCED_BLOCK, "") : raw;
+  return file.endsWith(".md") ? raw.replaceAll(FENCED_BLOCK, "") : raw;
 }
 
 const files = scannedFiles();

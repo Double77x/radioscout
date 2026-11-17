@@ -271,7 +271,7 @@ export function splitQualityFromName(raw: string): { name: string; bitrate: numb
   let name = raw;
   let bitrate = 0;
   let codec = "";
-  name = name.replace(BRACKET_GROUP_PATTERN, (_group, paren: string, square: string) => {
+  name = name.replaceAll(BRACKET_GROUP_PATTERN, (_group, paren: string, square: string) => {
     const parsed = parseBracketGroup(paren ?? square ?? "");
     if (parsed.bitrate > 0 && bitrate === 0) bitrate = parsed.bitrate;
     if (parsed.codec !== "" && codec === "") codec = parsed.codec;
