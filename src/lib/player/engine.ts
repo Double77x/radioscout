@@ -264,11 +264,34 @@ let reconnectAttempt = 0;
 /** True while a retry sequence owns recovery (manual transport clears it). */
 let retryingReconnect = false;
 /**
- * True once the live output played through at least once. A `loading` error
- * after this is a drop (reconnect); before it, a stillborn tune (verdict).
- * Fresh `play()` replays reset it; `playing` sets it.
+ * True once the live output played through at least once. A failure after
+ * this is a drop (reconnect); before it, a stillborn tune (verdict). Fresh
+ * `play()` replays reset it; `playing` sets it.
  */
 let playedThrough = false;
+/**
+ * How long a live stall may last before it counts as a drop. A stream that
+ * stops delivering data rarely says anything louder than `waiting`/`stalled`
+ * — a CDN that closes the socket without an `error` leaves the element
+ * buffering indefinitely — so silence this long is the only available signal.
+ *
+ * A silent stall has no positive signal: the host leaves the socket open and
+ * stops writing, so there is no EOF, no `error`, and the element only reports
+ * that its buffer ran dry *after* the audio stopped. (A clean close is the
+ * opposite — `ended` says the response is over, which is why that path has no
+ * deadline in it at all.) Elapsed silence is the only observable here, and
+ * this number is the whole of the guess.
+ *
+ * 2s sits just above the longest self-healing `DEMUXER_UNDERFLOW` dip measured
+ * (1.9s), because guessing wrong is cheap: the retry replays the URL that was
+ * working and the replacement reaches `kPlay` in tens of ms, so a restart
+ * lands before the dip it guessed wrong about would have healed. At 15s a
+ * Capital XTRA drop spent 18.7s of silence: the deadline, then the table's
+ * first slot, then a `/json/url` round trip.
+ */
+const DROP_STALL_MS = 2000;
+/** Pending stall deadline for the live element (null when nothing stalled). */
+let dropWatchdog: ReturnType<typeof globalThis.setTimeout> | null = null;
 /** `true` while the Media3 service (not `<audio>`) owns playback. */
 let usingNative = false;
 /** Native event subscription is attached once per session. */
@@ -385,6 +408,11 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
       // from under the loop (manual pauses cancel first, so a pending
       // sequence here is always the loop's own).
       if (retryingReconnect) return;
+      // End of stream fires `pause` *before* `ended` (HTML media spec: ended
+      // playback is set, then paused, then the event), so a server closing a
+      // live response would park the dock on a Play button for one task. The
+      // `ended` handler owns that close — it reconnects instead.
+      if (element.ended) return;
       if (snapshot.status === "playing" || snapshot.status === "loading") emit({ status: "paused" });
     },
     { signal },
@@ -394,7 +422,18 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
     () => {
       if (audio !== element) return;
       if (usingNative) return;
-      if (snapshot.status === "playing") emit({ status: "loading" });
+      noteStall();
+    },
+    { signal },
+  );
+  // `stalled` means the same thing as `waiting` (the fetch went quiet), and a
+  // transport that dies without an `error` often reports only this one.
+  element.addEventListener(
+    "stalled",
+    () => {
+      if (audio !== element) return;
+      if (usingNative) return;
+      noteStall();
     },
     { signal },
   );
@@ -402,8 +441,20 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
     "ended",
     () => {
       if (audio !== element) return;
-      if (retryingReconnect) return;
-      if (!usingNative) emit({ status: "paused" });
+      if (usingNative || retryingReconnect) return;
+      // A live stream has no end, so `ended` here means the server closed the
+      // response. Walking the table beats offering Play over a stream that
+      // will never answer again.
+      if (playedThrough && snapshot.station) {
+        // A clean close means the host ended the response and the element's
+        // buffer has drained, so there is nothing left to protect: take the
+        // first slot at once rather than adding a wait to a silence the
+        // listener can already hear.
+        playedThrough = false;
+        beginReconnect(snapshot.station, { immediate: true });
+        return;
+      }
+      emit({ status: "paused" });
     },
     { signal },
   );
@@ -415,6 +466,14 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
       // Dead-element noise mid-sequence belongs to the loop, not to a
       // verdict — the loop owns recovery until it gives up.
       if (retryingReconnect) return;
+      // An `error` that skips `waiting` is still a drop. Without this the
+      // dock would keep saying `playing` over silence and no retry would be
+      // armed, which is the one shape the loading branch below never sees.
+      if (snapshot.status === "playing" && playedThrough && snapshot.station) {
+        playedThrough = false;
+        beginReconnect(snapshot.station);
+        return;
+      }
       if (snapshot.status === "loading") {
         // A routed load fails when the host sends no CORS headers (the
         // graph can only read CORS-clean streams). Rescue once per element:
@@ -432,8 +491,7 @@ function attachLiveListeners(element: HTMLAudioElement, signal: AbortSignal): vo
           return;
         }
         // A load that fails AFTER the stream played through is a drop, not
-        // a stillborn tune (drops usually stall through `waiting` first, so
-        // they arrive here, not while `playing`). Walk the backoff table.
+        // a stillborn tune. Walk the backoff table.
         if (playedThrough && snapshot.station) {
           playedThrough = false;
           beginReconnect(snapshot.station);
@@ -1296,6 +1354,55 @@ function cancelReconnect(): void {
   retryingReconnect = false;
   reconnectAttempt = 0;
   reconnectTimer.cancel();
+  clearDropWatchdog();
+}
+
+/** Drop a pending stall deadline (recovery landed or transport took over). */
+function clearDropWatchdog(): void {
+  if (dropWatchdog !== null) {
+    globalThis.clearTimeout(dropWatchdog);
+    dropWatchdog = null;
+  }
+}
+
+/**
+ * A stall on the live output: `loading` while audible, plus the stall deadline.
+ * Callers are identity-guarded to the live element, so a staged incoming never
+ * arms it — the handoff watchdog owns that stage.
+ */
+function noteStall(): void {
+  if (retryingReconnect || !playedThrough) return;
+  const station = snapshot.station;
+  if (!station) return;
+  if (snapshot.status === "playing") emit({ status: "loading" });
+  if (snapshot.status !== "loading") return;
+  armDropWatchdog(station);
+}
+
+/**
+ * Arm the stall deadline for the live element. Only reached once the stream
+ * has played through, so a stillborn tune keeps its immediate verdict; the
+ * fire-time guards re-check ownership because anything may have happened
+ * during the grace period (a manual pause, a newer play, native takeover).
+ */
+function armDropWatchdog(station: Station): void {
+  // One deadline per stall episode. A dead transport keeps re-reporting
+  // `waiting`/`stalled` for as long as the browser waits on it, so re-arming
+  // here would let a stream that never comes back push its own deadline out
+  // forever — the exact shape this exists for. `playing` and every play or
+  // transport take-over clear it.
+  if (dropWatchdog !== null) return;
+  dropWatchdog = globalThis.setTimeout(() => {
+    dropWatchdog = null;
+    if (usingNative || retryingReconnect || !playedThrough) return;
+    if (snapshot.status !== "loading") return;
+    if (snapshot.station?.stationuuid !== station.stationuuid) return;
+    playedThrough = false;
+    // The socket died, not the station: the URL was delivering a minute ago,
+    // so replay it at once instead of paying the first slot plus a lookup
+    // while the listener hears nothing.
+    beginReconnect(station, { immediate: true });
+  }, DROP_STALL_MS);
 }
 
 /** The `online` fast path is wired once, on the first reconnect-capable play. */
@@ -1331,12 +1438,25 @@ function ensureReconnectFastPath(): void {
 }
 
 /** First drop: quiet toast, `loading` dock, first wait armed. */
-function beginReconnect(station: Station): void {
+function beginReconnect(station: Station, options?: { immediate?: boolean }): void {
   ensureReconnectFastPath();
+  clearDropWatchdog();
   retryingReconnect = true;
   reconnectAttempt = 1;
   toast("Connection lost", { description: "Retrying the stream…" });
   emit({ status: "loading", error: null });
+  // `immediate` is the shape where the silence has already started: a clean
+  // close (response gone, buffer drained) or a stall that outlived its
+  // deadline (socket dry). The first wait protects nothing there and only
+  // lengthens a silence the listener can hear. A failed immediate attempt
+  // still walks the rest of the table.
+  if (options?.immediate === true) {
+    // Known-good URL: a directory lookup here is longer than the wait it
+    // replaces (measured: 2.36s of a 2.27s-plus silence), and a stale URL
+    // still falls through to the table, which re-resolves.
+    retryStation(station, { skipResolve: true });
+    return;
+  }
   reconnectTimer.schedule(1, () => {
     retryStation(station);
   });
@@ -1367,8 +1487,8 @@ function continueReconnect(station: Station, url: string): void {
 }
 
 /** Retry replay: a cold-start-shaped `play()` with no revert target (the live element is dead). */
-function retryStation(station: Station): void {
-  play(station, { fromReconnect: true });
+function retryStation(station: Station, options?: { skipResolve?: boolean }): void {
+  play(station, { fromReconnect: true, skipResolve: options?.skipResolve });
   // play() captured the dead predecessor above — there is nothing audible
   // to revert to, so force the cold-start failure branch on another failure.
   handoffPrev = null;
@@ -1383,15 +1503,17 @@ function retryStation(station: Station): void {
  * `fromReconnect` marks a retry replay, which keeps its attempt count; a manual
  * play resets the retry sequence.
  */
-export function play(station: Station, options?: { fromReconnect?: boolean }): void {
+export function play(station: Station, options?: { fromReconnect?: boolean; skipResolve?: boolean }): void {
   const token = ++playToken;
   // A fresh play cancels in-flight fades (a finishing pause-fade must never
   // park or re-level the new station's output) and any staged handoff.
   fadeToken += 1;
   handoffToken += 1;
   // A manual play abandons any retry wait; a retry replay keeps its count
-  // (otherwise the loop could never exhaust).
+  // (otherwise the loop could never exhaust). A pending stall deadline dies
+  // with it either way — this play owns recovery from here.
   reconnectTimer.cancel();
+  clearDropWatchdog();
   if (options?.fromReconnect !== true) {
     retryingReconnect = false;
     reconnectAttempt = 0;
@@ -1424,7 +1546,11 @@ export function play(station: Station, options?: { fromReconnect?: boolean }): v
       emit({ status: "error", error: "Audio isn't available during prerender." });
       return;
     }
-    const url = await resolveUrl(station);
+    // The immediate reconnect retry reuses the URL that just played: paying a
+    // `/json/url/<uuid>` round trip before the replacement exists turns a
+    // zero-delay retry back into a multi-second silence.
+    const url =
+      options?.skipResolve === true ? canonicalStreamUrl(pickPlayableUrl(station)) : await resolveUrl(station);
     if (token !== playToken) return; // superseded by a newer play()
     if (handoff !== handoffToken) return; // paused/stopped mid-resolve
     if (!pausedAtTap && snapshot.status === "paused") {
