@@ -135,3 +135,6 @@ GEMINI.md
 # Vite+ hooks (generated dispatcher; project hooks in .vite-hooks/ are tracked)
 # -----------------------------------------------------------------------------
 .vite-hooks/_
+
+# Long-run playback soak logs (scripts/soak-playback.mjs)
+.tmp-soak*/

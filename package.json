@@ -13,6 +13,7 @@
     "check": "vp check",
     "prepare": "vp config --no-agent",
     "fallow": "fallow audit",
+    "soak": "node scripts/soak-playback.mjs",
     "preview": "wrangler pages dev --port 8788",
     "cap:sync": "npx cap sync",
     "cap:android": "cross-env CAPACITOR_BUILD=1 pnpm exec vp run build && node scripts/strip-sw.mjs && npx cap sync android",

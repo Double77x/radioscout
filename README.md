@@ -159,7 +159,7 @@ distribution/
   obtainium/   listing config published to the Obtainium app directory
 scripts/       generate-sitemap, generate-icons, generate-native-assets, cap-version,
                generate-sw, publish-ota, obtainium-links, android-fixture-*, android-*smoke,
-               capture-*
+               screenshot, soak-playback
 capacitor.config.ts  Android shell on dist/client
 android/             committed native shell (local outputs gitignored)
 ```
