@@ -121,6 +121,20 @@ function latestSocket(): FakeSocket {
   return socket;
 }
 
+/**
+ * `play()` resolves the stream URL before it arms the probe, so the socket
+ * appears a turn or two later — and on a loaded worker that can outlast any
+ * fixed sleep. Poll for it instead of guessing a delay.
+ */
+async function waitForSocket(): Promise<FakeSocket> {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const socket = FakeSocket.instances.at(-1);
+    if (socket) return socket;
+    await sleep(10);
+  }
+  return latestSocket();
+}
+
 beforeEach(async () => {
   FakeSocket.instances = [];
   // The engine owns one audio element per module lifetime — track every one
@@ -151,8 +165,7 @@ afterEach(async () => {
 describe("Radiolise push persistence", () => {
   it("applies a pushed title to the player snapshot", async () => {
     play(STATION);
-    await flush();
-    const socket = latestSocket();
+    const socket = await waitForSocket();
     socket.serverOpen();
     expect(socket.sent).toEqual([
       JSON.stringify({ action: "subscribe", data: { url: "https://example.com/push.mp3" } }),
@@ -171,9 +184,9 @@ describe("Radiolise push persistence", () => {
     const fetchSpy = vi.fn(() => Promise.reject(new Error("offline")));
     vi.stubGlobal("fetch", fetchSpy);
     play(STATION);
-    await flush();
+    const socket = await waitForSocket();
     audio().fire("playing");
-    latestSocket().serverOpen();
+    socket.serverOpen();
     expect(ticks).toHaveLength(1);
     const before = fetchSpy.mock.calls.length;
     ticks[0]?.();
@@ -183,9 +196,8 @@ describe("Radiolise push persistence", () => {
 
   it("reopens the socket after an unexpected drop", async () => {
     play(STATION);
-    await flush();
+    const first = await waitForSocket();
     audio().fire("playing");
-    const first = latestSocket();
     first.serverOpen();
     vi.useFakeTimers();
     try {
@@ -201,9 +213,8 @@ describe("Radiolise push persistence", () => {
 
   it("ends the subscription on a station error without reconnecting", async () => {
     play(STATION);
-    await flush();
+    const socket = await waitForSocket();
     audio().fire("playing");
-    const socket = latestSocket();
     socket.serverOpen();
     vi.useFakeTimers();
     try {
@@ -218,8 +229,7 @@ describe("Radiolise push persistence", () => {
 
   it("tears the socket down on stop as an expected close", async () => {
     play(STATION);
-    await flush();
-    const socket = latestSocket();
+    const socket = await waitForSocket();
     socket.serverOpen();
     stop();
     expect(socket.sent).toContain(JSON.stringify({ action: "unsubscribe" }));
