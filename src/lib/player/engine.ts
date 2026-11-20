@@ -288,8 +288,19 @@ let playedThrough = false;
  * lands before the dip it guessed wrong about would have healed. At 15s a
  * Capital XTRA drop spent 18.7s of silence: the deadline, then the table's
  * first slot, then a `/json/url` round trip.
+ *
+ * The number only measures silence because `armDropWatchdog` re-reads the
+ * playhead before it fires: elapsed time since a `stalled` is not a drop, and a
+ * stream whose playhead kept moving is left alone.
  */
 const DROP_STALL_MS = 2000;
+/**
+ * Playhead advance (seconds) inside the grace period that proves a stall healed.
+ * The deadline is measured against the clock the listener hears, not against
+ * the event: a `stalled` that plays through is a live-edge segment boundary
+ * (Chromium's native HLS reports one per segment), not a dead socket.
+ */
+const DROP_PROGRESS_S = 0.25;
 /** Pending stall deadline for the live element (null when nothing stalled). */
 let dropWatchdog: ReturnType<typeof globalThis.setTimeout> | null = null;
 /** `true` while the Media3 service (not `<audio>`) owns playback. */
@@ -1366,17 +1377,31 @@ function clearDropWatchdog(): void {
 }
 
 /**
- * A stall on the live output: `loading` while audible, plus the stall deadline.
- * Callers are identity-guarded to the live element, so a staged incoming never
- * arms it — the handoff watchdog owns that stage.
+ * A stall on the live output: arms the stall deadline and nothing else.
+ *
+ * It deliberately does not emit `loading`. A stall is not yet a drop — the
+ * element stalls whenever its buffer runs dry, and Chromium's native HLS path
+ * does that at every live-edge segment boundary while the audio it already
+ * holds keeps playing (measured: `stalled` at 4045/11713/17903/24122ms, one per
+ * 6.4s segment, `currentTime` advancing 3.69→23.76s). Flipping the dock to
+ * tuning on each of those flickers over audio that never stopped; the deadline
+ * is what decides, and `beginReconnect` emits `loading` when it does.
+ *
+ * Callers are identity-guarded to the live element, so a staged incoming
+ * never arms it — the handoff watchdog owns that stage.
  */
 function noteStall(): void {
   if (retryingReconnect || !playedThrough) return;
   const station = snapshot.station;
   if (!station) return;
-  if (snapshot.status === "playing") emit({ status: "loading" });
-  if (snapshot.status !== "loading") return;
+  if (snapshot.status !== "playing" && snapshot.status !== "loading") return;
   armDropWatchdog(station);
+}
+
+/** Readable playhead in seconds, or null before the element has one. */
+function playheadOf(element: HTMLAudioElement): number | null {
+  const at = element.currentTime;
+  return typeof at === "number" && Number.isFinite(at) ? at : null;
 }
 
 /**
@@ -1392,11 +1417,21 @@ function armDropWatchdog(station: Station): void {
   // forever — the exact shape this exists for. `playing` and every play or
   // transport take-over clear it.
   if (dropWatchdog !== null) return;
+  const element = audio;
+  const armedAt = element === null ? null : playheadOf(element);
   dropWatchdog = globalThis.setTimeout(() => {
     dropWatchdog = null;
     if (usingNative || retryingReconnect || !playedThrough) return;
-    if (snapshot.status !== "loading") return;
+    if (snapshot.status !== "loading" && snapshot.status !== "playing") return;
     if (snapshot.station?.stationuuid !== station.stationuuid) return;
+    // A playhead that moved during the grace period means the element was
+    // waiting on its next segment, not on a dead socket: native HLS reports
+    // `stalled` at every live-edge segment boundary while the audio it already
+    // holds keeps playing. Tearing a healthy stream down there reconnected BBC
+    // stations about once per segment. Dropping the deadline is the whole
+    // response — the status stays `playing` and the next stall arms afresh.
+    const now = element === null || element !== audio ? null : playheadOf(element);
+    if (armedAt !== null && now !== null && now - armedAt >= DROP_PROGRESS_S) return;
     playedThrough = false;
     // The socket died, not the station: the URL was delivering a minute ago,
     // so replay it at once instead of paying the first slot plus a lookup
@@ -1411,14 +1446,14 @@ let reconnectFastPathReady = false;
 /**
  * Fire an armed retry wait the moment the network reports it is back.
  *
- * <p>Worth having on cellular, where a drop usually means the radio left
+ * Worth having on cellular, where a drop usually means the radio left
  * coverage: the long backoff waits are then mostly spent on a socket that
  * cannot recover, so a 60s wait can outlast the drive back into signal by
  * minutes. This only fires a wait that is already armed — it never starts a
  * sequence, and with nothing pending it is a no-op — so the subscription is
  * harmless when the app has no drop in flight.
  *
- * <p>Registered alongside the other module-owned global subscriptions rather
+ * Registered alongside the other module-owned global subscriptions rather
  * than in a component effect: the retry loop lives here, not in the tree, and
  * the engine outlives every component that could host the effect.
  */

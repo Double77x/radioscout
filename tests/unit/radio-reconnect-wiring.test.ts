@@ -16,6 +16,8 @@ class FakeAudio {
   readonly volume = 1;
   muted = false;
   ended = false;
+  /** Playhead; tests move it to prove which stalls are live-edge waits. */
+  currentTime = 0;
   readonly preload = "";
   private readonly attrs = new Map<string, string>();
   private readonly handlers = new Map<string, Set<AudioHandler>>();
@@ -230,6 +232,71 @@ describe("drop reconnect", () => {
     await settle();
     expect(lookups).toBe(0);
     expect(latest().src).toBe(staged.src);
+  });
+
+  // Chromium's native HLS path (Edge takes it: `canPlayType` says "maybe", so
+  // no hls.js) fires `stalled` at every live-edge segment boundary while the
+  // audio it already holds keeps playing. Treating that as a drop reconnected
+  // the BBC stations about once per 6.4s segment, so progress during the grace
+  // period has to win over the event.
+  it("a live-edge stall whose playhead advanced never reconnects", async () => {
+    const { staged } = await startPlaying();
+    const base = FakeAudio.created.length;
+    const statuses: string[] = [];
+    const unsubscribe = subscribe(() => {
+      const { status } = getSnapshot();
+      if (statuses.at(-1) !== status) statuses.push(status);
+    });
+    staged.currentTime = 30;
+    staged.fire("stalled");
+    await settle();
+    // The buffer ran dry at a boundary and refilled; the playhead moved on.
+    staged.currentTime = 32.4;
+    await vi.advanceTimersByTimeAsync(2000);
+    await settle();
+    expect(FakeAudio.created).toHaveLength(base);
+    expect(getSnapshot().status).toBe("playing");
+    expect(getSnapshot().error).toBeNull();
+    // No dock flicker either: a bail must not have emitted `loading`.
+    expect(statuses).not.toContain("loading");
+    unsubscribe();
+  });
+
+  // The signal the guard replaces event-time with: silence the listener can
+  // actually hear. Same event, same deadline, frozen playhead.
+  it("a stall whose playhead is frozen still reconnects at the deadline", async () => {
+    const { staged } = await startPlaying();
+    const base = FakeAudio.created.length;
+    staged.currentTime = 30;
+    staged.fire("stalled");
+    await settle();
+    // Inside the 2s deadline (`DROP_STALL_MS`).
+    await vi.advanceTimersByTimeAsync(1999);
+    await settle();
+    expect(FakeAudio.created).toHaveLength(base);
+    await vi.advanceTimersByTimeAsync(1);
+    await settle();
+    expect(FakeAudio.created).toHaveLength(base + 1);
+  });
+
+  // A bailed deadline must not become a permanent shield: a socket that really
+  // dies after a healthy boundary still has to be recovered.
+  it("a bailed deadline leaves the next stall free to reconnect", async () => {
+    const { staged } = await startPlaying();
+    const base = FakeAudio.created.length;
+    staged.currentTime = 10;
+    staged.fire("stalled");
+    await settle();
+    staged.currentTime = 16;
+    await vi.advanceTimersByTimeAsync(2000);
+    await settle();
+    expect(FakeAudio.created).toHaveLength(base);
+    // Next boundary — this time the socket is gone and the clock stops dead.
+    staged.fire("stalled");
+    await settle();
+    await vi.advanceTimersByTimeAsync(2000);
+    await settle();
+    expect(FakeAudio.created).toHaveLength(base + 1);
   });
 
   it("a stall that recovers inside the grace period never reconnects", async () => {
