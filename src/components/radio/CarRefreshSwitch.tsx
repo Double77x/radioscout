@@ -12,7 +12,7 @@ const REFRESH_OFF = "0";
  * follow every title on their own). One tap flips the persisted toggle and
  * live-applies it, exactly like `NormalizeSwitch`.
  *
- * <p>The copy carries the trade-off on purpose: this works by nudging playback
+ * The copy carries the trade-off on purpose: this works by nudging playback
  * at every song change, so a click or short rebuffer is the price of a car that
  * stops showing the first song forever.
  */
