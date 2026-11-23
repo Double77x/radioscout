@@ -89,7 +89,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.7",
     "fake-indexeddb": "^6.2.8",
-    "fallow": "^3.42.0",
+    "fallow": "^3.43.1",
     "jsdom": "^31.0.1",
     "oxc-transform-react": "^0.157.0",
     "png-to-ico": "^3.0.2",
