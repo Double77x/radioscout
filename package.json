@@ -91,7 +91,7 @@
     "fake-indexeddb": "^6.2.8",
     "fallow": "^3.43.2",
     "jsdom": "^31.0.1",
-    "oxc-transform-react": "^0.157.0",
+    "oxc-transform-react": "^0.158.0",
     "png-to-ico": "^3.0.2",
     "react-doctor": "^0.9.23",
     "rollup-plugin-visualizer": "^7.1.3",
