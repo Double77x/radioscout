@@ -315,8 +315,8 @@ importers:
         specifier: ^4.11.0
         version: 4.11.0(eslint@10.15.0(jiti@2.7.0)(supports-color@10.2.2))(oxlint@1.93.0(oxlint-tsgolint@7.0.2006)(vite-plus@1.6.0(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(@vitest/ui@5.1.0)(esbuild@0.28.2)(jiti@2.7.0)(jsdom@31.0.1)(playwright@1.65.1)(terser@5.51.2)(typescript@7.0.2)(yaml@2.9.1)))(tailwindcss@4.3.5)(typescript@7.0.2)
       eslint-plugin-react-doctor:
-        specifier: 0.9.22
-        version: 0.9.22
+        specifier: 0.9.23
+        version: 0.9.23
       eslint-plugin-react-hooks:
         specifier: ^7.1.1
         version: 7.1.1(eslint@10.15.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2)
@@ -3957,8 +3957,8 @@ packages:
       oxlint:
         optional: true
 
-  eslint-plugin-react-doctor@0.9.22:
-    resolution: {integrity: sha512-EnTsvO3QZDMhkexvrgMaevmLrHyEdj/RgOxB/g85wlZnF2czOxnS/Owz+yCjKmAHc7YMAcp3GTFzFrIB3sSOnQ==}
+  eslint-plugin-react-doctor@0.9.23:
+    resolution: {integrity: sha512-GsEtbnhIVge9hhIbIXrMD6DsQtFy2VKCQf+p5JPKHyyaaUeBKeq0e/3Yz7jwx3tPwFWSGpsLpuFhv+iBZD1BZQ==}
     engines: {node: ^20.19.0 || >=22.13.0}
 
   eslint-plugin-react-hooks@7.1.1:
@@ -4790,10 +4790,6 @@ packages:
         optional: true
       vite-plus:
         optional: true
-
-  oxlint-plugin-react-doctor@0.9.22:
-    resolution: {integrity: sha512-kf9MwCpK3YlAWYUyX5Zx7XYrdIbA/4lQD2QREIqC8DvmNb2I+wP8zyjL4NeGl2FO2EC1sLuYvW8ir4Ooq1Xd2A==}
-    engines: {node: ^20.19.0 || >=22.13.0}
 
   oxlint-plugin-react-doctor@0.9.23:
     resolution: {integrity: sha512-AWC9/Jiki6s7e8b8xqTs0T/Hph8ISEDmoMUDwPkEzTrE0996ZWjwg7Ifaz5vPJQnefnOI9SDQQ/EvwvaZt4Tvg==}
@@ -9099,9 +9095,9 @@ snapshots:
       - '@eslint/css'
       - typescript
 
-  eslint-plugin-react-doctor@0.9.22:
+  eslint-plugin-react-doctor@0.9.23:
     dependencies:
-      oxlint-plugin-react-doctor: 0.9.22
+      oxlint-plugin-react-doctor: 0.9.23
 
   eslint-plugin-react-hooks@7.1.1(eslint@10.15.0(jiti@2.7.0)(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
@@ -9984,15 +9980,6 @@ snapshots:
       '@oxfmt/binding-win32-ia32-msvc': 0.78.0
       '@oxfmt/binding-win32-x64-msvc': 0.78.0
       vite-plus: 1.6.0(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(@vitest/ui@5.1.0)(esbuild@0.28.2)(jiti@2.7.0)(jsdom@31.0.1)(playwright@1.65.1)(terser@5.51.2)(typescript@7.0.2)(yaml@2.9.1)
-
-  oxlint-plugin-react-doctor@0.9.22:
-    dependencies:
-      '@shaderfrog/glsl-parser': 7.0.1
-      '@typescript-eslint/types': 8.73.0
-      eslint-scope: 9.1.2
-      eslint-visitor-keys: 5.0.1
-      lightningcss: 1.33.0
-      oxc-parser: 0.148.0
 
   oxlint-plugin-react-doctor@0.9.23:
     dependencies:
