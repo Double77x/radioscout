@@ -109,7 +109,7 @@ jobs:
           mv "$registry.tmp" "$registry"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Decode release keystore
         env:
