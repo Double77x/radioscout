@@ -9,8 +9,10 @@ import { normalizeMinBitrate, QUALITY_KEY, readMinBitrate, writeMinBitrate } fro
 import { readNormalizeEnabled, writeNormalizeEnabled, NORMALIZE_KEY } from "@/lib/radio/normalize";
 import {
   radioDb,
+  rebuildListeningRollups,
   type FavouriteRow,
   type HistoryRow,
+  type ListeningDayRow,
   type ListeningRow,
   type RadioDB,
   type TrackRow,
@@ -21,7 +23,8 @@ import { readVotedIds, writeVotedIds } from "@/lib/radio/votes";
 
 /** v6 adds the station-country filter; v7 adds song history (`tracks`). */
 /** v8 adds the colour flavour (`flavor`, default by default). */
-export const RADIO_BACKUP_VERSION = 8 as const;
+/** v9 adds the listening day rollups (`listeningDaily`). */
+export const RADIO_BACKUP_VERSION = 9 as const;
 
 /**
  * Versioned envelope for everything RadioScout keeps locally. New feature
@@ -48,6 +51,20 @@ const listeningRowSchema = z.object({
   name: z.string(),
   started_at: z.string(),
   seconds: z.number(),
+});
+
+const listeningDayRowSchema = z.object({
+  key: z.string().min(1),
+  stationuuid: z.string().min(1),
+  name: z.string(),
+  date: z.string(),
+  midnight: z.number(),
+  seconds: z.number(),
+  plays: z.number(),
+  longest: z.number(),
+  partSeconds: z.number().array(),
+  partPlays: z.number().array(),
+  latestAt: z.string(),
 });
 
 const trackRowSchema = z.object({
@@ -79,6 +96,8 @@ const radioBackupSchema = z.object({
   quality: z.number().optional().default(0),
   // Absent before v4 — no listening time banked, never a restore failure.
   listening: listeningRowSchema.array().optional().default([]),
+  // Absent before v9 — rebuilt from the raw sessions on restore.
+  listeningDaily: listeningDayRowSchema.array().optional().default([]),
   // Absent before v5 — leveling off by default, never a restore failure.
   normalize: z.boolean().optional().default(false),
   // Absent before v7 — no song history banked, never a restore failure.
@@ -99,6 +118,7 @@ export type RadioBackupPayload = {
   countries: string[];
   quality: number;
   listening: ListeningRow[];
+  listeningDaily: ListeningDayRow[];
   normalize: boolean;
   tracks: TrackRow[];
   flavor: Flavor;
@@ -110,10 +130,11 @@ export function radioBackupFilename(now: Date = new Date()): string {
 
 /** Snapshot everything worth keeping into a portable payload. */
 export async function collectRadioBackup(database: RadioDB = radioDb): Promise<RadioBackupPayload> {
-  const [favourites, history, listening, tracks] = await Promise.all([
+  const [favourites, history, listening, listeningDaily, tracks] = await Promise.all([
     database.favourites.toArray(),
     database.history.orderBy("id").toArray(),
     database.listening.orderBy("id").toArray(),
+    database.listeningDaily.toArray(),
     database.tracks.orderBy("id").toArray(),
   ]);
   return {
@@ -128,6 +149,7 @@ export async function collectRadioBackup(database: RadioDB = radioDb): Promise<R
     countries: readCountries(),
     quality: readMinBitrate(),
     listening,
+    listeningDaily,
     normalize: readNormalizeEnabled(),
     tracks,
     flavor: readStoredFlavor(),
@@ -160,25 +182,43 @@ export async function restoreRadioBackup(payload: unknown, database: RadioDB = r
   if (parsed.data.version > RADIO_BACKUP_VERSION) {
     throw new Error("That backup needs a newer RadioScout — update first, then restore.");
   }
-  const { favourites, history, prefs, voted, languages, countries, quality, listening, normalize, tracks, flavor } =
-    parsed.data;
+  const {
+    favourites,
+    history,
+    prefs,
+    voted,
+    languages,
+    countries,
+    quality,
+    listening,
+    listeningDaily,
+    normalize,
+    tracks,
+    flavor,
+  } = parsed.data;
   await database.transaction(
     "rw",
-    [database.favourites, database.history, database.listening, database.tracks],
+    [database.favourites, database.history, database.listening, database.listeningDaily, database.tracks],
     async () => {
       await database.favourites.clear();
       await database.history.clear();
       await database.listening.clear();
+      await database.listeningDaily.clear();
       await database.tracks.clear();
       await database.favourites.bulkPut(favourites);
       const withoutIds = history.map(({ id: _dropped, ...row }) => row);
       await database.history.bulkPut(withoutIds);
       const sessionsWithoutIds = listening.map(({ id: _dropped, ...row }) => row);
       await database.listening.bulkPut(sessionsWithoutIds);
+      await database.listeningDaily.bulkPut(listeningDaily);
       const tracksWithoutIds = tracks.map(({ id: _dropped, ...row }) => row);
       await database.tracks.bulkPut(tracksWithoutIds);
     },
   );
+  // Envelopes without rollups carry only the raw sessions; fold them back in.
+  if (listeningDaily.length === 0 && listening.length > 0) {
+    await rebuildListeningRollups(database);
+  }
   writeVotedIds(voted);
   writeLanguages(normalizeLanguages(languages));
   writeCountries(normalizeCountries(countries));

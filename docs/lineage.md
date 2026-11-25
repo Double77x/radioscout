@@ -99,6 +99,8 @@ step with the headings below, so an entry without a line here fails the build.
 - 2026-11-16 — Drops are three shapes: loud, silent, and a clean close
 - 2026-11-17 — A silent drop cost 18.7s of audible silence
 - 2026-11-20 — A stall is judged by the playhead, not by the event
+- 2026-11-25 — Listening average rows name the sample, not a time share
+- 2026-11-25 — Listening stats read (station, day) rollups, not the session log
 - 2026-11-25 — Flavour palettes brought to WCAG AA
 
 ## How this fits the other docs
@@ -704,6 +706,26 @@ So `noteStall` no longer emits `loading`, and `armDropWatchdog` no longer trusts
 Where the latency enters is worth writing down, because the report that started this was "only with the VPN". `stalled` is the spec's *media data has surprisingly not arrived for more than 3 seconds* signal, not a fault, and the native path fetches a single segment at a time at the live edge with barely any lookahead. On a ~20ms path a boundary refill finishes in tens of ms and never approaches 3s; over a tunnel the same fetch runs on a different Akamai edge (handshakes measured 140–153ms to Akamai against 50–60ms to the Icecast host) on a shared exit node, and one refill that idles past 3s emits `stalled` over audio that is still playing. The tunnel was therefore not causing a failure — it was moving a latency knob across a threshold Chromium defines for itself, which is also why the same build behaves differently in Chrome and Firefox rather than differently for the station. It is the same coin as the one `net::ERR_CONNECTION_TIMED_OUT`, the other way that path can genuinely die behind a congested exit node and the case a deadline should still recover.
 
 The cost is two judgements that are now load-bearing. 0.25s is the smallest advance that separates "played through the boundary" from "frozen", and a stall whose playhead creeps forward by a fraction would be left on `playing` until the next stall arms again — tolerable because `currentTime` on a live stream only moves with audio the listener is actually hearing, and the shape this exists for re-stalls immediately. The dock also keeps saying `playing` through up to 2s of a genuine silent drop instead of flipping to tuning on the first report, which is precisely the flicker being removed. Rejected: bridging every Chromium station through `hls.js`. It measured steady — 8 fragments loaded, `currentTime` 14.93→58.93, zero stalls — but adopting it means giving up the platform demuxer to work around one false positive, and the progress guard fixes the class rather than a single transport. Still uncovered: a backgrounded WebView with frozen timers, the APK's Media3 path, and the fact that `playing` resets the attempt counter, so a five-second flap loop could never have exhausted the table on its own.
+
+### 2026-11-25 · Listening average rows name the sample, not a time share
+
+The Average sort ranked stations by mean seconds per banked session but captioned each row with the station's share of total listening time, because an average has no share of its own. The two metrics disagree on small samples: one 26-minute listen is 0.3% of 149h of listening, so it topped the chart as "26m avg (0%)" beside a full bar — which reads as a broken number rather than a station that was opened once.
+
+Average rows now append the sample size (`26m avg · 1 session`), while Total and Sessions keep their real shares; the bar was already scaled by the sort's own value, so only the caption was lying. The row model — ranking, captions, the Other row and the unrounded cascade shares — moved out of `ListeningStats.tsx` into `listening-rows.ts` so it is testable without a DOM, and `tests/unit/listening-rows.test.ts` pins the reported case. The cost is that Average mode shows no percentage at all; the time split is one tab away under Total.
+
+Rejected: showing the average as a percentage of the overall mean session (an average of averages, which no listener can compare against) and hiding one-off stations behind a minimum play count (it would drop a station the listener did open, and the sample caption already explains the ranking).
+
+### 2026-11-25 · Listening stats read (station, day) rollups, not the session log
+
+The session cap was the only thing keeping the charts cheap: `summarizeListening` read the whole `listening` table and aggregated it in memory, and the player invalidates `LISTENING_KEY` every time a session banks — on every checkpoint, station switch and native buffering blip. Raising the cap to 100k on that design would have put a full scan on each bank; measured on the real function, 1k rows took 6 ms, 10k took 50 ms and 100k took 479 ms on a desktop, with a low-end phone several times worse.
+
+Sessions now fold into `listeningDaily`, one row per (station, local date) carrying seconds, plays, longest session, the four daypart splits and the newest name, written in the same transaction as the raw row. The charts read only the rollups, so summary cost tracks listening days rather than sessions — a decade of daily listening is a few thousand rows — and pruning the raw log no longer changes a total. There is one aggregation implementation: `summarizeListeningRows` folds in memory and calls the same `summarizeListeningDays` the stored path uses, so reference and rollups cannot drift, and `tests/unit/radio-listening.test.ts` asserts they agree. The raw cap is now 100k (backup detail plus rebuilds), and the envelope is v9 carrying the rollups; a pre-v9 envelope rebuilds them from its sessions on restore. Dates freeze at write time, so a session stays on the local day it happened even if the device changes timezone.
+
+Rejected: capping raw rows at 10k instead of adding rollups (still a 50 ms scan per bank, and totals would truncate), and dropping the raw log entirely (no rebuild path, and the backup would lose per-session detail). The cost that remains is the backup: 100k raw sessions are about 15 MB of JSON, so the export is now the largest file the app writes.
+
+One migration scar: the rollup store was first named `listening_daily` while the code read `listeningDaily`, and a dev database that opened during that window sat at v4 with an empty, wrongly named store — every summary threw and the home section hid itself as if nothing had ever been banked. v5 drops that store, and `summarizeListening` rebuilds the rollups whenever the raw log holds more sessions than they do, so a half-built cache heals on reload instead of needing the cache cleared. A pruned log always holds fewer rows than its rollups, so the repair can't mistake a cap for lost history.
+
+The version change itself reads and writes no user rows — v4 and v5 only declare schema, and the backfill runs on the first summary. That is deliberate: an upgrade that folded inside Dexie's versionchange would take the whole database down with it if a single row tripped the fold, and every table (favourites, history) would be unreadable until a fix shipped. A failed backfill now costs one empty chart and retries on the next read.
 
 ### 2026-11-25 · Flavour palettes brought to WCAG AA
 

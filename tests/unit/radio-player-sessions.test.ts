@@ -98,6 +98,7 @@ beforeEach(async () => {
   // Never touch the live directory — resolve falls back to the local URL.
   scope.fetch = () => Promise.reject(new Error("offline"));
   await radioDb.listening.clear();
+  await radioDb.listeningDaily.clear();
   await radioDb.history.clear();
 });
 
@@ -112,6 +113,7 @@ afterEach(async () => {
   stop();
   await flush();
   await radioDb.listening.clear();
+  await radioDb.listeningDaily.clear();
   await radioDb.history.clear();
   vi.restoreAllMocks();
 });

@@ -4,6 +4,7 @@ import type {
   DateBucket,
   DayBucket,
   DaypartBucket,
+  ListeningDayRow,
   ListeningRow,
   ListeningStation,
   ListeningSummary,
@@ -11,10 +12,13 @@ import type {
 } from "./store";
 
 /**
- * Pure listening aggregation for the stats views. The Dexie-backed
- * `summarizeListening` wrapper in `store.ts` fetches and filters sessions,
- * then delegates here; keeping it pure lets the buckets, streaks and best day
- * be reasoned about without a database.
+ * Pure listening aggregation for the stats views.
+ *
+ * Sessions are folded into one row per (station, local date) as they are
+ * banked, and the charts read those rollups — a decade of listening stays a
+ * few thousand rows, so a summary never scans the session log. The Dexie
+ * wrapper in `store.ts` keeps the read; `summarizeListeningRows` keeps the
+ * row-in reference path for rebuilds and tests.
  */
 
 /** Weekday labels, Monday first (matches `(getDay() + 6) % 7`). */
@@ -48,6 +52,62 @@ function mondayOf(date: Date): Date {
   day.setHours(0, 0, 0, 0);
   day.setDate(day.getDate() - ((day.getDay() + 6) % 7));
   return day;
+}
+
+/** Six-hour daypart slot for a local hour: night, morning, afternoon, evening. */
+function daypartIndex(hour: number): number {
+  return hour < 6 ? 0 : hour < 12 ? 1 : hour < 18 ? 2 : 3;
+}
+
+/** The local date, its midnight and its daypart for a session start. */
+export function listeningRowBucket(startedAt: string): { date: string; midnight: number; part: number } {
+  const started = new Date(startedAt);
+  const midnight = new Date(started);
+  midnight.setHours(0, 0, 0, 0);
+  return { date: localDateKey(started), midnight: midnight.getTime(), part: daypartIndex(started.getHours()) };
+}
+
+/**
+ * Fold sessions into one row per (station, local date) — the write model
+ * behind the charts. A session crossing midnight counts to its start date.
+ */
+export function foldListeningRows(rows: readonly ListeningRow[]): ListeningDayRow[] {
+  const byKey = new Map<string, ListeningDayRow>();
+  for (const row of rows) {
+    const { date, midnight, part } = listeningRowBucket(row.started_at);
+    const key = `${row.stationuuid}|${date}`;
+    const current = byKey.get(key);
+    if (!current) {
+      const partSeconds = DAYPART_DEFS.map(() => 0);
+      const partPlays = DAYPART_DEFS.map(() => 0);
+      partSeconds[part] = row.seconds;
+      partPlays[part] = 1;
+      byKey.set(key, {
+        key,
+        stationuuid: row.stationuuid,
+        name: row.name,
+        date,
+        midnight,
+        seconds: row.seconds,
+        plays: 1,
+        longest: row.seconds,
+        partSeconds,
+        partPlays,
+        latestAt: row.started_at,
+      });
+      continue;
+    }
+    current.seconds += row.seconds;
+    current.plays += 1;
+    if (row.seconds > current.longest) current.longest = row.seconds;
+    current.partSeconds[part] = (current.partSeconds[part] ?? 0) + row.seconds;
+    current.partPlays[part] = (current.partPlays[part] ?? 0) + 1;
+    if (row.started_at > current.latestAt) {
+      current.latestAt = row.started_at;
+      current.name = row.name;
+    }
+  }
+  return [...byKey.values()];
 }
 
 interface ListeningWindows {
@@ -97,140 +157,10 @@ function createListeningWindows(now: Date): ListeningWindows {
   return { today, byRecent, byWeek, recentIndex, weekIndex };
 }
 
-interface StationAggregate {
-  stations: ListeningStation[];
-  totalSeconds: number;
-  longestSession: number;
-}
-
-/** Per-station totals, latest name wins, most-listened first. */
-function aggregateStations(rows: readonly ListeningRow[]): StationAggregate {
-  const byStation = new Map<string, { name: string; started_at: string; seconds: number; plays: number }>();
-  let totalSeconds = 0;
-  let longestSession = 0;
-  for (const row of rows) {
-    totalSeconds += row.seconds;
-    if (row.seconds > longestSession) longestSession = row.seconds;
-    const current = byStation.get(row.stationuuid);
-    if (current) {
-      current.seconds += row.seconds;
-      current.plays += 1;
-      if (row.started_at > current.started_at) {
-        current.name = row.name;
-        current.started_at = row.started_at;
-      }
-    } else {
-      byStation.set(row.stationuuid, { name: row.name, started_at: row.started_at, seconds: row.seconds, plays: 1 });
-    }
-  }
-  const stations: ListeningStation[] = [...byStation.entries()].map(([stationuuid, entry]) => ({
-    stationuuid,
-    name: entry.name,
-    seconds: entry.seconds,
-    plays: entry.plays,
-  }));
-  stations.sort((a, b) => b.seconds - a.seconds);
-  return { stations, totalSeconds, longestSession };
-}
-
-/** Monday-first buckets; `days` counts distinct local dates behind each weekday. */
-function aggregateWeekdays(rows: readonly ListeningRow[]): DayBucket[] {
-  const byDay: DayBucket[] = DAY_LABELS.map((label, day) => ({ day, label, seconds: 0, plays: 0, days: 0 }));
-  const seenDates = new Map<number, Set<string>>();
-  for (const row of rows) {
-    const started = new Date(row.started_at);
-    const weekday = (started.getDay() + 6) % 7;
-    const bucket = byDay[weekday];
-    if (!bucket) continue;
-    bucket.seconds += row.seconds;
-    bucket.plays += 1;
-    const key = localDateKey(started);
-    let dates = seenDates.get(weekday);
-    if (!dates) {
-      dates = new Set<string>();
-      seenDates.set(weekday, dates);
-    }
-    dates.add(key);
-  }
-  for (const [weekday, dates] of seenDates) {
-    const bucket = byDay[weekday];
-    if (bucket) bucket.days = dates.size;
-  }
-  return byDay;
-}
-
-/** Fill the last-14-days strip; sessions outside the window stay in the totals. */
-function aggregateRecent(
-  rows: readonly ListeningRow[],
-  byRecent: DateBucket[],
-  recentIndex: Map<string, number>,
-): DateBucket[] {
-  for (const row of rows) {
-    const recent = recentIndex.get(localDateKey(new Date(row.started_at)));
-    if (recent === undefined) continue;
-    const bucket = byRecent[recent];
-    if (!bucket) continue;
-    bucket.seconds += row.seconds;
-    bucket.plays += 1;
-  }
-  return byRecent;
-}
-
-/** Fill the last-12-weeks strip; sessions outside the window stay in the totals. */
-function aggregateWeeks(
-  rows: readonly ListeningRow[],
-  byWeek: WeekBucket[],
-  weekIndex: Map<string, number>,
-): WeekBucket[] {
-  for (const row of rows) {
-    const started = new Date(row.started_at);
-    const week = weekIndex.get(localDateKey(mondayOf(started)));
-    if (week === undefined) continue;
-    const bucket = byWeek[week];
-    if (!bucket) continue;
-    bucket.seconds += row.seconds;
-    bucket.plays += 1;
-  }
-  return byWeek;
-}
-
-/** Four even six-hour blocks, local time. */
-function aggregateDayparts(rows: readonly ListeningRow[]): DaypartBucket[] {
-  const byPart: DaypartBucket[] = DAYPART_DEFS.map((def) => ({ ...def, seconds: 0, plays: 0 }));
-  for (const row of rows) {
-    const hour = new Date(row.started_at).getHours();
-    const index = hour < 6 ? 0 : hour < 12 ? 1 : hour < 18 ? 2 : 3;
-    const part = byPart[index];
-    if (!part) continue;
-    part.seconds += row.seconds;
-    part.plays += 1;
-  }
-  return byPart;
-}
-
 interface DateTotal {
   midnight: number;
   seconds: number;
   plays: number;
-}
-
-/** All-history per-date totals back the streak and best-day records. */
-function aggregateDates(rows: readonly ListeningRow[]): Map<string, DateTotal> {
-  const perDate = new Map<string, DateTotal>();
-  for (const row of rows) {
-    const started = new Date(row.started_at);
-    const midnight = new Date(started);
-    midnight.setHours(0, 0, 0, 0);
-    const dateKey = localDateKey(started);
-    const day = perDate.get(dateKey);
-    if (day) {
-      day.seconds += row.seconds;
-      day.plays += 1;
-    } else {
-      perDate.set(dateKey, { midnight: midnight.getTime(), seconds: row.seconds, plays: 1 });
-    }
-  }
-  return perDate;
 }
 
 /** Run ending today — or yesterday when today is still quiet. */
@@ -280,25 +210,116 @@ function computeBestDay(perDate: ReadonlyMap<string, DateTotal>): BestDay | null
   return bestDay;
 }
 
-/** Aggregate already-filtered sessions into every listening view. */
-export function summarizeListeningRows(rows: readonly ListeningRow[], now: Date): ListeningSummary {
+/**
+ * Aggregate stored day rollups into every listening view. Chronological
+ * order keeps station and best-day tie-breaks identical to the row-in
+ * reference path (first appearance wins).
+ */
+export function summarizeListeningDays(days: readonly ListeningDayRow[], now: Date): ListeningSummary {
   const { today, byRecent, byWeek, recentIndex, weekIndex } = createListeningWindows(now);
-  const byDay = aggregateWeekdays(rows);
-  const recent = aggregateRecent(rows, byRecent, recentIndex);
-  const weeks = aggregateWeeks(rows, byWeek, weekIndex);
-  const byPart = aggregateDayparts(rows);
-  const perDate = aggregateDates(rows);
-  const { stations, totalSeconds, longestSession } = aggregateStations(rows);
+  const byDay: DayBucket[] = DAY_LABELS.map((label, day) => ({ day, label, seconds: 0, plays: 0, days: 0 }));
+  const byPart: DaypartBucket[] = DAYPART_DEFS.map((def) => ({ ...def, seconds: 0, plays: 0 }));
+  const perDate = new Map<string, DateTotal>();
+  const byStation = new Map<string, { name: string; latestAt: string; seconds: number; plays: number }>();
+  const datesByWeekday = new Map<number, Set<string>>();
+  let totalSeconds = 0;
+  let plays = 0;
+  let longestSession = 0;
+
+  for (const day of days.toSorted((a, b) => a.midnight - b.midnight)) {
+    totalSeconds += day.seconds;
+    plays += day.plays;
+    if (day.longest > longestSession) longestSession = day.longest;
+
+    const weekday = (new Date(day.midnight).getDay() + 6) % 7;
+    const weekdayBucket = byDay[weekday];
+    if (weekdayBucket) {
+      weekdayBucket.seconds += day.seconds;
+      weekdayBucket.plays += day.plays;
+      let dates = datesByWeekday.get(weekday);
+      if (!dates) {
+        dates = new Set<string>();
+        datesByWeekday.set(weekday, dates);
+      }
+      dates.add(day.date);
+    }
+
+    for (let slot = 0; slot < byPart.length; slot += 1) {
+      const part = byPart[slot];
+      if (!part) continue;
+      part.seconds += day.partSeconds[slot] ?? 0;
+      part.plays += day.partPlays[slot] ?? 0;
+    }
+
+    const date = perDate.get(day.date);
+    if (date) {
+      date.seconds += day.seconds;
+      date.plays += day.plays;
+    } else {
+      perDate.set(day.date, { midnight: day.midnight, seconds: day.seconds, plays: day.plays });
+    }
+
+    const station = byStation.get(day.stationuuid);
+    if (station) {
+      station.seconds += day.seconds;
+      station.plays += day.plays;
+      if (day.latestAt > station.latestAt) {
+        station.name = day.name;
+        station.latestAt = day.latestAt;
+      }
+    } else {
+      byStation.set(day.stationuuid, {
+        name: day.name,
+        latestAt: day.latestAt,
+        seconds: day.seconds,
+        plays: day.plays,
+      });
+    }
+
+    const recent = recentIndex.get(day.date);
+    const recentBucket = recent === undefined ? undefined : byRecent[recent];
+    if (recentBucket) {
+      recentBucket.seconds += day.seconds;
+      recentBucket.plays += day.plays;
+    }
+
+    const dayStart = new Date(day.midnight);
+    const week = weekIndex.get(localDateKey(mondayOf(dayStart)));
+    const weekBucket = week === undefined ? undefined : byWeek[week];
+    if (weekBucket) {
+      weekBucket.seconds += day.seconds;
+      weekBucket.plays += day.plays;
+    }
+  }
+
+  for (const [weekday, dates] of datesByWeekday) {
+    const bucket = byDay[weekday];
+    if (bucket) bucket.days = dates.size;
+  }
+
+  const stations: ListeningStation[] = [...byStation.entries()].map(([stationuuid, entry]) => ({
+    stationuuid,
+    name: entry.name,
+    seconds: entry.seconds,
+    plays: entry.plays,
+  }));
+  stations.sort((a, b) => b.seconds - a.seconds);
+
   return {
     totalSeconds,
-    plays: rows.length,
+    plays,
     stations,
     byDay,
-    byRecent: recent,
-    byWeek: weeks,
+    byRecent,
+    byWeek,
     byPart,
     streak: { current: computeCurrentStreak(perDate, today), longest: computeLongestStreak(perDate) },
     bestDay: computeBestDay(perDate),
     longestSession,
   };
+}
+
+/** Reference path: fold sessions in memory, then aggregate the same way. */
+export function summarizeListeningRows(rows: readonly ListeningRow[], now: Date): ListeningSummary {
+  return summarizeListeningDays(foldListeningRows(rows), now);
 }

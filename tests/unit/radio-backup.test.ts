@@ -113,13 +113,33 @@ describe("radio backup", () => {
     const payload = await collectRadioBackup(source);
     expect(payload.listening).toHaveLength(1);
     expect(payload.listening[0]).toMatchObject({ stationuuid: "stats-1", seconds: 600 });
+    expect(payload.listeningDaily).toHaveLength(1);
+    expect(payload.listeningDaily[0]).toMatchObject({ stationuuid: "stats-1", seconds: 600, plays: 1 });
     expect(payload.normalize).toBe(false);
 
     const target = freshDatabase();
     await restoreRadioBackup(structuredClone(payload), target);
+    expect(await target.listeningDaily.count()).toBe(1);
     const summary = await summarizeListening(target);
     expect(summary.totalSeconds).toBe(600);
     expect(summary.stations.map((station) => station.stationuuid)).toEqual(["stats-1"]);
+  });
+
+  it("rebuilds the rollups from a pre-v9 backup that carried only sessions", async () => {
+    const source = freshDatabase();
+    const { logListening, summarizeListening } = await import("@/lib/radio/store");
+    await logListening(
+      { stationuuid: "stats-1", name: "Stats FM", started_at: new Date(2026, 8, 21, 10).toISOString(), seconds: 600 },
+      source,
+    );
+    const { listeningDaily: _rollups, ...v8 } = structuredClone(await collectRadioBackup(source));
+
+    const target = freshDatabase();
+    await restoreRadioBackup({ ...v8, version: 8 }, target);
+    expect(await target.listeningDaily.count()).toBe(1);
+    const summary = await summarizeListening(target);
+    expect(summary.totalSeconds).toBe(600);
+    expect(summary.plays).toBe(1);
   });
 
   it("round-trips the leveling toggle", async () => {

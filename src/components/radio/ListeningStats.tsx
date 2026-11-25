@@ -6,7 +6,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import { useClearListening, useListeningStats } from "@/hooks/use-radio";
 import { formatListeningTime } from "@/lib/radio/format";
-import type { DayBucket, DaypartBucket, ListeningStation, ListeningSummary } from "@/lib/radio/store";
+import { topStationRows, type StationSort } from "@/lib/radio/listening-rows";
+import type { DayBucket, DaypartBucket, ListeningSummary } from "@/lib/radio/store";
 import { cn } from "@/lib/utils";
 
 /** Chart rows per breakdown (mobile-first: five fits a phone column). */
@@ -35,13 +36,11 @@ const VIEWS = [
 
 type StatsView = (typeof VIEWS)[number]["id"];
 
-const SORTS = [
+const SORTS: readonly { id: StationSort; label: string }[] = [
   { id: "total", label: "Total" },
   { id: "sessions", label: "Sessions" },
   { id: "average", label: "Average" },
-] as const;
-
-type SortMode = (typeof SORTS)[number]["id"];
+];
 
 const TREND_RANGES = [
   { id: "days", label: "14 days" },
@@ -111,51 +110,13 @@ export function ListeningStats() {
 }
 
 function TotalView({ stats }: { stats: ListeningSummary }) {
-  const [sort, setSort] = useState<SortMode>("total");
-  const cascadeId = useId();
-  const ranked = stats.stations.toSorted((a, b) =>
-    sort === "sessions"
-      ? b.plays - a.plays || b.seconds - a.seconds
-      : sort === "average"
-        ? averageSession(b) - averageSession(a) || b.seconds - a.seconds
-        : b.seconds - a.seconds,
-  );
-  const top = ranked.slice(0, TOP_ROWS);
-  const total = modeTotal(stats, sort);
-  const other = otherRow(top, stats, sort);
+  const [sort, setSort] = useState<StationSort>("total");
   const [cascade, setCascade] = useState(false);
+  const cascadeId = useId();
+  const rows = topStationRows(stats, sort, TOP_ROWS);
   // Row geometry per layout. Standard bars scale against the biggest row;
   // cascade rows tile 0–100 by share (session counts in Sessions mode, time
   // otherwise), each starting where the previous share ended.
-  const shareMetric = (station: ListeningStation): number => (sort === "sessions" ? station.plays : station.seconds);
-  const rows: {
-    key: string;
-    name: string;
-    label: string;
-    display: number;
-    share: number;
-    tone: string;
-  }[] = top.map((station, index) => {
-    const row = stationRow(station, total, sort);
-    return {
-      key: station.stationuuid,
-      name: station.name,
-      label: row.label,
-      display: row.value,
-      share: total <= 0 ? 0 : (shareMetric(station) / total) * 100,
-      tone: BAR_TONES[index] ?? BAR_TONES[0],
-    };
-  });
-  if (other) {
-    rows.push({
-      key: "__other__",
-      name: other.name,
-      label: other.label,
-      display: other.value,
-      share: total <= 0 ? 0 : (other.share / total) * 100,
-      tone: "fill-muted-foreground",
-    });
-  }
   const max = cascade ? 100 : Math.max(1, ...rows.map((row) => row.display));
   const starts = rows.map((_, index) => rows.slice(0, index).reduce((sum, row) => sum + row.share, 0));
   return (
@@ -183,94 +144,12 @@ function TotalView({ stats }: { stats: ListeningSummary }) {
             max={max}
             offset={cascade ? (starts[index] ?? 0) : 0}
             valueLabel={row.label}
-            barClass={row.tone}
+            barClass={row.isOther ? "fill-muted-foreground" : (BAR_TONES[index] ?? BAR_TONES[0])}
           />
         ))}
       </ul>
     </div>
   );
-}
-
-/** Mean seconds per session (0 plays can't happen — every station has ≥1). */
-function averageSession(station: ListeningStation): number {
-  return station.seconds / Math.max(1, station.plays);
-}
-
-/** Bar value for the active sort: time, session count, or mean session. */
-function sortValue(station: ListeningStation, sort: SortMode): number {
-  return sort === "sessions"
-    ? station.plays
-    : sort === "average"
-      ? Math.round(averageSession(station))
-      : station.seconds;
-}
-
-/** Row caption for the active sort: time, session count, or mean session. */
-function modeLabel(station: ListeningStation, sort: SortMode): string {
-  if (sort === "sessions") return `${station.plays} ${station.plays === 1 ? "session" : "sessions"}`;
-  const time = formatListeningTime(sortValue(station, sort));
-  return sort === "average" ? `${time} avg` : time;
-}
-
-/** Share denominator for the active sort: session count, else total time
- * (an average has no meaningful share, so it keeps the time share). */
-function modeTotal(stats: ListeningSummary, sort: SortMode): number {
-  return sort === "sessions" ? stats.plays : stats.totalSeconds;
-}
-
-/** Share percent of the active metric, guarded against empty totals. */
-function sharePct(value: number, total: number): number {
-  return total <= 0 ? 0 : Math.round((value / total) * 100);
-}
-
-/** Row model for one station under the active sort (bar length + caption).
- * The percent always shares the sort's own denominator — session counts in
- * Sessions mode, total time otherwise (an average has no meaningful share,
- * so average rows keep their time share and sum to 100 with the rest). */
-function stationRow(station: ListeningStation, total: number, sort: SortMode): { value: number; label: string } {
-  const value = sortValue(station, sort);
-  const share = sharePct(sort === "sessions" ? station.plays : station.seconds, total);
-  return { value, label: `${modeLabel(station, sort)} (${share}%)` };
-}
-
-/** Muted "Other" row for everything outside the ranked top. Null when the
- * top accounts for every session. `share` backs the cascade position;
- * `value` is the displayed bar caption basis. */
-function otherRow(
-  top: ListeningStation[],
-  stats: ListeningSummary,
-  sort: SortMode,
-): { name: string; value: number; label: string; share: number } | null {
-  const topPlays = top.reduce((sum, station) => sum + station.plays, 0);
-  const topSeconds = top.reduce((sum, station) => sum + station.seconds, 0);
-  const otherPlays = stats.plays - topPlays;
-  const otherSeconds = stats.totalSeconds - topSeconds;
-  if (sort === "sessions") {
-    if (otherPlays <= 0) return null;
-    return {
-      name: "Other sessions",
-      value: otherPlays,
-      label: `${otherPlays} ${otherPlays === 1 ? "session" : "sessions"} (${sharePct(otherPlays, stats.plays)}%)`,
-      share: otherPlays,
-    };
-  }
-  if (otherSeconds <= 0) return null;
-  const timeShare = sharePct(otherSeconds, stats.totalSeconds);
-  if (sort === "average") {
-    const mean = Math.round(otherSeconds / Math.max(1, otherPlays));
-    return {
-      name: "Other stations",
-      value: mean,
-      label: `${formatListeningTime(mean)} avg (${timeShare}%)`,
-      share: otherSeconds,
-    };
-  }
-  return {
-    name: "Other stations",
-    value: otherSeconds,
-    label: `${formatListeningTime(otherSeconds)} (${timeShare}%)`,
-    share: otherSeconds,
-  };
 }
 
 export function DailyView({ stats }: { stats: ListeningSummary }) {

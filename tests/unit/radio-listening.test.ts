@@ -1,6 +1,16 @@
 import "fake-indexeddb/auto";
+import Dexie from "dexie";
 import { afterEach, describe, expect, it } from "vite-plus/test";
-import { clearListening, logListening, RadioDB, summarizeListening, type ListeningRow } from "@/lib/radio/store";
+import { summarizeListeningRows } from "@/lib/radio/listening-summary";
+import {
+  clearListening,
+  logListening,
+  pruneListening,
+  RadioDB,
+  summarizeListening,
+  type ListeningRow,
+} from "@/lib/radio/store";
+import { EMPTY_STATION } from "@/lib/radio/types";
 
 let counter = 0;
 let database = new RadioDB(`radioscout-listening-test-${counter}`);
@@ -208,5 +218,164 @@ describe("listening stats", () => {
       plays: 1,
     });
     expect(summary.byWeek.slice(0, 7).every((bucket) => bucket.seconds === 0)).toBe(true);
+  });
+
+  it("keeps the day rollups in step with the row-by-row reference", async () => {
+    // Two stations across four local dates, dayparts and a renamed station:
+    // the stored rollups must reproduce the in-memory fold exactly.
+    const now = new Date(2026, 8, 28, 12);
+    const target = freshDatabase();
+    const rows = [
+      session("a", "Alpha", 60, new Date(2026, 8, 21, 2).toISOString()),
+      session("a", "Alpha", 120, new Date(2026, 8, 21, 13).toISOString()),
+      session("b", "Beta", 300, new Date(2026, 8, 21, 19).toISOString()),
+      session("a", "Alpha Renamed", 45, new Date(2026, 8, 27, 7).toISOString()),
+      session("c", "Gamma", 900, new Date(2026, 7, 31, 22).toISOString()),
+      session("a", "Alpha Renamed", 30, new Date(2026, 8, 28, 11).toISOString()),
+    ];
+    for (const row of rows) await logListening(row, target);
+    const stored = await target.listening.toArray();
+    expect(stored).toHaveLength(rows.length);
+    expect(await target.listeningDaily.count()).toBe(5);
+    expect(await summarizeListening(target, now)).toEqual(summarizeListeningRows(stored, now));
+  });
+
+  it("prunes the raw log without losing a total", async () => {
+    const target = freshDatabase();
+    for (let hour = 10; hour < 15; hour += 1) {
+      await logListening(session("a", "Alpha", 60, new Date(2026, 8, 21, hour).toISOString()), target);
+    }
+    await pruneListening(target, 2);
+    expect(await target.listening.count()).toBe(2);
+    const summary = await summarizeListening(target);
+    expect(summary.totalSeconds).toBe(300);
+    expect(summary.plays).toBe(5);
+    expect(summary.stations[0]).toMatchObject({ seconds: 300, plays: 5 });
+  });
+
+  it("folds a pre-rollup database on upgrade", async () => {
+    counter += 1;
+    const name = `radioscout-listening-upgrade-${counter}`;
+    const legacy = new Dexie(name);
+    legacy.version(3).stores({
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
+      tracks: "++id, stationuuid, played_at",
+    });
+    await legacy.open();
+    await legacy.table<ListeningRow, number>("listening").bulkAdd([
+      { stationuuid: "a", name: "Alpha", started_at: new Date(2026, 8, 21, 10).toISOString(), seconds: 120 },
+      { stationuuid: "b", name: "Beta", started_at: new Date(2026, 8, 22, 20).toISOString(), seconds: 60 },
+    ]);
+    legacy.close();
+
+    const upgraded = new RadioDB(name);
+    database = upgraded;
+    await upgraded.open();
+    const summary = await summarizeListening(upgraded);
+    expect(summary.totalSeconds).toBe(180);
+    expect(summary.plays).toBe(2);
+    expect(summary.stations.map((station) => station.stationuuid).toSorted()).toEqual(["a", "b"]);
+    // Dayparts survive the upgrade: 10am is morning, 8pm is evening.
+    expect(summary.byPart[1]?.seconds).toBe(120);
+    expect(summary.byPart[3]?.seconds).toBe(60);
+  });
+
+  it("heals a v4 database whose rollups landed in a renamed store", async () => {
+    counter += 1;
+    const name = `radioscout-listening-renamed-${counter}`;
+    const schema = {
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
+      tracks: "++id, stationuuid, played_at",
+    };
+    const broken = new Dexie(name);
+    broken.version(3).stores(schema);
+    broken.version(4).stores({ ...schema, listening_daily: "&key, stationuuid, date" });
+    await broken.open();
+    await broken
+      .table<ListeningRow, number>("listening")
+      .bulkAdd([
+        { stationuuid: "a", name: "Alpha", started_at: new Date(2026, 8, 21, 10).toISOString(), seconds: 120 },
+      ]);
+    broken.close();
+
+    const healed = new RadioDB(name);
+    database = healed;
+    await healed.open();
+    expect(await healed.listening.count()).toBe(1);
+    const summary = await summarizeListening(healed);
+    expect(summary.totalSeconds).toBe(120);
+    expect(summary.plays).toBe(1);
+    expect(await healed.listeningDaily.count()).toBe(1);
+  });
+
+  it("upgrades a production-sized log without touching a row", async () => {
+    counter += 1;
+    const name = `radioscout-listening-prod-${counter}`;
+    const schema = {
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
+      tracks: "++id, stationuuid, played_at",
+    };
+    const legacy = new Dexie(name);
+    legacy.version(3).stores(schema);
+    await legacy.open();
+    const rows = Array.from({ length: 1000 }, (_, index) => ({
+      stationuuid: `station-${index % 12}`,
+      name: `Station ${index % 12}`,
+      started_at: new Date(Date.UTC(2026, 0, 1) + index * 5 * 60_000).toISOString(),
+      seconds: 60 + (index % 300),
+    }));
+    const snapshot = { ...EMPTY_STATION, stationuuid: "favourite-1", name: "Favourite FM" };
+    await legacy.table<ListeningRow, number>("listening").bulkAdd(rows);
+    await legacy
+      .table("favourites")
+      .put({ stationuuid: "favourite-1", snapshot, saved_at: "2026-01-01T00:00:00.000Z", sort: 0 });
+    await legacy.table("history").add({ stationuuid: "favourite-1", snapshot, played_at: "2026-01-01T00:00:00.000Z" });
+    legacy.close();
+
+    const upgraded = new RadioDB(name);
+    database = upgraded;
+    await upgraded.open();
+    // The version change is schema-only: every user row is still there.
+    expect(await upgraded.listening.count()).toBe(rows.length);
+    expect(await upgraded.favourites.count()).toBe(1);
+    expect(await upgraded.history.count()).toBe(1);
+    expect(await upgraded.listeningDaily.count()).toBe(0);
+
+    const now = new Date(2026, 1, 15, 12);
+    const summary = await summarizeListening(upgraded, now);
+    // The lazy backfill must reproduce the pre-rollup totals exactly.
+    expect(summary).toEqual(summarizeListeningRows(rows, now));
+    expect(await upgraded.listening.count()).toBe(rows.length);
+    expect(await upgraded.listeningDaily.count()).toBeGreaterThan(0);
+  });
+
+  it("rebuilds rollups that went missing instead of reading zero", async () => {
+    const target = freshDatabase();
+    await logListening(session("a", "Alpha", 60, new Date(2026, 8, 21, 10).toISOString()), target);
+    await target.listeningDaily.clear();
+    const summary = await summarizeListening(target);
+    expect(summary.totalSeconds).toBe(60);
+    expect(summary.plays).toBe(1);
+    expect(await target.listeningDaily.count()).toBe(1);
+  });
+
+  it("folds a raw log that outnumbers a half-built rollup", async () => {
+    const target = freshDatabase();
+    await logListening(session("a", "Alpha", 60, new Date(2026, 8, 21, 10).toISOString()), target);
+    await logListening(session("b", "Beta", 120, new Date(2026, 8, 22, 11).toISOString()), target);
+    // Keep one rollup, as an interrupted fold would: the log has more plays.
+    const [partial] = await target.listeningDaily.toArray();
+    await target.listeningDaily.clear();
+    if (partial) await target.listeningDaily.put(partial);
+    const summary = await summarizeListening(target);
+    expect(summary.totalSeconds).toBe(180);
+    expect(summary.plays).toBe(2);
+    expect(await target.listeningDaily.count()).toBe(2);
   });
 });

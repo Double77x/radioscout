@@ -1,12 +1,16 @@
 import Dexie, { type EntityTable } from "dexie";
-import { summarizeListeningRows } from "./listening-summary";
+import { foldListeningRows, listeningRowBucket, summarizeListeningDays } from "./listening-summary";
 import { normaliseTrackTitle } from "./titles";
 import { splitQualityFromName, withStationDefaults, type Station } from "./types";
 
 const HISTORY_LIMIT = 50;
 const FAVOURITE_LIMIT = 500;
-/** Completed listening sessions — enough for years of top-station charts. */
-const LISTENING_LIMIT = 1000;
+/**
+ * Completed listening sessions kept verbatim. The charts read the
+ * `listeningDaily` rollups, so this only bounds the raw log (and the backup
+ * it feeds): pruning never changes a total.
+ */
+const LISTENING_LIMIT = 100_000;
 /** Heard song/programme titles overall — years of listening stay small. */
 const TRACKS_LIMIT = 1000;
 /** Heard titles kept per station (the sheet shows the latest handful). */
@@ -57,6 +61,32 @@ export interface ListeningRow {
   started_at: string;
   /** Whole seconds actually audible (`playing` → pause/stop/switch/error). */
   seconds: number;
+}
+
+/**
+ * One (station, local date) rollup — the read model behind every chart.
+ * Sessions are folded in as they bank, so a summary never scans the raw log.
+ */
+export interface ListeningDayRow {
+  /** `${stationuuid}|${date}` — unique, so a fold is a get + put. */
+  key: string;
+  stationuuid: string;
+  /** Newest name folded in — renamed stations relabel themselves. */
+  name: string;
+  /** Local `YYYY-M-D` key (no padding — map key only). */
+  date: string;
+  /** Local midnight of `date`, epoch ms (streak ordering, DST-safe). */
+  midnight: number;
+  seconds: number;
+  plays: number;
+  /** Longest single session that day for this station. */
+  longest: number;
+  /** Seconds per six-hour daypart: night, morning, afternoon, evening. */
+  partSeconds: number[];
+  /** Plays per six-hour daypart. */
+  partPlays: number[];
+  /** `started_at` of the newest session folded in. */
+  latestAt: string;
 }
 
 export interface ListeningStation {
@@ -168,6 +198,7 @@ export class RadioDB extends Dexie {
   favourites!: EntityTable<FavouriteRow, "stationuuid">;
   history!: EntityTable<HistoryRow, "id">;
   listening!: EntityTable<ListeningRow, "id">;
+  listeningDaily!: EntityTable<ListeningDayRow, "key">;
   tracks!: EntityTable<TrackRow, "id">;
 
   constructor(name = "scout-radio") {
@@ -185,6 +216,26 @@ export class RadioDB extends Dexie {
       favourites: "stationuuid",
       history: "++id, stationuuid",
       listening: "++id, stationuuid, started_at",
+      tracks: "++id, stationuuid, played_at",
+    });
+    // v4 adds the (station, day) rollups the charts read. The backfill is
+    // lazy on the first summary (see `summarizeListening`), so a version
+    // change never touches user rows.
+    this.version(4).stores({
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
+      listeningDaily: "&key, stationuuid, date",
+      tracks: "++id, stationuuid, played_at",
+    });
+    // v5 keeps the rollups under `listeningDaily` and drops the unused
+    // `listening_daily` store. Schema only, like v4.
+    this.version(5).stores({
+      favourites: "stationuuid",
+      history: "++id, stationuuid",
+      listening: "++id, stationuuid, started_at",
+      listeningDaily: "&key, stationuuid, date",
+      listening_daily: null,
       tracks: "++id, stationuuid, played_at",
     });
   }
@@ -327,36 +378,88 @@ export async function clearHistory(database: RadioDB = radioDb): Promise<void> {
   await database.tracks.clear();
 }
 
-/**
- * Bank one completed session. Callers enforce the audibility threshold
- * (short taps never reach here) — the store just appends and caps.
- */
-export async function logListening(row: Omit<ListeningRow, "id">, database: RadioDB = radioDb): Promise<void> {
-  await database.listening.add(row);
-  const count = await database.listening.count();
-  if (count > LISTENING_LIMIT) {
-    const oldest = await database.listening
-      .orderBy("id")
-      .limit(count - LISTENING_LIMIT)
-      .primaryKeys();
-    await database.listening.bulkDelete(oldest);
-  }
+/** Four daypart slots (night, morning, afternoon, evening) with nothing banked. */
+const EMPTY_DAYPARTS = [0, 0, 0, 0];
+
+/** Merge one session into its (station, local date) rollup. */
+async function foldListeningDay(database: RadioDB, row: Omit<ListeningRow, "id">): Promise<void> {
+  const { date, midnight, part } = listeningRowBucket(row.started_at);
+  const key = `${row.stationuuid}|${date}`;
+  const previous = await database.listeningDaily.get(key);
+  const partSeconds = [...(previous?.partSeconds ?? EMPTY_DAYPARTS)];
+  const partPlays = [...(previous?.partPlays ?? EMPTY_DAYPARTS)];
+  partSeconds[part] = (partSeconds[part] ?? 0) + row.seconds;
+  partPlays[part] = (partPlays[part] ?? 0) + 1;
+  const newer = previous && previous.latestAt > row.started_at ? previous : undefined;
+  await database.listeningDaily.put({
+    key,
+    stationuuid: row.stationuuid,
+    name: newer?.name ?? row.name,
+    date,
+    midnight,
+    seconds: (previous?.seconds ?? 0) + row.seconds,
+    plays: (previous?.plays ?? 0) + 1,
+    longest: Math.max(previous?.longest ?? 0, row.seconds),
+    partSeconds,
+    partPlays,
+    latestAt: newer?.latestAt ?? row.started_at,
+  });
 }
 
-/** Aggregate sessions per station/day/date/week/daypart for the charts (latest name wins). */
+/** Trim the raw log to the newest `limit` rows — the rollups keep the history. */
+export async function pruneListening(database: RadioDB = radioDb, limit = LISTENING_LIMIT): Promise<void> {
+  const count = await database.listening.count();
+  if (count <= limit) return;
+  const oldest = await database.listening
+    .orderBy("id")
+    .limit(count - limit)
+    .primaryKeys();
+  await database.listening.bulkDelete(oldest);
+}
+
 /**
- * Read and filter sessions, then aggregate in `listening-summary.ts`.
- * Station-scoped summaries reuse every bucket, so filtering up front keeps
- * streaks, best days and trends station-true.
+ * Bank one completed session. Callers enforce the audibility threshold
+ * (short taps never reach here) — the store appends the row, folds it into
+ * the day rollup the charts read, and caps the raw log. One transaction so a
+ * rollup can never disagree with its session.
+ */
+export async function logListening(row: Omit<ListeningRow, "id">, database: RadioDB = radioDb): Promise<void> {
+  await database.transaction("rw", [database.listening, database.listeningDaily], async () => {
+    await database.listening.add(row);
+    await foldListeningDay(database, row);
+    await pruneListening(database);
+  });
+}
+
+/** Rebuild the day rollups from the raw log. */
+export async function rebuildListeningRollups(database: RadioDB = radioDb): Promise<void> {
+  const rows = await database.listening.toArray();
+  await database.transaction("rw", database.listeningDaily, async () => {
+    await database.listeningDaily.clear();
+    await database.listeningDaily.bulkPut(foldListeningRows(rows));
+  });
+}
+
+/**
+ * Read the day rollups (optionally for one station) and aggregate them in
+ * `listening-summary.ts`. Station-scoped summaries reuse every bucket, so
+ * filtering up front keeps streaks, best days and trends station-true.
  */
 export async function summarizeListening(
   database: RadioDB = radioDb,
   now: Date = new Date(),
   onlyStation?: string,
 ): Promise<ListeningSummary> {
-  const stored = await database.listening.toArray();
-  const rows = onlyStation === undefined ? stored : stored.filter((row) => row.stationuuid === onlyStation);
-  return summarizeListeningRows(rows, now);
+  let stored = await database.listeningDaily.toArray();
+  // The rollups are a cache of the raw log: when the log holds more sessions
+  // than they do, rebuild before aggregating. A pruned log holds fewer rows
+  // than the rollups, so it never triggers this.
+  if ((await database.listening.count()) > stored.reduce((sum, day) => sum + day.plays, 0)) {
+    await rebuildListeningRollups(database);
+    stored = await database.listeningDaily.toArray();
+  }
+  const days = onlyStation === undefined ? stored : stored.filter((day) => day.stationuuid === onlyStation);
+  return summarizeListeningDays(days, now);
 }
 
 /**
@@ -437,6 +540,9 @@ export async function clearStationTracks(stationuuid: string, database: RadioDB 
   await database.tracks.where("stationuuid").equals(stationuuid).delete();
 }
 
-export function clearListening(database: RadioDB = radioDb): Promise<void> {
-  return database.listening.clear();
+export async function clearListening(database: RadioDB = radioDb): Promise<void> {
+  await database.transaction("rw", [database.listening, database.listeningDaily], async () => {
+    await database.listening.clear();
+    await database.listeningDaily.clear();
+  });
 }
