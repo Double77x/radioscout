@@ -98,7 +98,7 @@ function VolumeSlider({
       onPointerCancel={endScrub}
       onKeyDown={onKeyDown}
       className='relative grid h-44 w-12 cursor-pointer touch-none place-items-center rounded-2xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none'>
-      <div ref={trackRef} aria-hidden='true' className='relative h-full w-2 overflow-hidden rounded-full bg-muted'>
+      <div ref={trackRef} aria-hidden='true' className='relative h-full w-2 overflow-hidden rounded-full bg-border'>
         <div className='absolute inset-x-0 bottom-0 rounded-full bg-foreground' style={{ height: `${percent}%` }} />
       </div>
       <span

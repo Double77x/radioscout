@@ -324,12 +324,12 @@
   --card-foreground: #3c3836;
   --popover: #f9f5d7;
   --popover-foreground: #3c3836;
-  --primary: #79740e;
+  --primary: #6e6a0c;
   --primary-foreground: #fbf1c7;
   --secondary: #ebdbb2;
   --secondary-foreground: #3c3836;
   --muted: #ebdbb2;
-  --muted-foreground: #7c6f64;
+  --muted-foreground: #675b50;
   --accent: #ebdbb2;
   --accent-foreground: #3c3836;
   --destructive: #cc241d;
@@ -356,14 +356,14 @@
   --primary-foreground: #282828;
   --secondary: #504945;
   --secondary-foreground: #ebdbb2;
-  --muted: #3c3836;
-  --muted-foreground: #a89984;
+  --muted: #504945;
+  --muted-foreground: #c9bdae;
   --accent: #504945;
   --accent-foreground: #ebdbb2;
   --destructive: #fb4934;
-  --destructive-foreground: #282828;
-  --border: #504945;
-  --input: #504945;
+  --destructive-foreground: #1d2021;
+  --border: #665c54;
+  --input: #665c54;
   --ring: #b8bb26;
   --logo-tile: #282828;
   --scroll-thumb: #504945;
@@ -382,7 +382,7 @@
   --card-foreground: #2e3440;
   --popover: #e5e9f0;
   --popover-foreground: #2e3440;
-  --primary: #5e81ac;
+  --primary: #4c6a94;
   --primary-foreground: #eceff4;
   --secondary: #d8dee9;
   --secondary-foreground: #2e3440;
@@ -390,7 +390,7 @@
   --muted-foreground: #4c566a;
   --accent: #d8dee9;
   --accent-foreground: #2e3440;
-  --destructive: #bf616a;
+  --destructive: #a8424c;
   --destructive-foreground: #eceff4;
   --border: #d8dee9;
   --input: #d8dee9;
@@ -415,13 +415,13 @@
   --secondary: #434c5e;
   --secondary-foreground: #eceff4;
   --muted: #434c5e;
-  --muted-foreground: #8f9bb3;
+  --muted-foreground: #b6c0d4;
   --accent: #434c5e;
   --accent-foreground: #eceff4;
-  --destructive: #bf616a;
+  --destructive: #d68f97;
   --destructive-foreground: #2e3440;
-  --border: #4c566a;
-  --input: #4c566a;
+  --border: #6a7a96;
+  --input: #6a7a96;
   --ring: #88c0d0;
   --logo-tile: #2e3440;
   --scroll-thumb: #4c566a;
@@ -441,18 +441,18 @@
   --popover: #ffffff;
   --popover-foreground: #3d3436;
   --primary: #ff7e5f;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #2a2024;
   --secondary: #ffedea;
-  --secondary-foreground: #b35340;
+  --secondary-foreground: #a34a38;
   --muted: #fff0eb;
-  --muted-foreground: #78716c;
+  --muted-foreground: #6f6862;
   --accent: #feb47b;
   --accent-foreground: #3d3436;
-  --destructive: #e63946;
+  --destructive: #cf2b38;
   --destructive-foreground: #ffffff;
   --border: #ffe0d6;
   --input: #ffe0d6;
-  --ring: #ff7e5f;
+  --ring: #d94f2f;
   --scroll-thumb: #ffe0d6;
   --logo-tile: #2a2024;
   --scroll-thumb-hover: #ce6a57;
@@ -469,14 +469,14 @@
   --popover: #392f35;
   --popover-foreground: #f2e9e4;
   --primary: #ff7e5f;
-  --primary-foreground: #ffffff;
+  --primary-foreground: #2a2024;
   --secondary: #463a41;
   --secondary-foreground: #f2e9e4;
   --muted: #30272c;
   --muted-foreground: #d7c6bc;
   --accent: #feb47b;
   --accent-foreground: #2a2024;
-  --destructive: #e63946;
+  --destructive: #cf2b38;
   --destructive-foreground: #ffffff;
   --border: #463a41;
   --input: #463a41;
@@ -503,7 +503,7 @@
   --secondary: #ccd0da;
   --secondary-foreground: #4c4f69;
   --muted: #ccd0da;
-  --muted-foreground: #6c6f85;
+  --muted-foreground: #52556d;
   --accent: #ccd0da;
   --accent-foreground: #4c4f69;
   --destructive: #d20f39;
@@ -531,7 +531,7 @@
   --secondary: #45475a;
   --secondary-foreground: #cdd6f4;
   --muted: #45475a;
-  --muted-foreground: #9399b2;
+  --muted-foreground: #b0b8d2;
   --accent: #45475a;
   --accent-foreground: #cdd6f4;
   --destructive: #f38ba8;
@@ -822,8 +822,8 @@
     }
   }
 
-  /* Scout — token-themed volume slider (player dock). Muted track with a
-     foreground thumb; hover grows the thumb for feedback in both schemes. */
+  /* Scout — token-themed volume slider (player dock). Border-toned rail
+     with a foreground thumb; hover grows the thumb for feedback. */
   .volume-slider {
     -webkit-appearance: none;
     appearance: none;
@@ -832,7 +832,7 @@
   .volume-slider::-webkit-slider-runnable-track {
     height: 6px;
     border-radius: 9999px;
-    background: var(--color-muted);
+    background: var(--color-border);
   }
   .volume-slider::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -850,7 +850,7 @@
   .volume-slider::-moz-range-track {
     height: 6px;
     border-radius: 9999px;
-    background: var(--color-muted);
+    background: var(--color-border);
   }
   .volume-slider::-moz-range-progress {
     height: 6px;
