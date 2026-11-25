@@ -30,7 +30,8 @@ This project is a mobile-first, privacy-first free worldwide radio player built 
 - **`vite-plugin-pwa`, installed but unwired.** Deliberately so: the verified offline path is the hand-rolled workbox script above. See `docs/lineage.md` (2026-10-05) before touching it.
 - **Fuse.js:** In-memory fuzzy search for Quick Find command palette.
 - **Sonner:** Toasts (favourites, history cleared, restores, backup states).
-- **Zod:** Radio backup envelope + station schema validation.
+- **Zod:** Radio backup envelope + station schema validation, plus the LRCLIB search records.
+- **LRCLIB (lrclib.net):** Lyrics for the playing track, called from the client on demand with no key. `src/lib/radio/lrclib.ts` matches the StreamTitle to a record and honours the service rules (identifying header, one request at a time, `Retry-After`). `src/lib/radio/lyrics.ts` parses LRC into stanzas, and `lyrics-client.ts` is the lazy bridge that keeps zod out of the initial chunk.
 - **Clsx & Tailwind Merge:** Class name utilities (`cn()`).
 - **Oxlint & oxfmt:** High-speed Rust linting and formatting (oxlint plugins: better-tailwindcss, react-hooks, react-refresh, react-doctor, and the local `scout/no-unjustified-effect` quota in `lint/`).
 - **Fallow:** Dead-code, duplication, complexity, and architecture linting (`fallow.toml`, `fallow audit --format json --quiet`, `fallow dead-code --trace`, `fallow health --hotspots`). Replaces knip; embedded `regression.baseline` for CI `--fail-on-regression`. `pnpm verify` runs `fallow audit` over the changed files: `exit 0` is clean, `1` is a failing gate, `2` is a real error (JSON envelope).

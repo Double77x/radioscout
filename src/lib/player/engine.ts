@@ -18,7 +18,7 @@ import {
 } from "@/lib/native-audio";
 import { DEFAULT_VOLUME, persistVolume, type PlayerPrefs } from "@/lib/radio/prefs";
 import type { TrackKind } from "@/lib/radio/store";
-import { normaliseTrackTitle } from "@/lib/radio/titles";
+import { normaliseTrackTitle, readTitlesEnabled } from "@/lib/radio/titles";
 import { hostOf, parkRecord, type RetiredOutput } from "@/lib/player/elements";
 import {
   HLS_UNSUPPORTED_MESSAGE,
@@ -256,6 +256,11 @@ export function setIcyProbing(enabled: boolean): void {
   const src = audio?.currentSrc ?? audio?.getAttribute("src") ?? "";
   if (src === "") return;
   armIcyProbe(station, src);
+}
+
+/** Arm or stand down the title probe from the persisted Titles switch. */
+export function refreshTitleProbing(): void {
+  setIcyProbing(readTitlesEnabled());
 }
 /** Retry wait for a dropped mid-play stream (backoff + quiet toast). */
 const reconnectTimer = new ReconnectTimer();

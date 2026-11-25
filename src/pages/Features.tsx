@@ -13,6 +13,7 @@ import {
   History,
   Languages,
   MapPin,
+  MicVocal,
   MoonStar,
   Music,
   Play,
@@ -138,7 +139,7 @@ const GROUPS: FeatureGroup[] = [
   {
     eyebrow: "Player",
     heading: "A dock that stays out of the way",
-    lede: "Gapless switches, levelled loudness and a sleep timer, with the same controls everywhere.",
+    lede: "Gapless switches, levelled loudness, a sleep timer and lyrics on tap, with the same controls everywhere.",
     cards: [
       {
         Icon: Play,
@@ -166,6 +167,13 @@ const GROUPS: FeatureGroup[] = [
         tint: TINTS[4],
         title: "Live song titles",
         body: "The dock subtitle follows the station's StreamTitle while it plays — BBC stations read the BBC's own now-playing feeds. Opt in under Settings → Audio on web. Always on in the APK.",
+        platform: "Web + APK",
+      },
+      {
+        Icon: MicVocal,
+        tint: TINTS[5],
+        title: "Lyrics on tap",
+        body: "The newest song in a station's Recent tab opens its full lyrics when you tap the mic icon, grouped into verses. Lyrics come from LRCLIB and are requested only for the track that is playing, only when you ask.",
         platform: "Web + APK",
       },
       {
@@ -272,7 +280,16 @@ export default function FeaturesPage() {
     <LegalLayout
       title='Features'
       description='Everything RadioScout does: discovery, library, player, personal setup and the Android shell.'
-      keywords={["features", "radio player", "android apk", "sleep timer", "crossfade", "backup", "ota updates"]}>
+      keywords={[
+        "features",
+        "radio player",
+        "android apk",
+        "sleep timer",
+        "crossfade",
+        "lyrics",
+        "backup",
+        "ota updates",
+      ]}>
       <div className='space-y-10'>
         {GROUPS.map((group, groupIndex) => (
           <section key={group.eyebrow} aria-labelledby={`features-${group.eyebrow.toLowerCase()}`}>

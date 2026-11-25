@@ -1,0 +1,1 @@
+Every colour theme now meets WCAG AA contrast for text in light and dark, and the volume slider's rail is visible again. Listening stats keep your whole history instead of only the latest 1,000 sessions, and long histories open fast. The newest song in a station's Recent tab now shows full lyrics on tap, grouped into verses and fetched only for that track.

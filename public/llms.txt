@@ -38,6 +38,7 @@ button), `data-testid="player-dock"` + `data-testid="player-toggle"` (dock).
 - [RadioScout home](https://radioscout.pages.dev/): Search, genre chips, Most loved / Best of British / Saved / Recently played, persistent player dock.
 - Quick Find (`Ctrl/⌘+K` on the site): fuzzy search across home sections, pages, external links and theme actions — the fastest route for browser agents.
 - [Features](https://radioscout.pages.dev/features): Core capabilities across the web app and Android APK.
+- Lyrics: the newest song in a station's Recent tab opens its full lyrics on tap, fetched from LRCLIB only for the track playing.
 
 ## Optional
 

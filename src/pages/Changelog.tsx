@@ -12,6 +12,20 @@ interface ChangelogEntry {
 /** Newest first. One entry per release — the markup below stays identical. */
 const ENTRIES: ChangelogEntry[] = [
   {
+    version: "0.4.7",
+    title: "Lyrics on tap, themes that read, stats that stay",
+    date: "November 2026",
+    points: [
+      "Lyrics for the song playing, one tap away. The newest title in a station's Recent tab carries a mic icon, and tapping it opens the whole song underneath, grouped into verses, with chorus markers set in italic. Older rows are history, so only the live track offers it.",
+      "Lyrics come from LRCLIB, an open lyrics database, and are fetched only when you open a song. If the service is busy, the app says so and lets you try again in a moment.",
+      "Every colour theme now meets the WCAG AA contrast standard for text in both light and dark, so secondary captions, button labels and focus rings are readable instead of washed out. Gruvbox, Nord and Catppuccin gain slightly deeper or lighter secondary text, Sunset's orange buttons use dark ink instead of white, and its red is a shade deeper.",
+      "The volume slider's rail is visible in every theme again. In Gruvbox dark it had matched the panel behind it.",
+      "Listening stats keep your whole history. Totals, dayparts, streaks and records stay exact however long you have listened. Before, only the latest 1,000 sessions were kept, so older listening quietly dropped out of the numbers.",
+      "Long histories open fast again, and your totals stay put as old sessions age out.",
+      "Backups keep your full listening history, and an older backup restores with its totals intact.",
+    ],
+  },
+  {
     version: "0.4.6",
     title: "Back stays in the app, and one permission ask",
     date: "October 2026",
@@ -28,7 +42,7 @@ const ENTRIES: ChangelogEntry[] = [
     points: [
       "The web player now takes the left and right arrow keys for volume: each press moves one percent and reveals the level, so you can adjust it without reaching for the slider. Held keys keep stepping, and arrows still belong to search fields, menus and the focused volume slider.",
       "Performance work across the dock, station sheet, settings and pickers keeps opening a station, switching tabs and scrolling long lists responsive.",
-      "Android playback no longer waits for the notification permission prompt. If you deny it — or the prompt never appears — audio still starts, and pausing during a buffering stream shows Paused immediately instead of leaving the dock on Tuning in.",
+      "Android playback no longer waits for the notification permission prompt. If you deny it, or the prompt never appears, audio still starts, and pausing during a buffering stream shows Paused immediately instead of leaving the dock on Tuning in.",
       "Fresh installs now actually start at 25% volume instead of silence.",
     ],
   },
@@ -55,7 +69,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Even volume across stations",
     date: "October 2026",
     points: [
-      "Stations now play at a consistent volume: quieter stations are lifted to match louder ones as you switch, and the match keeps refining itself while you listen — speech stations settle in over the first minute.",
+      "Stations now play at a consistent volume: quieter stations are lifted to match louder ones as you switch, and the match keeps refining itself while you listen. Speech stations settle in over the first minute.",
       "Loud stations are turned down without flattening the music: songs keep their dynamics, and a limiter stops boosted peaks from distorting. Applies in the browser and the Android app alike.",
     ],
   },
@@ -64,7 +78,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Offline on the web",
     date: "October 2026",
     points: [
-      "The web app keeps working without a connection: the shell, favourites, history and charts stay readable offline, and a new version offers a one-tap reload. Playback still needs the internet — live streams are never cached.",
+      "The web app keeps working without a connection: the shell, favourites, history and charts stay readable offline, and a new version offers a one-tap reload. Playback still needs the internet. Live streams are never cached.",
     ],
   },
   {
@@ -72,7 +86,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Colour themes and a rebuilt station sheet",
     date: "October 2026",
     points: [
-      "Four colour themes — Gruvbox, Nord, Sunset Horizon and Catppuccin — sit alongside light, dark and automatic in Settings → Style, in both schemes. Your pick saves on-device and travels with backups.",
+      "Four colour themes (Gruvbox, Nord, Sunset Horizon and Catppuccin) sit alongside light, dark and automatic in Settings → Style, in both schemes. Your pick saves on-device and travels with backups.",
       "Station sheets are rebuilt around Info, Recent and Stats tabs at a fixed height: details and links, the songs you have heard with relative times, and your own listening charts for that station alone. The sheet remembers which tab you left open per station.",
       "Heard songs also surface on Recently played rows (desktop), with a per-station clear, and votes now count instantly on the sheet and every row together.",
       "BBC titles reach the Android app reliably again, and filtered searches gain a back arrow to home.",
@@ -83,7 +97,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Artwork that respects your privacy",
     date: "October 2026",
     points: [
-      "Station logos now load through a privacy proxy rather than straight from each broadcaster's website. Scrolling the station lists used to leave those sites free to read and store their own cookies — including location guesses and ad IDs on roughly half the stations. Nothing is stored now, so the cookie policy is accurate as written.",
+      "Station logos now load through a privacy proxy rather than straight from each broadcaster's website. Scrolling the station lists used to leave those sites free to read and store their own cookies, including location guesses and ad IDs on roughly half the stations. Nothing is stored now, so the cookie policy is accurate as written.",
       "Cover art stops breaking when a proxy declines to serve an image: rows that used to sit on a blank placeholder, or fall back to a generic tile, now show the real logo.",
     ],
   },
@@ -100,7 +114,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "BBC song names and Firefox HLS playback",
     date: "October 2026",
     points: [
-      "BBC stations show live song and show names: HLS streams carry no broadcast titles, so the app reads the BBC's own now-playing feeds — tracks while music plays, the on-air programme otherwise",
+      "BBC stations show live song and show names: HLS streams carry no broadcast titles, so the app reads the BBC's own now-playing feeds, with tracks while music plays and the on-air programme otherwise",
       "Station details gain a Tracks row for BBC stations linking to the live page with schedule and track history",
       "Firefox plays BBC and other HLS stations directly instead of asking for the Android app, and polls smarter so show changes land within seconds",
     ],
@@ -128,7 +142,7 @@ const ENTRIES: ChangelogEntry[] = [
     date: "October 2026",
     points: [
       "Live titles reach the car too: the Android media session republishes on every track change (song as title, station as artist), so Bluetooth, Android Auto and the lock screen follow the song instead of repeating the station name.",
-      "Steering-wheel and headset skip buttons step through Saved favourites in list order, wrapping both directions. Skipping from idle starts the first saved station; with fewer than two saved the press stays silent.",
+      "Steering-wheel and headset skip buttons step through Saved favourites in list order, wrapping both directions. Skipping from idle starts the first saved station. With fewer than two saved the press stays silent.",
     ],
   },
   {
@@ -165,7 +179,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Titles light up on Android",
     date: "September 2026",
     points: [
-      "Stream titles now reach the dock — the bridge was calling a native method that doesn't exist, so every subscription failed silently",
+      "Stream titles now reach the dock. The bridge was calling a native method that doesn't exist, so every subscription failed silently",
       "Browser titles removed: too few stations broadcast usable metadata over the web path to justify the moving parts",
     ],
   },
@@ -174,7 +188,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Dance Wave fix and stream titles",
     date: "September 2026",
     points: [
-      "Dance Wave! plays again on Android — its server redirects to an HTTP edge, which the player now follows on an allowlisted host",
+      "Dance Wave! plays again on Android. Its server redirects to an HTTP edge, which the player now follows on an allowlisted host",
       "The dock shows the live track title under the station name on Android (stations that broadcast titles)",
     ],
   },
@@ -183,7 +197,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Audible Android crossfade",
     date: "September 2026",
     points: [
-      "Station switches on Android actually overlap now — the incoming player no longer steals audio focus and silences the old station mid-blend",
+      "Station switches on Android actually overlap now. The incoming player no longer steals audio focus and silences the old station mid-blend",
     ],
   },
   {
@@ -191,7 +205,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Real crossfade on Android",
     date: "September 2026",
     points: [
-      "Station switches on Android now truly crossfade — the old station fades out while the new one fades in, matching the browser",
+      "Station switches on Android now truly crossfade. The old station fades out while the new one fades in, matching the browser",
       "Switches tapped in quick succession still blend instead of cutting",
     ],
   },
@@ -200,7 +214,7 @@ const ENTRIES: ChangelogEntry[] = [
     title: "Android switching and pause fixes",
     date: "September 2026",
     points: [
-      "Station switching on Android is now actually gapless — the handoff fires every time, not just sometimes",
+      "Station switching on Android is now actually gapless. The handoff fires every time, not just sometimes",
       "Pausing during a switch keeps the old station paused instead of stranding the player",
       "Paused playback stays paused through network blips instead of spinning on tuning-in",
     ],
@@ -215,7 +229,7 @@ const ENTRIES: ChangelogEntry[] = [
       "Switching stations is gapless: the old one plays until the new stream is ready, then blends over",
       "Dropped streams reconnect automatically with backoff instead of stranding on an error",
       "Recent searches under the search box for one-tap repeats",
-      "Level volume no longer breathes with the music — it settles per station and stays there",
+      "Level volume no longer breathes with the music. It settles per station and stays there",
       "Fresh installs start at 25% volume instead of full blast",
     ],
   },
@@ -256,7 +270,7 @@ const ENTRIES: ChangelogEntry[] = [
     date: "September 2026",
     points: [
       "Surprise shuffle in the player dock: catalog browse plus one-tap random station",
-      "Filtered charts stay full — language and quality filters page until all 50 load",
+      "Filtered charts stay full. Language and quality filters page until all 50 load",
       "Settings tidied into Data, Languages and Quality sections with active filters summarized",
       "Minimum-bitrate quality filter for search results and charts",
       "Listening section with total time and daily-average charts",

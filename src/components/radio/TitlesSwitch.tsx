@@ -1,4 +1,4 @@
-import { setIcyProbing } from "@/hooks/use-player";
+import { refreshTitleProbing } from "@/hooks/use-player";
 import { usePersistentString } from "@/hooks/use-persistent-state";
 import { TITLES_KEY, titlesEnabled } from "@/lib/radio/titles";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ export function TitlesSwitch() {
   const toggle = () => {
     const next = !on;
     setValue(next ? "1" : "0");
-    setIcyProbing(next);
+    refreshTitleProbing();
   };
 
   return (

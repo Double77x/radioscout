@@ -339,7 +339,8 @@ export function armTitleProbe(station: Station, url: string, hooks: TitleProbeHo
   state.pushFailures = 0;
   // BBC RMS probing is always on (web + native): the 30s edge verdict is
   // globally cached, so one listener costs nothing extra. Raw ICY probing
-  // stays opt-in on web and bridge-driven on native (ExoPlayer decodes it).
+  // stays opt-in on web (the titles switch) and bridge-driven on native
+  // (ExoPlayer decodes it).
   const bbcService = bbcServiceIdForStation(station);
   if (bbcService === null && !readTitlesEnabled()) return;
   // HLS playlists carry no ICY StreamTitle (and a bridged element's own `src`

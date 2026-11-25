@@ -23,6 +23,7 @@ export default function PrivacyPage() {
           <li>Provide and operate the radio player on your device</li>
           <li>Remember your favourites, history and settings locally</li>
           <li>Fetch the public station directory (radio-browser.info) when you browse or search</li>
+          <li>Fetch lyrics from LRCLIB (lrclib.net) when you open them for the song playing</li>
         </ul>
 
         <ProseH2>Data security</ProseH2>

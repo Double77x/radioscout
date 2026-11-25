@@ -60,8 +60,10 @@ Full tour: **[radioscout.pages.dev/features](https://radioscout.pages.dev/featur
   Everything lives in on-device IndexedDB: no accounts, no sync, works offline.
 - **Player** — persistent dock with gapless crossfade switching, volume plus
   per-station levelling, sleep timer with dock countdown, surprise shuffle, quick
-  resume that reloads your last station, auto-reconnect with backoff, and
-  lockscreen controls (MediaSession on web, notifications on Android).
+  resume that reloads your last station, auto-reconnect with backoff,
+  lockscreen controls (MediaSession on web, notifications on Android), and full
+  lyrics for the song playing, opened from the station's Recent tab and fetched
+  from LRCLIB only on request.
 - **Personal** — light, dark or device-following theme with no flash, a Mod+K
   Quick Find palette, home-screen install as a PWA, and a one-JSON radio backup
   that moves favourites, history, stats, volume, votes and filters between
@@ -85,6 +87,9 @@ One static artefact serves both the website and the native apps.
   brand mark.
 - **Styling.** Tailwind v4 with `@theme` tokens, and self-hosted Poppins with a
   metric-adjusted fallback.
+- **Services.** Station data and votes come from radio-browser.info, logos
+  through two image proxies, track titles from the BBC and Radiolise feeds, and
+  lyrics from LRCLIB, requested only when a listener opens them.
 - **Quality.** A CSP in `public/_headers`, axe-core checks, and the Rust tools
   oxlint, oxfmt and the react-doctor plugin, plus Fallow for dead code.
 

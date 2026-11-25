@@ -40,9 +40,9 @@ No data fetching in any effect (TanStack Query owns it: `use-radio.ts` with `ena
 - [x] `emit()` call count per user gesture unchanged (play/pause/switch/sleep-fire paths).
 - [x] Prerender still emits skeletons only; `pnpm build` prints `Prerendered 9 pages` with no hang (the `query-client.ts:19` `gcTime: 0` server guard stays intact).
 
-## 5. Re-audit 2026-10-22 (24 call sites, 15 files)
+## 5. Re-audit 2026-10-22 (23 call sites, 14 files)
 
-`grep -rn "useEffect(" src` finds 24 call sites, up from the 12 this plan recorded at landing; the table in §1 is that snapshot and its line numbers have moved. Every site below is a subscription, a timer, an imperative browser/bridge call or a canvas paint. None fetches data, and none syncs state that could be derived.
+`grep -rn "useEffect(" src` finds 23 call sites (24 before the lyrics overlay was replaced by the untimed block in the station sheet), up from the 12 this plan recorded at landing; the table in §1 is that snapshot and its line numbers have moved. Every site below is a subscription, a timer, an imperative browser/bridge call or a canvas paint. None fetches data, and none syncs state that could be derived.
 
 | File | Sites | Why it is imperative |
 |------|-------|----------------------|

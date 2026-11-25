@@ -7,9 +7,10 @@ Features:
 - Saved favourites with reorder, recent plays, listening trends and streaks
 - Persistent player with crossfade, volume, per-station leveling, sleep timer
 - Station sheets with art, tags, votes and shareable links
+- Full lyrics for the song playing, opened from a station's Recent tab (LRCLIB)
 - One-file backup export/import for moving between devices
 - Light/dark theme, quick-find palette, PWA install on desktop
 
-Network: the app gets station data and sends votes through the radio-browser API. It loads station logos through wsrv.nl and proxy.duckduckgo.com. It plays audio directly from each station's own server. BBC track titles come from a companion web service at radioscout.pages.dev. That service fetches the title from rms.api.bbc.co.uk. The app never contacts the BBC directly. Radiolise track titles work in the web version only. The web version lives at radioscout.pages.dev.
+Network: the app gets station data and sends votes through the radio-browser API. It loads station logos through wsrv.nl and proxy.duckduckgo.com. It plays audio directly from each station's own server. BBC track titles come from a companion web service at radioscout.pages.dev. That service fetches the title from rms.api.bbc.co.uk. The app never contacts the BBC directly. Radiolise track titles work in the web version only. Lyrics come from LRCLIB at lrclib.net, and only when you open them. The web version lives at radioscout.pages.dev.
 
 Source, changelog and issue tracker on GitHub. MIT licensed.

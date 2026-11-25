@@ -99,6 +99,14 @@ step with the headings below, so an entry without a line here fails the build.
 - 2026-11-16 — Drops are three shapes: loud, silent, and a clean close
 - 2026-11-17 — A silent drop cost 18.7s of audible silence
 - 2026-11-20 — A stall is judged by the playhead, not by the event
+- 2026-11-21 — Lyrics overlay from LRCLIB (web, opt-in)
+- 2026-11-21 — Lyrics timing: anchored cursor, tighter probe, nudge
+- 2026-11-21 — Lyrics without a cursor: the whole song in the station sheet
+- 2026-11-21 — Lyrics section: collapsed until opened, titles required
+- 2026-11-21 — Lyrics moved onto the live row in the Recent tab
+- 2026-11-21 — Lyrics as stanzas, and the row width that overflowed
+- 2026-11-21 — LRCLIB identification, serial requests, Retry-After honoured
+- 2026-11-21 — Bracket lyric lines italic, skeleton while lyrics load
 - 2026-11-25 — Listening average rows name the sample, not a time share
 - 2026-11-25 — Listening stats read (station, day) rollups, not the session log
 - 2026-11-25 — Flavour palettes brought to WCAG AA
@@ -706,6 +714,68 @@ So `noteStall` no longer emits `loading`, and `armDropWatchdog` no longer trusts
 Where the latency enters is worth writing down, because the report that started this was "only with the VPN". `stalled` is the spec's *media data has surprisingly not arrived for more than 3 seconds* signal, not a fault, and the native path fetches a single segment at a time at the live edge with barely any lookahead. On a ~20ms path a boundary refill finishes in tens of ms and never approaches 3s; over a tunnel the same fetch runs on a different Akamai edge (handshakes measured 140–153ms to Akamai against 50–60ms to the Icecast host) on a shared exit node, and one refill that idles past 3s emits `stalled` over audio that is still playing. The tunnel was therefore not causing a failure — it was moving a latency knob across a threshold Chromium defines for itself, which is also why the same build behaves differently in Chrome and Firefox rather than differently for the station. It is the same coin as the one `net::ERR_CONNECTION_TIMED_OUT`, the other way that path can genuinely die behind a congested exit node and the case a deadline should still recover.
 
 The cost is two judgements that are now load-bearing. 0.25s is the smallest advance that separates "played through the boundary" from "frozen", and a stall whose playhead creeps forward by a fraction would be left on `playing` until the next stall arms again — tolerable because `currentTime` on a live stream only moves with audio the listener is actually hearing, and the shape this exists for re-stalls immediately. The dock also keeps saying `playing` through up to 2s of a genuine silent drop instead of flipping to tuning on the first report, which is precisely the flicker being removed. Rejected: bridging every Chromium station through `hls.js`. It measured steady — 8 fragments loaded, `currentTime` 14.93→58.93, zero stalls — but adopting it means giving up the platform demuxer to work around one false positive, and the progress guard fixes the class rather than a single transport. Still uncovered: a backgrounded WebView with frozen timers, the APK's Media3 path, and the fact that `playing` resets the attempt counter, so a five-second flap loop could never have exhausted the table on its own.
+
+### 2026-11-21 · Lyrics overlay from LRCLIB (web, opt-in)
+
+The dock already carries the live StreamTitle, so the cheapest lyrics feature is a consumer of it: one LRCLIB search per changed title, a timed LRC cursor, and one ambient line above the player. The lookup runs from the client — LRCLIB sends `Access-Control-Allow-Origin: *`, the preflight allows `lrclib-client` (how a browser identifies itself when `User-Agent` is forbidden), and `connect-src https:` already covers the host. No Pages Function, no key, no header edit. `/api/search` is the route because `/api/get` needs a duration ICY never carries; the picker keeps the first record whose normalized title matches and whose artist agrees, and records without `syncedLyrics` are skipped rather than shown untimed.
+
+The feature has its own switch (`radioscout:lyrics`, off by default, web only) rather than riding the visualiser. The leveller has no bearing on it, and tying it to the visualiser would hide lyrics whenever the wings were off. It mounts from `lg` up like the wings and shows nothing on the APK. Because lyrics consume the same `snapshot.track` the subtitle does, either switch now arms the probe: `refreshTitleProbing` ORs `readTitlesEnabled()` and `readLyricsEnabled()`, and both settings buttons call it, so turning one off no longer stands the probe down while the other still wants it. The cost is that lyrics on with titles off shows songs in the dock subtitle too — the honest consequence of needing a title source.
+
+Sync is approximate by construction, and the overlay is deliberately one current line plus the next rather than a karaoke bar. Elapsed time starts when the title reaches the client; the 20s poll (or the push socket when healthy) and the stream buffer mean the cursor can trail or lead the audio by seconds, and a listener who tunes in mid-song starts at line one. The card remounts per title, so a track change resets it without an anchor; pause hides it, and the query is cached per title so a repeated song costs no request. Left out of this pass: a manual offset control, plain-lyrics display, and any attempt to derive a real position from the stream. Rejected: a Pages Function proxy (unnecessary while CORS works), the beta v2 search plus a second `/api/get` call (two requests for the same payload), and gating on the visualiser (the card is useful without the wings).
+
+### 2026-11-21 · Lyrics timing: anchored cursor, tighter probe, nudge
+
+The first pass timed the cursor from the card's mount, which made part of the desync self-inflicted and unrecoverable by waiting. The card is not the track: a pause unmounts it, the lyrics switch unmounts it, crossing the `lg` breakpoint remounts it, and it first paints only after the LRCLIB round trip. Each of those restarted the count at line one — so a listener who paused mid-song, or toggled the switch to compare, got a cursor minutes behind the vocal with no way back. The anchor is now module-level and keyed by title: stamped when the title reaches the client, held across remounts, and re-stamped on a change, including the A → B → A rotation the probe really does apply twice.
+
+The larger error was the metadata itself. Half the stations measured refuse a direct in-page ICY read, and the browser memo makes that verdict permanent per URL, so those listeners always take the edge function — whose Cache API entry lives for the 20s poll window by design. A 20s poll reading a 20s-old verdict puts the title up to 40s behind the audio, and no cursor is right off that. Lyrics now run the probe at 8s and the edge read carries a cache-busting `_` parameter, so the verdict is read fresh; every other listener keeps the 20s loop and its cache, and BBC stations stay on their own RMS chain. The cost is roughly seven extra upstream probes a minute, paid only by people who turned lyrics on and only on the stations that reach that tier — the same upstream read the app already makes for stations it has not memoised.
+
+What is left is buffer lag, a station's own bookkeeping, and a mid-song tune-in, where no client measurement exists: ICY carries no playback position and the element clock counts connection time, not song time. A persisted ±1s nudge, clamped to ±20s and reset by pressing its readout, lets a listener close that by ear; it is per install rather than per station because the latencies are app-level and the station-to-station difference was not worth a storage map. Rejected: leading the anchor by half the poll interval — it halves the mean error but makes the common case (a title caught on the next poll) wrong by that much in the other direction — and any attempt to derive position from the stream.
+
+### 2026-11-21 · Lyrics without a cursor: the whole song in the station sheet
+
+Two passes of timing work made the overlay honest without making it right, and the remainder is not reachable from a client. The stream carries no playback position, a title arrives up to a poll interval late, the audio sits behind the station's encoder by an unknown amount, and a mid-song tune-in has no measurement at all. A cursor that is always a few seconds off is worse than no cursor: the listener reads the wrong line and cannot tell whether the fault is theirs. So the cursor went — the overlay, the anchor, the nudge, the 1 s clock and the lyrics switch with it.
+
+The Info tab now shows the whole song under a `Lyrics` heading, in a fixed-height scroller so a full lyric sheet does not bury the station facts. Untimed, so a late title, a buffering stream or a mid-song join changes nothing about what is on screen. LRCLIB's plain document is preferred and a synced one falls back to its text with the timestamps stripped — the picker no longer skips plain-only records, which widens the match pool, and a plain document cannot lose the untimed rows an LRC parse drops. The request runs when the tab opens: the same opt-in the switch was asking for, one click closer to the content, and paid only by the tab that reads it.
+
+Consequences. The Titles switch still owns the probe, so the block needs it on and says so when no track is known. The 8 s cadence, the cache-busting edge read and the lyrics-driven arming are reverted: all three existed only to start a cursor on a fresh title, and they cost roughly seven extra upstream probes a minute. `AppLyrics.tsx` and `LyricsSwitch.tsx` are gone, the effect audit loses a row, and the old `radioscout:lyrics` key is simply unread. Rejected: keeping the switch as a gate (it would hide a feature whose fetch is now explicitly on demand) and listing the synced lines with their timestamps (timing nobody can trust invites a karaoke read).
+
+### 2026-11-21 · Lyrics section: collapsed until opened, titles required
+
+Two corrections to the block from the entry above. It fetched as soon as the Info tab mounted, and that tab is usually opened to read the station's own facts — so a listener who never wanted lyrics still handed LRCLIB the track name. The section is now a disclosure row with the current track as its summary: closed by default, with the query disabled until it is opened (`useLyrics(track, open && titlesOn)`). Closing keeps the cached answer, so reopening the same song is instant.
+
+The fetch also now requires the persisted `Show song titles` switch. That switch arms the probe, so with it off there is no track to name anyway — but checking it explicitly lets the section explain itself instead of sitting on "Waiting for a title" forever, and guarantees no request fires behind a listener who turned titles off. The APK is exempt: its switch is hidden and the service reports titles regardless.
+
+This supersedes "the request runs when the tab opens" in the entry above.
+
+### 2026-11-21 · Lyrics moved onto the live row in the Recent tab
+
+Info was the wrong tab for lyrics: it holds the station's own facts, while the Recent tab is already a list of heard songs. The block is now an expansion of the newest row — the song playing now — so the lyrics sit where the song is, and the row reads as the thing you open rather than a second panel in the same tab. Hovering it gives the hand, a mic icon after the title marks lyrics as available, and a click reveals the whole song underneath. Only that row expands: every other row is history whose song has moved on, and each would need its own request.
+
+The gates from the previous entry are unchanged. The query stays disabled until the row is clicked, and only the playing station's newest title can be passed to it, so an untouched tab still names no track to LRCLIB and a listener who turned titles off has no live row to open. `StationLyrics` and its Info-tab wrapper are gone; the panel is inline in `RecentTracks`, where the row it belongs to already lives.
+
+A BBC programme row is excluded even when it is the live one: a show is not a song, so there is no lyric to look up and no mic to promise one. Rejected: making every row expandable (a history entry can disagree with what LRCLIB would find, and each click would be a fresh lookup) and a separate chevron beside the mic (two affordances for one action — the mic is the indicator and the row is the control).
+
+### 2026-11-21 · Lyrics as stanzas, and the row width that overflowed
+
+Dropping the timestamps threw away the one thing they still say honestly: where the singer stops. A synced document now yields stanzas — a gap of eight seconds between consecutive stamps ends one — and the stamps themselves are dropped. Plain documents group by their own blank lines. The block renders one paragraph per stanza with a fixed gap, so verses, choruses and the pause before a bridge read as structure rather than a wall of lines.
+
+Eight seconds, not four, and synced over plain, both came from looking at a real record rather than guessing. In LRCLIB's copy of a current single, consecutive lines of one verse sat 5.3 s, 5.7 s and 6.4 s apart, so a four-second rule split every verse into single lines; only the 10 s and 27 s gaps were real breaks. The same record's plain text had no blank lines at all — one unbroken paragraph — which is why the synced document now wins whenever it has one and plain is only the fallback for records that were never timed. That choice is `recordStanzas`, extracted so a network is not needed to test it.
+
+The live row's button carried `-mx-1.5` with `w-[calc(100%+0.75rem)]`, and `100%` resolves against the list item, not the list — so the row finished six pixels past its right edge and the mic icon surfaced it as horizontal scroll. Both row wrappers are now `w-full` with their own padding, so nothing extends past the sheet's column.
+
+### 2026-11-21 · LRCLIB identification, serial requests, Retry-After honoured
+
+`docs.txt` sets three obligations the client was only partly meeting. Identification wants name, version and a link; ours carried a bare name, so `Lrclib-Client` now reads `Scout v<version> (https://radioscout.pages.dev)`, with the version taken from `package.json` the same way the settings footer does. Requests must go out one at a time with a 200–500 ms gap, so they now pass through a module queue with a 300 ms floor — a listener stepping through songs cannot produce a burst.
+
+A `429` or `503` must be answered with the server's `Retry-After` and jitter, or the client risks a temporary ban. The header (delta-seconds or an HTTP date) sets a client-wide deadline padded by up to 30%, and nothing is sent before it. Reaching that deadline throws instead of returning "no lyrics": a null answer is cached per title for 30 minutes, so a transient throttle would otherwise read as a permanent absence, and TanStack's retry would violate the window — hence `retry: false` and a row that says LRCLIB is busy. The content type is checked before parsing, as the docs advise, because edge rejections are not guaranteed to be JSON.
+
+Not taken: registering for `Lrclib-App-Id`. It is optional and raises the per-IP allowance from about 90 to about 180 requests/min, which a click-only client does not need.
+
+### 2026-11-21 · Bracket lyric lines italic, skeleton while lyrics load
+
+Bracket lines — `[Chorus]`, `(Ooh, yeah)`, a guest singer's interjection — are not the lead vocal, so they are now set in italics and a muted tone while the lead line stays full-strength. That needed one change underneath: a stanza renders one block span per line instead of one joined string with `whitespace-pre-line`, so a single line can carry its own style and the stanza still keeps its spacing.
+
+The loading state is a skeleton now, not prose: five centred bars in the same card shape as the lyrics, `animate-pulse` with `motion-reduce:animate-none`, `aria-busy` and an sr-only "Looking for lyrics…". That is the pattern the sheet's own loading fallback already uses, and it says where the lyrics will appear instead of telling the reader that a request is in flight.
 
 ### 2026-11-25 · Listening average rows name the sample, not a time share
 
