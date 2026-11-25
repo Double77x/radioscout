@@ -83,6 +83,27 @@ function sh(command, options) {
 }
 
 /**
+ * Like `sh`, but hands the failure back instead of exiting — for steps that are
+ * allowed to find nothing there.
+ * @param {string} command
+ * @returns {{ ok: boolean, detail: string }}
+ */
+function shOutcome(command) {
+  try {
+    execSync(command, { cwd: root, encoding: "utf8", stdio: "pipe" });
+    return { ok: true, detail: "" };
+  } catch (error) {
+    const execError = error instanceof Error ? error : new Error("command failed");
+    /** @type {unknown} */
+    const stderr = Reflect.get(execError, "stderr");
+    return {
+      ok: false,
+      detail: typeof stderr === "string" && stderr !== "" ? stderr : execError.message,
+    };
+  }
+}
+
+/**
  * @param {string} version
  * @returns {number}
  */
@@ -188,6 +209,8 @@ const tag = `ota-${channel}-${version}`;
 // file always match, on every platform.
 const namedPath = path.join(os.tmpdir(), assetName);
 fs.copyFileSync(zipPath, namedPath);
+const replaced = shOutcome(`gh release delete ${tag} --cleanup-tag --yes`);
+if (replaced.ok) console.log(`[ota:publish] replaced the existing ${tag} release`);
 sh(
   // Prerelease so `…/releases/latest` keeps pointing at the APK releases —
   // OTA bundles are for the in-app updater, not for humans.
@@ -205,8 +228,17 @@ const entry = {
 };
 const versions = [entry, ...manifest.versions.filter((row) => row?.version !== version)];
 for (const row of versions.slice(keep)) {
-  sh(`gh release delete ota-${channel}-${row.version} --cleanup-tag --yes`);
-  console.log(`[ota:publish] pruned ${row.version}`);
+  const staleTag = `ota-${channel}-${row.version}`;
+  const pruned = shOutcome(`gh release delete ${staleTag} --cleanup-tag --yes`);
+  if (pruned.ok) {
+    console.log(`[ota:publish] pruned ${row.version}`);
+    continue;
+  }
+  if (!/release not found/i.test(pruned.detail)) {
+    fail(`gh release delete ${staleTag} failed:\n${pruned.detail}`);
+  }
+  shOutcome(`gh api -X DELETE repos/${repo}/git/refs/tags/${staleTag}`);
+  console.log(`[ota:publish] dropped ${row.version} (release already gone)`);
 }
 fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
 fs.writeFileSync(manifestPath, `${JSON.stringify({ channel, versions: versions.slice(0, keep) }, null, 2)}\n`);

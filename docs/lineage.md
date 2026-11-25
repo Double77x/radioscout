@@ -110,6 +110,7 @@ step with the headings below, so an entry without a line here fails the build.
 - 2026-11-25 — Listening average rows name the sample, not a time share
 - 2026-11-25 — Listening stats read (station, day) rollups, not the session log
 - 2026-11-25 — Flavour palettes brought to WCAG AA
+- 2026-11-25 — OTA publish survives a re-run
 
 ## How this fits the other docs
 
@@ -804,3 +805,9 @@ Auditing the token blocks found 18 text pairs under 4.5:1 and one focus ring und
 Each flavour now clears AA for the pairs it renders: Gruvbox light `muted-foreground` #675b50 and `primary` #6e6a0c; Gruvbox dark `muted-foreground` #c9bdae and `destructive-foreground` #1d2021; Nord light `primary` #4c6a94 and `destructive` #a8424c; Nord dark `muted-foreground` #b6c0d4 and `destructive` #d68f97; Sunset `primary-foreground` #2a2024 on the orange (6.3:1), `secondary-foreground` #a34a38, `destructive` #cf2b38, and the light ring #d94f2f; Catppuccin light `muted-foreground` #52556d, dark #b0b8d2. The volume rail moved from `muted` to `border` because the rail is a line, not a surface.
 
 Rejected: leaving the near-misses (4.06–4.46) as close enough — they are all captions at 12–14 px, where 4.5 is the threshold — and lifting every `border` to 3:1, which would turn each card edge into a hard outline; a control boundary that needs 3:1 wants its own stronger token rather than a darker decorative border.
+
+### 2026-11-25 · OTA publish survives a re-run
+
+A failed OTA publish could not be retried. The 0.4.7 run created `ota-production-0.4.7+ota.1` with its bundle, then stopped in the retention loop: the manifest still carried a `0.4.4+ota.1` row whose release and tag had already been deleted, so `gh release delete` exited non-zero, `sh` treated that as fatal, and the manifest was never written. Devices stayed on 0.4.5+ota.1 while both the APK release and the new bundle existed. A re-run would have failed a second time, because `gh release create` refuses a tag that already has a release.
+
+`publish-ota.mjs` now treats retention as best effort. A release that is already gone is the desired end state, so the row is dropped and any leftover tag is deleted through the API. The publish step removes a release carrying its own tag before creating one, so the script is idempotent for a single version. The cost is that "not found" is recognised by matching the message, and a partial publish replaces its release rather than aborting on the collision.
